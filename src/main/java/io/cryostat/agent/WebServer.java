@@ -78,7 +78,11 @@ class WebServer extends AbstractVerticle {
                 .path("/")
                 .method(HttpMethod.POST)
                 .method(HttpMethod.GET)
-                .handler(rc -> rc.end());
+                .handler(
+                        rc -> {
+                            getVertx().eventBus().publish(Registration.EVENT_BUS_ADDRESS, null);
+                            rc.end();
+                        });
 
         this.http
                 .requestHandler(router)

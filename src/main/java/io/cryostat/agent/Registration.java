@@ -45,16 +45,18 @@ import java.time.Instant;
 import java.util.Set;
 import java.util.UUID;
 
+import io.cryostat.agent.model.DiscoveryNode;
+import io.cryostat.agent.model.PluginInfo;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Future;
+import io.vertx.core.eventbus.MessageConsumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import io.cryostat.agent.model.DiscoveryNode;
-import io.cryostat.agent.model.PluginInfo;
-import io.vertx.core.AbstractVerticle;
-import io.vertx.core.Future;
-
 class Registration extends AbstractVerticle {
 
+    static final String EVENT_BUS_ADDRESS = Registration.class.getName() + ".UPDATE";
     private static final String NODE_TYPE = "JVM";
 
     private final Logger log = LoggerFactory.getLogger(getClass());
@@ -62,6 +64,7 @@ class Registration extends AbstractVerticle {
     private final CryostatClient cryostat;
     private final UUID instanceId;
     private PluginInfo pluginInfo;
+    private MessageConsumer<Object> consumer;
 
     Registration(CryostatClient cryostat, UUID instanceId) {
         this.cryostat = cryostat;
@@ -72,6 +75,16 @@ class Registration extends AbstractVerticle {
     public void start() {
         getVertx().setTimer(1, this::tryRegister);
         log.info("{} started", getClass().getName());
+
+        consumer =
+                getVertx()
+                        .eventBus()
+                        .consumer(
+                                EVENT_BUS_ADDRESS,
+                                msg -> {
+                                    log.info("Called back, attempting to update");
+                                    tryUpdate();
+                                });
     }
 
     private void tryRegister(Long id) {
@@ -96,10 +109,7 @@ class Registration extends AbstractVerticle {
     private void tryUpdate(Long id) {
         String jmxhost = "localhost";
         String appName = "cryostat-agent";
-        int port =
-            Integer.valueOf(
-                    System.getProperty(
-                        "com.sun.management.jmxremote.port"));
+        int port = Integer.valueOf(System.getProperty("com.sun.management.jmxremote.port"));
 
         long pid = ProcessHandle.current().pid();
         String hostname = null;
@@ -112,53 +122,60 @@ class Registration extends AbstractVerticle {
         if (StringUtils.isBlank(javaMain)) {
             javaMain = null;
         }
-        long startTime = ProcessHandle.current().info().startInstant().orElse(Instant.EPOCH).getEpochSecond();
+        long startTime =
+                ProcessHandle.current()
+                        .info()
+                        .startInstant()
+                        .orElse(Instant.EPOCH)
+                        .getEpochSecond();
         DiscoveryNode.Target target =
-            new DiscoveryNode.Target(
-                    URI.create(
-                        String.format(
-                            "service:jmx:rmi:///jndi/rmi://%s:%d/jmxrmi",
-                            jmxhost, port)),
-                    appName,
-                    instanceId,
-                    pid, hostname, port, javaMain, startTime);
+                new DiscoveryNode.Target(
+                        URI.create(
+                                String.format(
+                                        "service:jmx:rmi:///jndi/rmi://%s:%d/jmxrmi",
+                                        jmxhost, port)),
+                        appName,
+                        instanceId,
+                        pid,
+                        hostname,
+                        port,
+                        javaMain,
+                        startTime);
 
         DiscoveryNode selfNode =
-            new DiscoveryNode(
-                    "cryostat-agent-" + pluginInfo.getId(), NODE_TYPE, target);
+                new DiscoveryNode("cryostat-agent-" + pluginInfo.getId(), NODE_TYPE, target);
 
         log.info("publishing self as {}", selfNode.getTarget().getConnectUrl());
         cryostat.update(pluginInfo.getId(), Set.of(selfNode))
-            .onSuccess(
-                    ar -> {
-                        if (id != null) {
-                            getVertx().cancelTimer(id);
-                        }
-                    })
-        .onFailure(
-                t -> {
-                    log.error("Update failure", t);
-                    deregister()
-                        .onComplete(
-                                ar -> {
-                                    if (ar.failed()) {
-                                        Duration
-                                            registrationRetryPeriod =
-                                            Duration
-                                            .ofSeconds(
-                                                    5);
-                                        vertx.setTimer(
-                                                registrationRetryPeriod
-                                                .toMillis(),
-                                                this::tryRegister);
-                                        return;
-                                    }
-                                });
-                });
+                .onSuccess(
+                        ar -> {
+                            if (id != null) {
+                                getVertx().cancelTimer(id);
+                            }
+                        })
+                .onFailure(
+                        t -> {
+                            log.error("Update failure", t);
+                            deregister()
+                                    .onComplete(
+                                            ar -> {
+                                                if (ar.failed()) {
+                                                    Duration registrationRetryPeriod =
+                                                            Duration.ofSeconds(5);
+                                                    vertx.setTimer(
+                                                            registrationRetryPeriod.toMillis(),
+                                                            this::tryRegister);
+                                                    return;
+                                                }
+                                            });
+                        });
     }
 
     @Override
     public void stop() {
+        if (consumer != null) {
+            consumer.unregister();
+        }
         log.info("{} stopped", getClass().getName());
     }
 

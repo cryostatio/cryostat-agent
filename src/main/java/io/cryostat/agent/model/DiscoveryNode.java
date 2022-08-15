@@ -88,11 +88,30 @@ public class DiscoveryNode {
 
         Target() {}
 
-        public Target(URI connectUrl, String alias, UUID instanceId, long pid, String hostname, int port, String javaMain, long startTime) {
+        public Target(
+                URI connectUrl,
+                String alias,
+                UUID instanceId,
+                long pid,
+                String hostname,
+                int port,
+                String javaMain,
+                long startTime) {
             this.connectUrl = connectUrl;
             this.alias = alias;
             this.annotations = new Annotations();
-            annotations.setCryostat(Map.of("PID", pid, "HOST", hostname, "PORT", port, "JAVA_MAIN", javaMain, "START_TIME", startTime));
+            annotations.setCryostat(
+                    Map.of(
+                            "PID",
+                            pid,
+                            "HOST",
+                            hostname,
+                            "PORT",
+                            port,
+                            "JAVA_MAIN",
+                            javaMain,
+                            "START_TIME",
+                            startTime));
         }
 
         public URI getConnectUrl() {
