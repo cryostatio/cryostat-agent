@@ -45,7 +45,6 @@ import java.time.Instant;
 import java.util.Set;
 import java.util.UUID;
 
-import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -79,66 +78,8 @@ class Registration extends AbstractVerticle {
         cryostat.register()
                 .onSuccess(
                         plugin -> {
-                            String jmxhost = "localhost";
-                            String appName = "cryostat-agent";
-                            int port =
-                                    Integer.valueOf(
-                                            System.getProperty(
-                                                    "com.sun.management.jmxremote.port"));
-
-                            long pid = ProcessHandle.current().pid();
-                            String hostname = null;
-                            try {
-                                hostname = InetAddress.getLocalHost().getHostName();
-                            } catch (UnknownHostException uhe) {
-                                log.error("Could not determine own hostname", uhe);
-                            }
-                            String javaMain = System.getProperty("sun.java.command", System.getenv("JAVA_MAIN_CLASS"));
-                            if (StringUtils.isBlank(javaMain)) {
-                                javaMain = null;
-                            }
-                            long startTime = ProcessHandle.current().info().startInstant().orElse(Instant.EPOCH).getEpochSecond();
-                            DiscoveryNode.Target target =
-                                    new DiscoveryNode.Target(
-                                            URI.create(
-                                                    String.format(
-                                                            "service:jmx:rmi:///jndi/rmi://%s:%d/jmxrmi",
-                                                            jmxhost, port)),
-                                            appName,
-                                            instanceId,
-                                            pid, hostname, port, javaMain, startTime);
-
-                            DiscoveryNode selfNode =
-                                    new DiscoveryNode(
-                                            "cryostat-agent-" + plugin.getId(), NODE_TYPE, target);
-
-                            log.info("publishing self as {}", selfNode.getTarget().getConnectUrl());
-                            cryostat.update(plugin.getId(), Set.of(selfNode))
-                                    .onSuccess(
-                                            ar -> {
-                                                this.pluginInfo = plugin;
-                                                getVertx().cancelTimer(id);
-                                            })
-                                    .onFailure(
-                                            t -> {
-                                                log.error("Update failure", t);
-                                                deregister()
-                                                        .onComplete(
-                                                                ar -> {
-                                                                    if (ar.failed()) {
-                                                                        Duration
-                                                                                registrationRetryPeriod =
-                                                                                        Duration
-                                                                                                .ofSeconds(
-                                                                                                        5);
-                                                                        vertx.setTimer(
-                                                                                registrationRetryPeriod
-                                                                                        .toMillis(),
-                                                                                this::tryRegister);
-                                                                        return;
-                                                                    }
-                                                                });
-                                            });
+                            this.pluginInfo = plugin;
+                            tryUpdate(id);
                         })
                 .onFailure(
                         t -> {
@@ -146,6 +87,74 @@ class Registration extends AbstractVerticle {
                             Duration registrationRetryPeriod = Duration.ofSeconds(5);
                             vertx.setTimer(registrationRetryPeriod.toMillis(), this::tryRegister);
                         });
+    }
+
+    void tryUpdate() {
+        tryUpdate(null);
+    }
+
+    private void tryUpdate(Long id) {
+        String jmxhost = "localhost";
+        String appName = "cryostat-agent";
+        int port =
+            Integer.valueOf(
+                    System.getProperty(
+                        "com.sun.management.jmxremote.port"));
+
+        long pid = ProcessHandle.current().pid();
+        String hostname = null;
+        try {
+            hostname = InetAddress.getLocalHost().getHostName();
+        } catch (UnknownHostException uhe) {
+            log.error("Could not determine own hostname", uhe);
+        }
+        String javaMain = System.getProperty("sun.java.command", System.getenv("JAVA_MAIN_CLASS"));
+        if (StringUtils.isBlank(javaMain)) {
+            javaMain = null;
+        }
+        long startTime = ProcessHandle.current().info().startInstant().orElse(Instant.EPOCH).getEpochSecond();
+        DiscoveryNode.Target target =
+            new DiscoveryNode.Target(
+                    URI.create(
+                        String.format(
+                            "service:jmx:rmi:///jndi/rmi://%s:%d/jmxrmi",
+                            jmxhost, port)),
+                    appName,
+                    instanceId,
+                    pid, hostname, port, javaMain, startTime);
+
+        DiscoveryNode selfNode =
+            new DiscoveryNode(
+                    "cryostat-agent-" + pluginInfo.getId(), NODE_TYPE, target);
+
+        log.info("publishing self as {}", selfNode.getTarget().getConnectUrl());
+        cryostat.update(pluginInfo.getId(), Set.of(selfNode))
+            .onSuccess(
+                    ar -> {
+                        if (id != null) {
+                            getVertx().cancelTimer(id);
+                        }
+                    })
+        .onFailure(
+                t -> {
+                    log.error("Update failure", t);
+                    deregister()
+                        .onComplete(
+                                ar -> {
+                                    if (ar.failed()) {
+                                        Duration
+                                            registrationRetryPeriod =
+                                            Duration
+                                            .ofSeconds(
+                                                    5);
+                                        vertx.setTimer(
+                                                registrationRetryPeriod
+                                                .toMillis(),
+                                                this::tryRegister);
+                                        return;
+                                    }
+                                });
+                });
     }
 
     @Override
