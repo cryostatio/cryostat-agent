@@ -39,17 +39,19 @@ package io.cryostat.agent;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 
 import javax.inject.Singleton;
 
 import dagger.Component;
 import io.vertx.core.CompositeFuture;
 import io.vertx.core.Future;
+import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import sun.misc.Signal;
+import sun.misc.SignalHandler;
 
 public class Agent {
 
@@ -59,36 +61,65 @@ public class Agent {
         List<Future> futures = new ArrayList<>();
         final Client client = DaggerAgent_Client.builder().build();
 
-        futures.add(client.vertx().deployVerticle(client.webServer()));
+        Consumer<Promise<Void>> shutdown =
+                promise -> {
+                    log.info("Shutting down...");
+                    client.vertx()
+                            .close()
+                            .onComplete(
+                                    ar -> {
+                                        log.info("Shutdown complete");
+                                        promise.complete();
+                                    });
+                };
 
-        CompletableFuture<Integer> cf = new CompletableFuture<>();
         List.of(new Signal("INT"), new Signal("TERM"))
                 .forEach(
-                        signal ->
-                                Signal.handle(
-                                        signal,
-                                        s -> {
-                                            log.info(
-                                                    "Caught SIG{}({})", s.getName(), s.getNumber());
-                                            client.vertx().close();
-                                        }));
+                        signal -> {
+                            SignalHandler oldHandler = Signal.handle(signal, s -> {});
+                            SignalHandler handler =
+                                    s -> {
+                                        log.info("Caught SIG{}({})", s.getName(), s.getNumber());
+                                        client.registration()
+                                                .deregister()
+                                                .onComplete(
+                                                        ar -> {
+                                                            Promise<Void> promise =
+                                                                    Promise.promise();
+                                                            shutdown.accept(promise);
+                                                            promise.future()
+                                                                    .onComplete(
+                                                                            unused ->
+                                                                                    oldHandler
+                                                                                            .handle(
+                                                                                                    s));
+                                                        });
+                                    };
+                            Signal.handle(signal, handler);
+                        });
+
+        futures.add(client.vertx().deployVerticle(client.webServer()));
+        futures.add(client.vertx().deployVerticle(client.registration()));
 
         CompositeFuture.join(futures)
-                .onComplete(
-                        ar -> {
-                            if (ar.failed()) {
-                                log.error("Verticle failure", ar.cause());
-                                client.vertx().close();
-                            }
+                .onSuccess(ar -> log.info("Startup complete"))
+                .onFailure(
+                        t -> {
+                            log.error("Verticle failure", t);
+                            client.vertx().close();
                         });
     }
 
     public static void agentmain(String args) {
-        log.info("Cryostat Agent starting...");
-        if (args == null) {
-            args = "";
-        }
-        main(args.split("\\s"));
+        Thread t =
+                new Thread(
+                        () -> {
+                            log.info("Cryostat Agent starting...");
+                            main(args == null ? new String[0] : args.split("\\s"));
+                        });
+        t.setDaemon(true);
+        t.setName("cryostat-agent");
+        t.start();
     }
 
     public static void premain(String args) {
@@ -101,6 +132,8 @@ public class Agent {
         Vertx vertx();
 
         WebServer webServer();
+
+        Registration registration();
 
         @Component.Builder
         interface Builder {

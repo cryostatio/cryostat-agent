@@ -41,6 +41,7 @@
   <org.apache.httpcomponents.version>4.5.13</org.apache.httpcomponents.version>
   <io.fabric8.client.version>5.12.2</io.fabric8.client.version>
   <io.vertx.web.version>4.2.5</io.vertx.web.version>
+  <com.fasterxml.jackson.version>2.13.3</com.fasterxml.jackson.version>
   <org.slf4j.version>1.7.30</org.slf4j.version>
 
   <com.github.spotbugs.version>4.5.3</com.github.spotbugs.version>
@@ -93,6 +94,11 @@
     <groupId>io.vertx</groupId>
     <artifactId>vertx-web-client</artifactId>
     <version>${io.vertx.web.version}</version>
+  </dependency>
+  <dependency>
+    <groupId>com.fasterxml.jackson.core</groupId>
+    <artifactId>jackson-databind</artifactId>
+    <version>${com.fasterxml.jackson.version}</version>
   </dependency>
   <dependency>
     <groupId>org.slf4j</groupId>
@@ -161,12 +167,16 @@
       <groupId>org.apache.maven.plugins</groupId>
       <artifactId>maven-shade-plugin</artifactId>
       <version>${org.apache.maven.plugins.shade.version}</version>
+      <configuration></configuration>
       <executions>
         <execution>
           <phase>package</phase>
           <goals>
             <goal>shade</goal>
           </goals>
+          <configuration>
+            <createDependencyReducedPom>false</createDependencyReducedPom>
+          </configuration>
         </execution>
       </executions>
     </plugin>

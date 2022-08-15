@@ -38,12 +38,17 @@
 package io.cryostat.agent.model;
 
 import java.net.URI;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
 
 public class DiscoveryNode {
 
-    private final String name;
-    private final String nodeType;
-    private final Target target;
+    private String name;
+    private String nodeType;
+    private Target target;
+
+    DiscoveryNode() {}
 
     public DiscoveryNode(String name, String nodeType, Target target) {
         this.name = name;
@@ -63,14 +68,31 @@ public class DiscoveryNode {
         return target;
     }
 
+    void setName(String name) {
+        this.name = name;
+    }
+
+    void setNodeType(String nodeType) {
+        this.nodeType = nodeType;
+    }
+
+    void setTarget(Target target) {
+        this.target = target;
+    }
+
     public static class Target {
 
-        private final URI connectUrl;
-        private final String alias;
+        private URI connectUrl;
+        private String alias;
+        private Annotations annotations;
 
-        public Target(URI connectUrl, String alias) {
+        Target() {}
+
+        public Target(URI connectUrl, String alias, UUID instanceId, long pid, String hostname, int port, String javaMain, long startTime) {
             this.connectUrl = connectUrl;
             this.alias = alias;
+            this.annotations = new Annotations();
+            annotations.setCryostat(Map.of("PID", pid, "HOST", hostname, "PORT", port, "JAVA_MAIN", javaMain, "START_TIME", startTime));
         }
 
         public URI getConnectUrl() {
@@ -79,6 +101,49 @@ public class DiscoveryNode {
 
         public String getAlias() {
             return alias;
+        }
+
+        public Annotations getAnnotations() {
+            return annotations;
+        }
+
+        void setConnectUrl(URI connectUrl) {
+            this.connectUrl = connectUrl;
+        }
+
+        void setAlias(String alias) {
+            this.alias = alias;
+        }
+
+        void setAnnotations(Annotations annotations) {
+            this.annotations = annotations;
+        }
+    }
+
+    public static class Annotations {
+
+        private Map<String, Object> cryostat;
+        private Map<String, Object> platform;
+
+        Annotations() {
+            this.cryostat = new HashMap<>();
+            this.platform = new HashMap<>();
+        }
+
+        public Map<String, Object> getCryostat() {
+            return new HashMap<>(cryostat);
+        }
+
+        public Map<String, Object> getPlatform() {
+            return new HashMap<>(platform);
+        }
+
+        void setCryostat(Map<String, Object> cryostat) {
+            this.cryostat = new HashMap<>(cryostat);
+        }
+
+        void setPlatform(Map<String, Object> platform) {
+            this.platform = new HashMap<>(platform);
         }
     }
 }

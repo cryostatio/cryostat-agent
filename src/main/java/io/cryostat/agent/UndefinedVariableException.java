@@ -35,33 +35,11 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package io.cryostat.agent.model;
+package io.cryostat.agent;
 
-public class RegistrationInfo {
+public class UndefinedVariableException extends RuntimeException {
 
-    private String realm;
-    private String callback;
-
-    RegistrationInfo() {}
-
-    public RegistrationInfo(String realm, String callback) {
-        this.realm = realm;
-        this.callback = callback;
-    }
-
-    public String getRealm() {
-        return realm;
-    }
-
-    public String getCallback() {
-        return callback;
-    }
-
-    void setRealm(String realm) {
-        this.realm = realm;
-    }
-
-    void setCallback(String callback) {
-        this.callback = callback;
+    public UndefinedVariableException(String name) {
+        super("Environment variable \"" + name + "\" must be defined and non-blank");
     }
 }

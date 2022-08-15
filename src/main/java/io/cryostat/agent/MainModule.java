@@ -37,6 +37,8 @@
  */
 package io.cryostat.agent;
 
+import java.util.UUID;
+
 import javax.inject.Singleton;
 
 import dagger.Module;
@@ -50,12 +52,30 @@ public abstract class MainModule {
     @Provides
     @Singleton
     public static Vertx provideVertx() {
-        return Vertx.vertx(new VertxOptions().setWorkerPoolSize(1).setEventLoopPoolSize(1));
+        return Vertx.vertx(new VertxOptions().setEventLoopPoolSize(1).setWorkerPoolSize(1));
     }
 
     @Provides
     @Singleton
     public static WebServer provideHttpServer() {
         return new WebServer();
+    }
+
+    @Provides
+    @Singleton
+    public static CryostatClient provideCryostatClient(Vertx vertx, UUID instanceId) {
+        return new CryostatClient(vertx, instanceId);
+    }
+
+    @Provides
+    @Singleton
+    public static Registration provideRegistration(CryostatClient cryostat, UUID instanceId) {
+        return new Registration(cryostat, instanceId);
+    }
+
+    @Provides
+    @Singleton
+    public static UUID provideInstanceID() {
+        return UUID.randomUUID();
     }
 }

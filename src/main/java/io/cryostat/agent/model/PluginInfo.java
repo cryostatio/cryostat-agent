@@ -38,8 +38,11 @@
 package io.cryostat.agent.model;
 
 public class PluginInfo {
-    private final String id;
-    private final String token;
+
+    private String id;
+    private String token;
+
+    PluginInfo() {}
 
     public PluginInfo(String id, String token) {
         this.id = id;
@@ -52,5 +55,13 @@ public class PluginInfo {
 
     public String getToken() {
         return token;
+    }
+
+    void setId(String id) {
+        this.id = id;
+    }
+
+    void setToken(String token) {
+        this.token = token;
     }
 }

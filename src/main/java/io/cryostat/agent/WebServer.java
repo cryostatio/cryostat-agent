@@ -49,7 +49,7 @@ import org.slf4j.LoggerFactory;
 
 class WebServer extends AbstractVerticle {
 
-    private static final String DEFAULT_HTTP_HOST = "localhost";
+    private static final String DEFAULT_HTTP_HOST = "0.0.0.0";
     private static final int DEFAULT_HTTP_PORT = 9977;
 
     private final Logger log = LoggerFactory.getLogger(getClass());
