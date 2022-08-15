@@ -100,6 +100,7 @@ public class DiscoveryNode {
             this.connectUrl = connectUrl;
             this.alias = alias;
             this.annotations = new Annotations();
+            annotations.setPlatform(Map.of("INSTANCE_ID", instanceId));
             annotations.setCryostat(
                     Map.of(
                             "PID",
