@@ -107,6 +107,9 @@ class Registration extends AbstractVerticle {
     }
 
     private void tryUpdate(Long id) {
+        if (pluginInfo == null) {
+            return;
+        }
         String jmxhost = "localhost";
         String appName = "cryostat-agent";
         int port = Integer.valueOf(System.getProperty("com.sun.management.jmxremote.port"));
