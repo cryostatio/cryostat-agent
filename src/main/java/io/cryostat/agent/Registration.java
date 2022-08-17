@@ -57,8 +57,13 @@ import org.slf4j.LoggerFactory;
 
 class Registration extends AbstractVerticle {
 
+    private static final String CRYOSTAT_AGENT_APP_NAME = "cryostat.agent.app.name";
+    private static final String CRYOSTAT_AGENT_HOSTNAME = "cryostat.agent.hostname";
+    private static final String CRYOSTAT_AGENT_APP_JMX_HOST = "cryostat.agent.app.jmx.host";
+    private static final String CRYOSTAT_AGENT_APP_JMX_PORT = "cryostat.agent.app.jmx.port";
     private static final String CRYOSTAT_AGENT_REGISTRATION_RETRY_MS =
             "cryostat.agent.registration.retry-ms";
+
     static final String EVENT_BUS_ADDRESS = Registration.class.getName() + ".UPDATE";
     private static final String NODE_TYPE = "JVM";
 
@@ -153,14 +158,30 @@ class Registration extends AbstractVerticle {
     }
 
     private DiscoveryNode defineSelf() throws UnknownHostException {
-        String jmxhost = "localhost";
-        String appName = "cryostat-agent";
-        int port = Integer.valueOf(System.getProperty("com.sun.management.jmxremote.port"));
+        String jmxhost = config.getValue(CRYOSTAT_AGENT_APP_JMX_HOST, String.class);
+        String appName = config.getValue(CRYOSTAT_AGENT_APP_NAME, String.class);
+
+        int jmxport =
+                config.getOptionalValue(CRYOSTAT_AGENT_APP_JMX_PORT, int.class)
+                        .orElse(
+                                Integer.valueOf(
+                                        System.getProperty("com.sun.management.jmxremote.port")));
 
         long pid = ProcessHandle.current().pid();
-        String hostname = InetAddress.getLocalHost().getHostName();
+        String hostname =
+                config.getOptionalValue(CRYOSTAT_AGENT_HOSTNAME, String.class)
+                        .orElseGet(
+                                () -> {
+                                    try {
+                                        return InetAddress.getLocalHost().getHostName();
+                                    } catch (UnknownHostException uhe) {
+                                        log.error("Unable to determine own hostname", uhe);
+                                        return null;
+                                    }
+                                });
         String javaMain = System.getProperty("sun.java.command", System.getenv("JAVA_MAIN_CLASS"));
         if (StringUtils.isBlank(javaMain)) {
+            log.error("Unable to determine application mainclass");
             javaMain = null;
         }
         long startTime =
@@ -174,17 +195,17 @@ class Registration extends AbstractVerticle {
                         URI.create(
                                 String.format(
                                         "service:jmx:rmi:///jndi/rmi://%s:%d/jmxrmi",
-                                        jmxhost, port)),
+                                        jmxhost, jmxport)),
                         appName,
                         instanceId,
                         pid,
                         hostname,
-                        port,
+                        jmxport,
                         javaMain,
                         startTime);
 
         DiscoveryNode selfNode =
-                new DiscoveryNode("cryostat-agent-" + pluginInfo.getId(), NODE_TYPE, target);
+                new DiscoveryNode(appName + "-" + pluginInfo.getId(), NODE_TYPE, target);
         return selfNode;
     }
 
