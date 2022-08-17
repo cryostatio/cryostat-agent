@@ -2,6 +2,13 @@
 
 Discovery agent plugin for [Cryostat](https://github.com/cryostatio/cryostat).
 
+Cryostat has a Discovery API to allow service locator bridges ("Discovery Plugins") to inform Cryostat about the
+presence of connectable JVM applications. These Discovery Plugins may be implemented in a way that bridges a service
+locator system to Cryostat's API, or the Discovery Plugin may be implemented on individual application instances so
+that the applications may self-publish themselves to the Cryostat Discovery API. This agent implements a Discovery
+Plugin as an attachable JVM agent that can be included in a target application to enhance it for self-publishing its
+location to Cryostat.
+
 ## REQUIREMENTS
 Build Requirements:
 - Git
