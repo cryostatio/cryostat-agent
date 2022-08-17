@@ -1,0 +1,35 @@
+name: CI build and push
+
+on:
+  push:
+    branches:
+      - main
+      - v[0-9]+
+      - v[0-9]+.[0-9]+
+      - cryostat-v[0-9]+.[0-9]+
+  pull_request:
+    branches:
+      - main
+      - v[0-9]+
+      - v[0-9]+.[0-9]+
+      - cryostat-v[0-9]+.[0-9]+
+
+jobs:
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: true
+    - uses: actions/setup-java@v2
+      with:
+        java-version: '17'
+        distribution: 'adopt'
+    - uses: skjolber/maven-cache-github-action@v1
+      with:
+        step: restore
+    - run: mvn -B -U clean verify
+    - uses: skjolber/maven-cache-github-action@v1
+      with:
+        step: save
