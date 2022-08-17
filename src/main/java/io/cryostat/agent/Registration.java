@@ -119,17 +119,46 @@ class Registration extends AbstractVerticle {
         if (pluginInfo == null) {
             return;
         }
+        DiscoveryNode selfNode;
+        try {
+            selfNode = defineSelf();
+        } catch (UnknownHostException uhe) {
+            log.error("Unable to define self", uhe);
+            return;
+        }
+        log.info("publishing self as {}", selfNode.getTarget().getConnectUrl());
+        cryostat.update(pluginInfo.getId(), Set.of(selfNode))
+                .onSuccess(
+                        ar -> {
+                            if (id != null) {
+                                getVertx().cancelTimer(id);
+                            }
+                        })
+                .onFailure(
+                        t -> {
+                            log.error("Update failure", t);
+                            deregister()
+                                    .onComplete(
+                                            ar -> {
+                                                if (ar.failed()) {
+                                                    Duration registrationRetryPeriod =
+                                                            Duration.ofSeconds(5);
+                                                    vertx.setTimer(
+                                                            registrationRetryPeriod.toMillis(),
+                                                            this::tryRegister);
+                                                    return;
+                                                }
+                                            });
+                        });
+    }
+
+    private DiscoveryNode defineSelf() throws UnknownHostException {
         String jmxhost = "localhost";
         String appName = "cryostat-agent";
         int port = Integer.valueOf(System.getProperty("com.sun.management.jmxremote.port"));
 
         long pid = ProcessHandle.current().pid();
-        String hostname = null;
-        try {
-            hostname = InetAddress.getLocalHost().getHostName();
-        } catch (UnknownHostException uhe) {
-            log.error("Could not determine own hostname", uhe);
-        }
+        String hostname = InetAddress.getLocalHost().getHostName();
         String javaMain = System.getProperty("sun.java.command", System.getenv("JAVA_MAIN_CLASS"));
         if (StringUtils.isBlank(javaMain)) {
             javaMain = null;
@@ -156,31 +185,7 @@ class Registration extends AbstractVerticle {
 
         DiscoveryNode selfNode =
                 new DiscoveryNode("cryostat-agent-" + pluginInfo.getId(), NODE_TYPE, target);
-
-        log.info("publishing self as {}", selfNode.getTarget().getConnectUrl());
-        cryostat.update(pluginInfo.getId(), Set.of(selfNode))
-                .onSuccess(
-                        ar -> {
-                            if (id != null) {
-                                getVertx().cancelTimer(id);
-                            }
-                        })
-                .onFailure(
-                        t -> {
-                            log.error("Update failure", t);
-                            deregister()
-                                    .onComplete(
-                                            ar -> {
-                                                if (ar.failed()) {
-                                                    Duration registrationRetryPeriod =
-                                                            Duration.ofSeconds(5);
-                                                    vertx.setTimer(
-                                                            registrationRetryPeriod.toMillis(),
-                                                            this::tryRegister);
-                                                    return;
-                                                }
-                                            });
-                        });
+        return selfNode;
     }
 
     @Override
