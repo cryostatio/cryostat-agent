@@ -53,7 +53,7 @@ public class DiscoveryNode {
     public DiscoveryNode(String name, String nodeType, Target target) {
         this.name = name;
         this.nodeType = nodeType;
-        this.target = target;
+        this.target = new Target(target);
     }
 
     public String getName() {
@@ -65,7 +65,7 @@ public class DiscoveryNode {
     }
 
     public Target getTarget() {
-        return target;
+        return new Target(target);
     }
 
     void setName(String name) {
@@ -87,6 +87,12 @@ public class DiscoveryNode {
         private Annotations annotations;
 
         Target() {}
+
+        Target(Target o) {
+            this.connectUrl = o.connectUrl;
+            this.alias = o.alias;
+            this.annotations = new Annotations(o.annotations);
+        }
 
         public Target(
                 String realm,
@@ -127,7 +133,7 @@ public class DiscoveryNode {
         }
 
         public Annotations getAnnotations() {
-            return annotations;
+            return new Annotations(annotations);
         }
 
         void setConnectUrl(URI connectUrl) {
@@ -151,6 +157,11 @@ public class DiscoveryNode {
         Annotations() {
             this.cryostat = new HashMap<>();
             this.platform = new HashMap<>();
+        }
+
+        Annotations(Annotations o) {
+            this.cryostat = new HashMap<>(o.cryostat);
+            this.platform = new HashMap<>(o.platform);
         }
 
         public Map<String, Object> getCryostat() {
