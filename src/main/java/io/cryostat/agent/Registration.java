@@ -48,6 +48,7 @@ import java.util.UUID;
 import io.cryostat.agent.model.DiscoveryNode;
 import io.cryostat.agent.model.PluginInfo;
 
+import io.smallrye.config.SmallRyeConfig;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
 import io.vertx.core.eventbus.MessageConsumer;
@@ -56,6 +57,8 @@ import org.slf4j.LoggerFactory;
 
 class Registration extends AbstractVerticle {
 
+    private static final String CRYOSTAT_AGENT_REGISTRATION_RETRY_MS =
+            "cryostat.agent.registration.retry-ms";
     static final String EVENT_BUS_ADDRESS = Registration.class.getName() + ".UPDATE";
     private static final String NODE_TYPE = "JVM";
 
@@ -63,12 +66,15 @@ class Registration extends AbstractVerticle {
 
     private final CryostatClient cryostat;
     private final UUID instanceId;
+    private final SmallRyeConfig config;
+
     private PluginInfo pluginInfo;
     private MessageConsumer<Object> consumer;
 
-    Registration(CryostatClient cryostat, UUID instanceId) {
+    Registration(CryostatClient cryostat, UUID instanceId, SmallRyeConfig config) {
         this.cryostat = cryostat;
         this.instanceId = instanceId;
+        this.config = config;
     }
 
     @Override
@@ -97,8 +103,11 @@ class Registration extends AbstractVerticle {
                 .onFailure(
                         t -> {
                             log.error("Registration failure", t);
-                            Duration registrationRetryPeriod = Duration.ofSeconds(5);
-                            vertx.setTimer(registrationRetryPeriod.toMillis(), this::tryRegister);
+                            int registrationRetryMs =
+                                    config.getValue(
+                                            CRYOSTAT_AGENT_REGISTRATION_RETRY_MS, int.class);
+                            log.info("Registration retry period: {}(ms)", registrationRetryMs);
+                            vertx.setTimer(registrationRetryMs, this::tryRegister);
                         });
     }
 

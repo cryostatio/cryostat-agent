@@ -38,6 +38,8 @@
 package io.cryostat.agent;
 
 import java.io.Closeable;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.Set;
 import java.util.UUID;
 
@@ -45,6 +47,7 @@ import io.cryostat.agent.model.DiscoveryNode;
 import io.cryostat.agent.model.PluginInfo;
 import io.cryostat.agent.model.RegistrationInfo;
 
+import io.smallrye.config.SmallRyeConfig;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.core.http.HttpHeaders;
@@ -56,38 +59,53 @@ import org.slf4j.LoggerFactory;
 
 class CryostatClient implements Closeable {
 
+    private static final String CRYOSTAT_AGENT_CALLBACK = "cryostat.agent.callback";
+    private static final String CRYOSTAT_AGENT_REALM = "cryostat.agent.realm";
+    private static final String CRYOSTAT_AGENT_TRUST_ALL = "cryostat.agent.trust-all";
+    private static final String CRYOSTAT_AGENT_BASEURI = "cryostat.agent.baseuri";
+    private static final String CRYOSTAT_AGENT_AUTHORIZATION = "cryostat.agent.authorization";
+
     private final Logger log = LoggerFactory.getLogger(getClass());
 
     private WebClient http;
     private final UUID instanceId;
+    private final SmallRyeConfig config;
 
-    CryostatClient(Vertx vertx, UUID instanceId) {
+    CryostatClient(Vertx vertx, UUID instanceId, SmallRyeConfig config) {
+        this.config = config;
         WebClientOptions opts = new WebClientOptions();
 
-        // TODO make configurable
-        opts.setDefaultHost("localhost");
-        opts.setDefaultPort(8181);
-        opts.setSsl(true);
-        opts.setTrustAll(true);
-        opts.setVerifyHost(false);
+        String rawUri = config.getValue(CRYOSTAT_AGENT_BASEURI, String.class);
+        URI baseUri;
+        try {
+            baseUri = new URI(rawUri);
+        } catch (URISyntaxException e) {
+            log.error("Invalid {}: {}", CRYOSTAT_AGENT_BASEURI, rawUri);
+            baseUri = URI.create("http://localhost:8181/");
+        }
+        log.info("Using Cryostat baseuri {}", baseUri);
+
+        opts.setDefaultHost(baseUri.getHost());
+        opts.setDefaultPort(baseUri.getPort());
+        opts.setSsl("https".equals(baseUri.getScheme()));
+        if (config.getValue(CRYOSTAT_AGENT_TRUST_ALL, Boolean.class)) {
+            opts.setTrustAll(true);
+            opts.setVerifyHost(false);
+        }
 
         this.http = WebClient.create(vertx, opts);
         this.instanceId = instanceId;
     }
 
     Future<PluginInfo> register() {
-        String auth = System.getenv("CRYOSTAT_AGENT_AUTHORIZATION");
-        if (StringUtils.isBlank(auth)) {
-            auth = "None";
-        }
-        String realm = System.getenv("CRYOSTAT_AGENT_REALM");
-        if (StringUtils.isBlank(realm)) {
-            realm = "cryostat-agent-" + instanceId;
-        }
-        String callback = System.getenv("CRYOSTAT_AGENT_CALLBACK");
+        String auth = config.getValue(CRYOSTAT_AGENT_AUTHORIZATION, String.class);
+        String realm =
+                config.getOptionalValue(CRYOSTAT_AGENT_REALM, String.class)
+                        .orElse("cryostat-agent-" + instanceId);
+        String callback = config.getValue(CRYOSTAT_AGENT_CALLBACK, String.class);
         // do this at startup time
         if (StringUtils.isBlank(callback)) {
-            throw new UndefinedVariableException("CRYOSTAT_AGENT_CALLBACK");
+            throw new NoConfigurationException(CRYOSTAT_AGENT_CALLBACK);
         }
         RegistrationInfo registrationInfo = new RegistrationInfo(realm, callback);
         return http.post("/api/v2.2/discovery")
@@ -102,10 +120,7 @@ class CryostatClient implements Closeable {
     }
 
     Future<Void> deregister(String id) {
-        String auth = System.getenv("CRYOSTAT_AGENT_AUTHORIZATION");
-        if (StringUtils.isBlank(auth)) {
-            auth = "None";
-        }
+        String auth = config.getValue(CRYOSTAT_AGENT_AUTHORIZATION, String.class);
         return http.delete("/api/v2.2/discovery/" + id)
                 .putHeader(HttpHeaders.AUTHORIZATION.toString(), auth)
                 .expect(ResponsePredicate.SC_SUCCESS)
@@ -116,10 +131,7 @@ class CryostatClient implements Closeable {
     }
 
     Future<Void> update(String id, Set<DiscoveryNode> subtree) {
-        String auth = System.getenv("CRYOSTAT_AGENT_AUTHORIZATION");
-        if (StringUtils.isBlank(auth)) {
-            auth = "None";
-        }
+        String auth = config.getValue(CRYOSTAT_AGENT_AUTHORIZATION, String.class);
         return http.post("/api/v2.2/discovery/" + id)
                 .putHeader(HttpHeaders.AUTHORIZATION.toString(), auth)
                 .expect(ResponsePredicate.SC_SUCCESS)

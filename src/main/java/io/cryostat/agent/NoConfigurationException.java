@@ -37,9 +37,9 @@
  */
 package io.cryostat.agent;
 
-public class UndefinedVariableException extends RuntimeException {
+public class NoConfigurationException extends RuntimeException {
 
-    public UndefinedVariableException(String name) {
-        super("Environment variable \"" + name + "\" must be defined and non-blank");
+    public NoConfigurationException(String name) {
+        super("Configuration key \"" + name + "\" must haved defined, non-blank value");
     }
 }

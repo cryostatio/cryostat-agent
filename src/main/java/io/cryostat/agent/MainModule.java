@@ -43,8 +43,10 @@ import javax.inject.Singleton;
 
 import dagger.Module;
 import dagger.Provides;
+import io.smallrye.config.SmallRyeConfig;
 import io.vertx.core.Vertx;
 import io.vertx.core.VertxOptions;
+import org.eclipse.microprofile.config.ConfigProvider;
 
 @Module
 public abstract class MainModule {
@@ -57,25 +59,33 @@ public abstract class MainModule {
 
     @Provides
     @Singleton
-    public static WebServer provideHttpServer() {
-        return new WebServer();
+    public static WebServer provideHttpServer(SmallRyeConfig config) {
+        return new WebServer(config);
     }
 
     @Provides
     @Singleton
-    public static CryostatClient provideCryostatClient(Vertx vertx, UUID instanceId) {
-        return new CryostatClient(vertx, instanceId);
+    public static CryostatClient provideCryostatClient(
+            Vertx vertx, UUID instanceId, SmallRyeConfig config) {
+        return new CryostatClient(vertx, instanceId, config);
     }
 
     @Provides
     @Singleton
-    public static Registration provideRegistration(CryostatClient cryostat, UUID instanceId) {
-        return new Registration(cryostat, instanceId);
+    public static Registration provideRegistration(
+            CryostatClient cryostat, UUID instanceId, SmallRyeConfig config) {
+        return new Registration(cryostat, instanceId, config);
     }
 
     @Provides
     @Singleton
     public static UUID provideInstanceID() {
         return UUID.randomUUID();
+    }
+
+    @Provides
+    @Singleton
+    public static SmallRyeConfig provideConfig() {
+        return ConfigProvider.getConfig().unwrap(SmallRyeConfig.class);
     }
 }

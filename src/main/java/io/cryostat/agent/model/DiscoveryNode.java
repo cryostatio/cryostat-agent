@@ -103,6 +103,8 @@ public class DiscoveryNode {
             annotations.setPlatform(Map.of("INSTANCE_ID", instanceId));
             annotations.setCryostat(
                     Map.of(
+                            "REALM",
+                            "cryostat-agent",
                             "PID",
                             pid,
                             "HOST",

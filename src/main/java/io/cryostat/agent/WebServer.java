@@ -37,6 +37,7 @@
  */
 package io.cryostat.agent;
 
+import io.smallrye.config.SmallRyeConfig;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Promise;
 import io.vertx.core.http.HttpMethod;
@@ -48,30 +49,24 @@ import org.slf4j.LoggerFactory;
 
 class WebServer extends AbstractVerticle {
 
-    private static final String DEFAULT_HTTP_HOST = "0.0.0.0";
-    private static final int DEFAULT_HTTP_PORT = 9977;
+    private static final String CRYOSTAT_AGENT_WEBSERVER_HOST = "cryostat.agent.webserver.host";
+    private static final String CRYOSTAT_AGENT_WEBSERVER_PORT = "cryostat.agent.webserver.port";
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
+    private final SmallRyeConfig config;
     private HttpServer http;
+
+    WebServer(SmallRyeConfig config) {
+        this.config = config;
+    }
 
     @Override
     public void start(Promise<Void> promise) {
-        String host = System.getenv("CRYOSTAT_AGENT_HTTP_HOST");
-        if (StringUtils.isBlank(host)) {
-            host = DEFAULT_HTTP_HOST;
-        }
-        final String fHost = host;
-        String port = System.getenv("CRYOSTAT_AGENT_HTTP_PORT");
-        if (StringUtils.isBlank(port)) {
-            port = String.valueOf(DEFAULT_HTTP_PORT);
-        }
+        String host = config.getValue(CRYOSTAT_AGENT_WEBSERVER_HOST, String.class);
+        int port = config.getValue(CRYOSTAT_AGENT_WEBSERVER_PORT, int.class);
         this.http =
-                getVertx()
-                        .createHttpServer(
-                                new HttpServerOptions()
-                                        .setHost(host)
-                                        .setPort(Integer.valueOf(port)));
+                getVertx().createHttpServer(new HttpServerOptions().setHost(host).setPort(port));
 
         Router router = Router.router(getVertx());
         router.route()
@@ -94,9 +89,7 @@ class WebServer extends AbstractVerticle {
                             }
                             promise.complete();
                             log.info(
-                                    "HTTP Server started on {}:{}",
-                                    fHost,
-                                    ar.result().actualPort());
+                                    "HTTP Server started on {}:{}", host, ar.result().actualPort());
                         });
     }
 
