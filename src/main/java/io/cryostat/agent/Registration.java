@@ -47,6 +47,7 @@ import java.util.UUID;
 import io.cryostat.agent.model.DiscoveryNode;
 import io.cryostat.agent.model.PluginInfo;
 
+import dagger.Lazy;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
 import io.vertx.core.eventbus.MessageConsumer;
@@ -60,6 +61,7 @@ class Registration extends AbstractVerticle {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
+    private final Lazy<WebServer> webServer;
     private final CryostatClient cryostat;
     private final UUID instanceId;
     private final String appName;
@@ -72,6 +74,7 @@ class Registration extends AbstractVerticle {
     private MessageConsumer<Object> consumer;
 
     Registration(
+            Lazy<WebServer> webServer,
             CryostatClient cryostat,
             UUID instanceId,
             String appName,
@@ -79,6 +82,7 @@ class Registration extends AbstractVerticle {
             String hostname,
             int jmxPort,
             int registrationRetryMs) {
+        this.webServer = webServer;
         this.cryostat = cryostat;
         this.instanceId = instanceId;
         this.appName = appName;
@@ -109,7 +113,9 @@ class Registration extends AbstractVerticle {
                 .onSuccess(
                         plugin -> {
                             this.pluginInfo = plugin;
-                            tryUpdate(id);
+                            getVertx()
+                                    .deployVerticle(webServer.get())
+                                    .onSuccess(unused -> tryUpdate(id));
                         })
                 .onFailure(
                         t -> {

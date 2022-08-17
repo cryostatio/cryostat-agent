@@ -43,6 +43,7 @@ import java.util.UUID;
 import javax.inject.Named;
 import javax.inject.Singleton;
 
+import dagger.Lazy;
 import dagger.Module;
 import dagger.Provides;
 import io.vertx.core.Vertx;
@@ -82,6 +83,7 @@ public abstract class MainModule {
     @Provides
     @Singleton
     public static Registration provideRegistration(
+            Lazy<WebServer> webServer,
             CryostatClient cryostat,
             UUID instanceId,
             @Named(ConfigModule.CRYOSTAT_AGENT_APP_NAME) String appName,
@@ -90,7 +92,14 @@ public abstract class MainModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_APP_JMX_PORT) int jmxPort,
             @Named(ConfigModule.CRYOSTAT_AGENT_REGISTRATION_RETRY_MS) int registrationRetryMs) {
         return new Registration(
-                cryostat, instanceId, appName, realm, hostname, jmxPort, registrationRetryMs);
+                webServer,
+                cryostat,
+                instanceId,
+                appName,
+                realm,
+                hostname,
+                jmxPort,
+                registrationRetryMs);
     }
 
     @Provides

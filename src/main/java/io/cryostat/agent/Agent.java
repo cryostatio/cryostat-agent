@@ -98,7 +98,6 @@ public class Agent {
                             Signal.handle(signal, handler);
                         });
 
-        futures.add(client.vertx().deployVerticle(client.webServer()));
         futures.add(client.vertx().deployVerticle(client.registration()));
 
         CompositeFuture.join(futures)
