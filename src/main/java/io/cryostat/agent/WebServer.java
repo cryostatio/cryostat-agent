@@ -37,7 +37,6 @@
  */
 package io.cryostat.agent;
 
-import io.smallrye.config.SmallRyeConfig;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Promise;
 import io.vertx.core.http.HttpMethod;
@@ -49,22 +48,19 @@ import org.slf4j.LoggerFactory;
 
 class WebServer extends AbstractVerticle {
 
-    private static final String CRYOSTAT_AGENT_WEBSERVER_HOST = "cryostat.agent.webserver.host";
-    private static final String CRYOSTAT_AGENT_WEBSERVER_PORT = "cryostat.agent.webserver.port";
-
     private final Logger log = LoggerFactory.getLogger(getClass());
 
-    private final SmallRyeConfig config;
+    private final String host;
+    private final int port;
     private HttpServer http;
 
-    WebServer(SmallRyeConfig config) {
-        this.config = config;
+    WebServer(String host, int port) {
+        this.host = host;
+        this.port = port;
     }
 
     @Override
     public void start(Promise<Void> promise) {
-        String host = config.getValue(CRYOSTAT_AGENT_WEBSERVER_HOST, String.class);
-        int port = config.getValue(CRYOSTAT_AGENT_WEBSERVER_PORT, int.class);
         this.http =
                 getVertx().createHttpServer(new HttpServerOptions().setHost(host).setPort(port));
 

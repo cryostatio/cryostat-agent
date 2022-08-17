@@ -37,14 +37,16 @@
  */
 package io.cryostat.agent.model;
 
+import java.net.URI;
+
 public class RegistrationInfo {
 
     private String realm;
-    private String callback;
+    private URI callback;
 
     RegistrationInfo() {}
 
-    public RegistrationInfo(String realm, String callback) {
+    public RegistrationInfo(String realm, URI callback) {
         this.realm = realm;
         this.callback = callback;
     }
@@ -53,7 +55,7 @@ public class RegistrationInfo {
         return realm;
     }
 
-    public String getCallback() {
+    public URI getCallback() {
         return callback;
     }
 
@@ -61,7 +63,7 @@ public class RegistrationInfo {
         this.realm = realm;
     }
 
-    void setCallback(String callback) {
+    void setCallback(URI callback) {
         this.callback = callback;
     }
 }

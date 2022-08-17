@@ -89,6 +89,7 @@ public class DiscoveryNode {
         Target() {}
 
         public Target(
+                String realm,
                 URI connectUrl,
                 String alias,
                 UUID instanceId,
@@ -104,7 +105,7 @@ public class DiscoveryNode {
             annotations.setCryostat(
                     Map.of(
                             "REALM",
-                            "cryostat-agent",
+                            realm,
                             "PID",
                             pid,
                             "HOST",

@@ -37,18 +37,18 @@
  */
 package io.cryostat.agent;
 
+import java.net.URI;
 import java.util.UUID;
 
+import javax.inject.Named;
 import javax.inject.Singleton;
 
 import dagger.Module;
 import dagger.Provides;
-import io.smallrye.config.SmallRyeConfig;
 import io.vertx.core.Vertx;
 import io.vertx.core.VertxOptions;
-import org.eclipse.microprofile.config.ConfigProvider;
 
-@Module
+@Module(includes = {ConfigModule.class})
 public abstract class MainModule {
 
     @Provides
@@ -59,33 +59,51 @@ public abstract class MainModule {
 
     @Provides
     @Singleton
-    public static WebServer provideHttpServer(SmallRyeConfig config) {
-        return new WebServer(config);
+    public static WebServer provideHttpServer(
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_HOST) String host,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_PORT) int port) {
+        return new WebServer(host, port);
     }
 
     @Provides
     @Singleton
     public static CryostatClient provideCryostatClient(
-            Vertx vertx, UUID instanceId, SmallRyeConfig config) {
-        return new CryostatClient(vertx, instanceId, config);
+            Vertx vertx,
+            UUID instanceId,
+            @Named(ConfigModule.CRYOSTAT_AGENT_BASEURI) URI baseUri,
+            @Named(ConfigModule.CRYOSTAT_AGENT_CALLBACK) URI callback,
+            @Named(ConfigModule.CRYOSTAT_AGENT_REALM) String realm,
+            @Named(ConfigModule.CRYOSTAT_AGENT_AUTHORIZATION) String authorization,
+            @Named(ConfigModule.CRYOSTAT_AGENT_TRUST_ALL) boolean trustAll) {
+        return new CryostatClient(
+                vertx, instanceId, baseUri, callback, realm, authorization, trustAll);
     }
 
     @Provides
     @Singleton
     public static Registration provideRegistration(
-            CryostatClient cryostat, UUID instanceId, SmallRyeConfig config) {
-        return new Registration(cryostat, instanceId, config);
+            CryostatClient cryostat,
+            UUID instanceId,
+            @Named(ConfigModule.CRYOSTAT_AGENT_APP_NAME) String appName,
+            @Named(ConfigModule.CRYOSTAT_AGENT_REALM) String realm,
+            @Named(ConfigModule.CRYOSTAT_AGENT_HOSTNAME) String hostname,
+            @Named(ConfigModule.CRYOSTAT_AGENT_APP_JMX_HOST) String jmxHost,
+            @Named(ConfigModule.CRYOSTAT_AGENT_APP_JMX_PORT) int jmxPort,
+            @Named(ConfigModule.CRYOSTAT_AGENT_REGISTRATION_RETRY_MS) int registrationRetryMs) {
+        return new Registration(
+                cryostat,
+                instanceId,
+                appName,
+                realm,
+                hostname,
+                jmxHost,
+                jmxPort,
+                registrationRetryMs);
     }
 
     @Provides
     @Singleton
     public static UUID provideInstanceID() {
         return UUID.randomUUID();
-    }
-
-    @Provides
-    @Singleton
-    public static SmallRyeConfig provideConfig() {
-        return ConfigProvider.getConfig().unwrap(SmallRyeConfig.class);
     }
 }

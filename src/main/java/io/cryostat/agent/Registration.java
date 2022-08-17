@@ -37,7 +37,6 @@
  */
 package io.cryostat.agent;
 
-import java.net.InetAddress;
 import java.net.URI;
 import java.net.UnknownHostException;
 import java.time.Duration;
@@ -48,7 +47,6 @@ import java.util.UUID;
 import io.cryostat.agent.model.DiscoveryNode;
 import io.cryostat.agent.model.PluginInfo;
 
-import io.smallrye.config.SmallRyeConfig;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
 import io.vertx.core.eventbus.MessageConsumer;
@@ -57,13 +55,6 @@ import org.slf4j.LoggerFactory;
 
 class Registration extends AbstractVerticle {
 
-    private static final String CRYOSTAT_AGENT_APP_NAME = "cryostat.agent.app.name";
-    private static final String CRYOSTAT_AGENT_HOSTNAME = "cryostat.agent.hostname";
-    private static final String CRYOSTAT_AGENT_APP_JMX_HOST = "cryostat.agent.app.jmx.host";
-    private static final String CRYOSTAT_AGENT_APP_JMX_PORT = "cryostat.agent.app.jmx.port";
-    private static final String CRYOSTAT_AGENT_REGISTRATION_RETRY_MS =
-            "cryostat.agent.registration.retry-ms";
-
     static final String EVENT_BUS_ADDRESS = Registration.class.getName() + ".UPDATE";
     private static final String NODE_TYPE = "JVM";
 
@@ -71,15 +62,33 @@ class Registration extends AbstractVerticle {
 
     private final CryostatClient cryostat;
     private final UUID instanceId;
-    private final SmallRyeConfig config;
+    private final String appName;
+    private final String realm;
+    private final String hostname;
+    private final String jmxHost;
+    private final int jmxPort;
+    private final int registrationRetryMs;
 
     private PluginInfo pluginInfo;
     private MessageConsumer<Object> consumer;
 
-    Registration(CryostatClient cryostat, UUID instanceId, SmallRyeConfig config) {
+    Registration(
+            CryostatClient cryostat,
+            UUID instanceId,
+            String appName,
+            String realm,
+            String hostname,
+            String jmxHost,
+            int jmxPort,
+            int registrationRetryMs) {
         this.cryostat = cryostat;
         this.instanceId = instanceId;
-        this.config = config;
+        this.appName = appName;
+        this.realm = realm;
+        this.hostname = hostname;
+        this.jmxHost = jmxHost;
+        this.jmxPort = jmxPort;
+        this.registrationRetryMs = registrationRetryMs;
     }
 
     @Override
@@ -108,9 +117,6 @@ class Registration extends AbstractVerticle {
                 .onFailure(
                         t -> {
                             log.error("Registration failure", t);
-                            int registrationRetryMs =
-                                    config.getValue(
-                                            CRYOSTAT_AGENT_REGISTRATION_RETRY_MS, int.class);
                             log.info("Registration retry period: {}(ms)", registrationRetryMs);
                             vertx.setTimer(registrationRetryMs, this::tryRegister);
                         });
@@ -158,27 +164,7 @@ class Registration extends AbstractVerticle {
     }
 
     private DiscoveryNode defineSelf() throws UnknownHostException {
-        String jmxhost = config.getValue(CRYOSTAT_AGENT_APP_JMX_HOST, String.class);
-        String appName = config.getValue(CRYOSTAT_AGENT_APP_NAME, String.class);
-
-        int jmxport =
-                config.getOptionalValue(CRYOSTAT_AGENT_APP_JMX_PORT, int.class)
-                        .orElse(
-                                Integer.valueOf(
-                                        System.getProperty("com.sun.management.jmxremote.port")));
-
         long pid = ProcessHandle.current().pid();
-        String hostname =
-                config.getOptionalValue(CRYOSTAT_AGENT_HOSTNAME, String.class)
-                        .orElseGet(
-                                () -> {
-                                    try {
-                                        return InetAddress.getLocalHost().getHostName();
-                                    } catch (UnknownHostException uhe) {
-                                        log.error("Unable to determine own hostname", uhe);
-                                        return null;
-                                    }
-                                });
         String javaMain = System.getProperty("sun.java.command", System.getenv("JAVA_MAIN_CLASS"));
         if (StringUtils.isBlank(javaMain)) {
             log.error("Unable to determine application mainclass");
@@ -192,15 +178,16 @@ class Registration extends AbstractVerticle {
                         .getEpochSecond();
         DiscoveryNode.Target target =
                 new DiscoveryNode.Target(
+                        realm,
                         URI.create(
                                 String.format(
                                         "service:jmx:rmi:///jndi/rmi://%s:%d/jmxrmi",
-                                        jmxhost, jmxport)),
+                                        jmxHost, jmxPort)),
                         appName,
                         instanceId,
                         pid,
                         hostname,
-                        jmxport,
+                        jmxPort,
                         javaMain,
                         startTime);
 
