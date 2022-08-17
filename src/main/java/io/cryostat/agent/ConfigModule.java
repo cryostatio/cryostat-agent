@@ -95,9 +95,12 @@ public abstract class ConfigModule {
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_REALM)
-    public static String provideCryostatAgentRealm(SmallRyeConfig config, UUID instanceId) {
+    public static String provideCryostatAgentRealm(
+            SmallRyeConfig config,
+            @Named(CRYOSTAT_AGENT_APP_NAME) String appName,
+            UUID instanceId) {
         return config.getOptionalValue(CRYOSTAT_AGENT_REALM, String.class)
-                .orElse("cryostat-agent-" + instanceId);
+                .orElseGet(() -> String.format("%s-%s", appName, instanceId));
     }
 
     @Provides
