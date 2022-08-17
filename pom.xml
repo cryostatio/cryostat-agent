@@ -14,7 +14,7 @@
   <repository>
     <id>github</id>
     <name>GitHub Packages</name>
-    <url>https://maven.pkg.github.com/cryostastio/cryostat-agent</url>
+    <url>https://maven.pkg.github.com/cryostatio/cryostat-agent</url>
   </repository>
 </distributionManagement>
 
