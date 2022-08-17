@@ -87,18 +87,10 @@ public abstract class MainModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_APP_NAME) String appName,
             @Named(ConfigModule.CRYOSTAT_AGENT_REALM) String realm,
             @Named(ConfigModule.CRYOSTAT_AGENT_HOSTNAME) String hostname,
-            @Named(ConfigModule.CRYOSTAT_AGENT_APP_JMX_HOST) String jmxHost,
             @Named(ConfigModule.CRYOSTAT_AGENT_APP_JMX_PORT) int jmxPort,
             @Named(ConfigModule.CRYOSTAT_AGENT_REGISTRATION_RETRY_MS) int registrationRetryMs) {
         return new Registration(
-                cryostat,
-                instanceId,
-                appName,
-                realm,
-                hostname,
-                jmxHost,
-                jmxPort,
-                registrationRetryMs);
+                cryostat, instanceId, appName, realm, hostname, jmxPort, registrationRetryMs);
     }
 
     @Provides

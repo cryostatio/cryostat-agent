@@ -65,7 +65,6 @@ class Registration extends AbstractVerticle {
     private final String appName;
     private final String realm;
     private final String hostname;
-    private final String jmxHost;
     private final int jmxPort;
     private final int registrationRetryMs;
 
@@ -78,7 +77,6 @@ class Registration extends AbstractVerticle {
             String appName,
             String realm,
             String hostname,
-            String jmxHost,
             int jmxPort,
             int registrationRetryMs) {
         this.cryostat = cryostat;
@@ -86,7 +84,6 @@ class Registration extends AbstractVerticle {
         this.appName = appName;
         this.realm = realm;
         this.hostname = hostname;
-        this.jmxHost = jmxHost;
         this.jmxPort = jmxPort;
         this.registrationRetryMs = registrationRetryMs;
     }
@@ -182,7 +179,7 @@ class Registration extends AbstractVerticle {
                         URI.create(
                                 String.format(
                                         "service:jmx:rmi:///jndi/rmi://%s:%d/jmxrmi",
-                                        jmxHost, jmxPort)),
+                                        hostname, jmxPort)),
                         appName,
                         instanceId,
                         pid,

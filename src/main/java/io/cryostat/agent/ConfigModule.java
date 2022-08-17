@@ -68,7 +68,6 @@ public abstract class ConfigModule {
 
     public static final String CRYOSTAT_AGENT_APP_NAME = "cryostat.agent.app.name";
     public static final String CRYOSTAT_AGENT_HOSTNAME = "cryostat.agent.hostname";
-    public static final String CRYOSTAT_AGENT_APP_JMX_HOST = "cryostat.agent.app.jmx.host";
     public static final String CRYOSTAT_AGENT_APP_JMX_PORT = "cryostat.agent.app.jmx.port";
     public static final String CRYOSTAT_AGENT_REGISTRATION_RETRY_MS =
             "cryostat.agent.registration.retry-ms";
@@ -150,13 +149,6 @@ public abstract class ConfigModule {
                                 return null;
                             }
                         });
-    }
-
-    @Provides
-    @Singleton
-    @Named(CRYOSTAT_AGENT_APP_JMX_HOST)
-    public static String provideCryostatAgentAppJmxHost(SmallRyeConfig config) {
-        return config.getValue(CRYOSTAT_AGENT_APP_JMX_HOST, String.class);
     }
 
     @Provides
