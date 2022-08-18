@@ -138,8 +138,14 @@ public class Harvester implements FlightRecorderListener {
         this.task.cancel(true);
         FlightRecorder.removeListener(this);
 
+        long id = recordingId.get();
+        // TODO on stop, should we upload a smaller emergency dump recording?
+        try {
+            upload().get();
+        } catch (ExecutionException | InterruptedException e) {
+            log.warn("Exit upload failed", e);
+        }
         if (flightRecorder != null) {
-            long id = recordingId.get();
             for (Recording r : flightRecorder.getRecordings()) {
                 if (id == r.getId()) {
                     r.close();
@@ -147,13 +153,7 @@ public class Harvester implements FlightRecorderListener {
                 }
             }
         }
-
-        // TODO on stop, should we upload a smaller emergency dump recording?
-        try {
-            upload().get();
-        } catch (ExecutionException | InterruptedException e) {
-            log.warn("Exit upload failed", e);
-        }
+        log.info("Harvester stopped");
     }
 
     private Future<Void> upload() {
@@ -166,10 +166,7 @@ public class Harvester implements FlightRecorderListener {
                 if (id != recording.getId()) {
                     continue;
                 }
-                Files.write(
-                        exitPath,
-                        new byte[0],
-                        StandardOpenOption.TRUNCATE_EXISTING);
+                Files.write(exitPath, new byte[0], StandardOpenOption.TRUNCATE_EXISTING);
                 recording.dump(exitPath);
                 return client.upload(exitPath);
             }
