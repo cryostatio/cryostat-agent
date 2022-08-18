@@ -135,15 +135,25 @@ public class Harvester implements FlightRecorderListener {
 
     public void stop() {
         log.info("Harvester stopping");
-        this.task.cancel(true);
+        if (this.task != null) {
+            this.task.cancel(true);
+            this.task = null;
+        }
         FlightRecorder.removeListener(this);
+        log.info("Harvester stopped");
+    }
 
+    public Future<Void> exitUpload() {
+        if (flightRecorder == null || period <= 0) {
+            return CompletableFuture.completedFuture(null);
+        }
         long id = recordingId.get();
         // TODO on stop, should we upload a smaller emergency dump recording?
         try {
             upload().get();
         } catch (ExecutionException | InterruptedException e) {
             log.warn("Exit upload failed", e);
+            return CompletableFuture.failedFuture(e);
         }
         if (flightRecorder != null) {
             for (Recording r : flightRecorder.getRecordings()) {
@@ -154,6 +164,7 @@ public class Harvester implements FlightRecorderListener {
             }
         }
         log.info("Harvester stopped");
+        return CompletableFuture.completedFuture(null);
     }
 
     private Future<Void> upload() {
