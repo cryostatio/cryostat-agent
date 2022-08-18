@@ -68,6 +68,7 @@ public class Harvester implements FlightRecorderListener {
     private final String template;
     private final CryostatClient client;
     private final AtomicLong recordingId = new AtomicLong(-1L);
+    private volatile Path exitPath;
     private FlightRecorder flightRecorder;
     private Future<?> task;
 
@@ -106,8 +107,8 @@ public class Harvester implements FlightRecorderListener {
                 recording.setToDisk(true);
                 recording.setMaxAge(Duration.ofMillis(period));
                 recording.setDumpOnExit(true);
-                Path path = Files.createTempFile(null, null);
-                recording.setDestination(path);
+                this.exitPath = Files.createTempFile(null, null);
+                recording.setDestination(this.exitPath);
                 recording.start();
                 this.recordingId.set(recording.getId());
                 startPeriodic();
@@ -155,13 +156,12 @@ public class Harvester implements FlightRecorderListener {
             return CompletableFuture.failedFuture(new IllegalStateException("No source recording"));
         }
         try {
-            Path p = Files.createTempFile(null, null);
             for (Recording recording : this.flightRecorder.getRecordings()) {
                 if (id != recording.getId()) {
                     continue;
                 }
-                recording.dump(p);
-                return client.upload(p);
+                recording.dump(exitPath);
+                return client.upload(exitPath);
             }
             return CompletableFuture.failedFuture(new FileNotFoundException("Could not locate source recording"));
         } catch (IOException e) {
