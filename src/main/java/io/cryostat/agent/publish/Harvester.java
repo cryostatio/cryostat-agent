@@ -130,6 +130,16 @@ public class Harvester implements FlightRecorderListener {
         this.task.cancel(true);
         FlightRecorder.removeListener(this);
 
+        if (flightRecorder != null) {
+            long id = recordingId.get();
+            for (Recording r : flightRecorder.getRecordings()) {
+                if (id == r.getId()) {
+                    r.close();
+                    break;
+                }
+            }
+        }
+
         // TODO on stop, should we upload a smaller emergency dump recording?
         try {
             upload().get();
