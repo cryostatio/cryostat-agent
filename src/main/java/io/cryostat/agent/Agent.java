@@ -44,6 +44,8 @@ import java.util.concurrent.TimeUnit;
 import javax.inject.Singleton;
 
 import dagger.Component;
+import io.cryostat.agent.publish.Harvester;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import sun.misc.Signal;
@@ -88,6 +90,13 @@ public class Agent {
                         });
 
         try {
+            client.registration().addRegistrationListener(evt -> {
+                if (evt.state) {
+                    client.harvester().start();
+                } else {
+                    client.harvester().sotp();
+                }
+            });
             client.registration().start();
             client.webServer().start();
         } catch (Exception e) {
@@ -119,6 +128,8 @@ public class Agent {
         WebServer webServer();
 
         Registration registration();
+
+        Harvester harvester();
 
         ScheduledExecutorService executor();
 

@@ -56,11 +56,17 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 
+import io.cryostat.agent.publish.PublishModule;
+
 import dagger.Lazy;
 import dagger.Module;
 import dagger.Provides;
 
-@Module(includes = {ConfigModule.class})
+@Module(
+        includes = {
+            ConfigModule.class,
+            PublishModule.class,
+        })
 public abstract class MainModule {
 
     // one for outbound HTTP requests, one for incoming HTTP requests, and one as a general worker
@@ -151,11 +157,13 @@ public abstract class MainModule {
     @Singleton
     public static CryostatClient provideCryostatClient(
             HttpClient http,
+            UUID instanceId,
+            @Named(ConfigModule.CRYOSTAT_AGENT_APP_NAME) String appName,
             @Named(ConfigModule.CRYOSTAT_AGENT_BASEURI) URI baseUri,
             @Named(ConfigModule.CRYOSTAT_AGENT_CALLBACK) URI callback,
             @Named(ConfigModule.CRYOSTAT_AGENT_REALM) String realm,
             @Named(ConfigModule.CRYOSTAT_AGENT_AUTHORIZATION) String authorization) {
-        return new CryostatClient(http, baseUri, callback, realm, authorization);
+        return new CryostatClient(http, instanceId, appName, baseUri, callback, realm, authorization);
     }
 
     @Provides

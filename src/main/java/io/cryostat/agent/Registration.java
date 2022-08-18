@@ -40,6 +40,7 @@ package io.cryostat.agent;
 import java.net.URI;
 import java.net.UnknownHostException;
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -47,6 +48,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 import io.cryostat.agent.model.DiscoveryNode;
 import io.cryostat.agent.model.PluginInfo;
@@ -70,6 +72,7 @@ class Registration {
     private final int registrationRetryMs;
 
     private final PluginInfo pluginInfo = new PluginInfo();
+    private final Set<Consumer<RegistrationEvent>> listeners = new HashSet<>();
 
     Registration(
             ScheduledExecutorService executor,
@@ -95,6 +98,10 @@ class Registration {
         log.info("{} started", getClass().getName());
     }
 
+    void addRegistrationListener(Consumer<RegistrationEvent> listener) {
+        this.listeners.add(listener);
+    }
+
     void tryRegister() {
         Future<Void> f =
                 cryostat.register(pluginInfo)
@@ -103,8 +110,10 @@ class Registration {
                                     if (plugin != null) {
                                         this.pluginInfo.copyFrom(plugin);
                                         log.info("Registered as {}", this.pluginInfo.getId());
+                                        notify(true);
                                         tryUpdate();
                                     } else if (t != null) {
+                                        notify(false);
                                         throw new RegistrationException(t);
                                     }
 
@@ -205,10 +214,12 @@ class Registration {
                 .handleAsync(
                         (n, t) -> {
                             if (t != null) {
+                                notify(false);
                                 log.warn(
                                         "Failed to deregister as Cryostat discovery plugin [{}]",
                                         this.pluginInfo.getId());
                             } else {
+                                notify(false);
                                 log.info(
                                         "Deregistered from Cryostat discovery plugin [{}]",
                                         this.pluginInfo.getId());
@@ -217,5 +228,18 @@ class Registration {
                             return null;
                         },
                         executor);
+    }
+
+    private void notify(boolean state) {
+        RegistrationEvent evt = new RegistrationEvent(state);
+        this.listeners.forEach(listener -> listener.accept(evt));
+    }
+
+    static class RegistrationEvent {
+        boolean state;
+
+        RegistrationEvent(boolean state) {
+            this.state = state;
+        }
     }
 }
