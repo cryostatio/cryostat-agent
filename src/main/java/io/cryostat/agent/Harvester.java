@@ -35,7 +35,7 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package io.cryostat.agent.publish;
+package io.cryostat.agent;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -55,13 +55,12 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import io.cryostat.agent.CryostatClient;
 import jdk.jfr.Configuration;
 import jdk.jfr.FlightRecorder;
 import jdk.jfr.FlightRecorderListener;
 import jdk.jfr.Recording;
 
-public class Harvester implements FlightRecorderListener {
+class Harvester implements FlightRecorderListener {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
@@ -151,7 +150,7 @@ public class Harvester implements FlightRecorderListener {
         shutdown = true;
     }
 
-    public Future<Void> exitUpload() {
+    Future<Void> exitUpload() {
         shutdown = true;
         if (flightRecorder == null || period <= 0) {
             return CompletableFuture.completedFuture(null);

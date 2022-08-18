@@ -56,8 +56,6 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 
-import io.cryostat.agent.publish.PublishModule;
-
 import dagger.Lazy;
 import dagger.Module;
 import dagger.Provides;
@@ -65,7 +63,6 @@ import dagger.Provides;
 @Module(
         includes = {
             ConfigModule.class,
-            PublishModule.class,
         })
 public abstract class MainModule {
 
@@ -188,6 +185,16 @@ public abstract class MainModule {
                 callback,
                 jmxPort,
                 registrationRetryMs);
+    }
+
+    @Provides
+    @Singleton
+    public static Harvester provideHarvester(
+            ScheduledExecutorService executor,
+            @Named(ConfigModule.CRYOSTAT_AGENT_HARVESTER_PERIOD_MS) long period,
+            @Named(ConfigModule.CRYOSTAT_AGENT_HARVESTER_TEMPLATE) String template,
+            CryostatClient client) {
+        return new Harvester(executor, period, template, client);
     }
 
     @Provides
