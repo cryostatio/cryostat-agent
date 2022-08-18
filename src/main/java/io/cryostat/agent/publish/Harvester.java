@@ -41,6 +41,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.text.ParseException;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
@@ -108,6 +109,10 @@ public class Harvester implements FlightRecorderListener {
                 recording.setMaxAge(Duration.ofMillis(period));
                 recording.setDumpOnExit(true);
                 this.exitPath = Files.createTempFile(null, null);
+                Files.write(
+                        exitPath,
+                        new byte[0],
+                        StandardOpenOption.TRUNCATE_EXISTING);
                 recording.setDestination(this.exitPath);
                 recording.start();
                 this.recordingId.set(recording.getId());
@@ -160,6 +165,10 @@ public class Harvester implements FlightRecorderListener {
                 if (id != recording.getId()) {
                     continue;
                 }
+                Files.write(
+                        exitPath,
+                        new byte[0],
+                        StandardOpenOption.TRUNCATE_EXISTING);
                 recording.dump(exitPath);
                 return client.upload(exitPath);
             }
