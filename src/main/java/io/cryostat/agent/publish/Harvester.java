@@ -49,6 +49,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.slf4j.Logger;
@@ -72,6 +73,7 @@ public class Harvester implements FlightRecorderListener {
     private volatile Path exitPath;
     private FlightRecorder flightRecorder;
     private Future<?> task;
+    private boolean shutdown;
 
     Harvester(ScheduledExecutorService executor, long period, String template, CryostatClient client) {
         this.executor = executor;
@@ -98,8 +100,20 @@ public class Harvester implements FlightRecorderListener {
             log.error("Harvester could not start", e);
             return;
         }
+        startRecording();
+        shutdown = false;
+    }
 
-        executor.submit(() -> {
+    private void startPeriodic() {
+        if (this.task != null) {
+            this.task.cancel(true);
+        }
+        this.task = executor.scheduleAtFixedRate(this::uploadOngoing, period, period, TimeUnit.MILLISECONDS);
+    }
+
+    private Future<?> startRecording() {
+        return executor.submit(() -> {
+            safeCloseCurrentRecording();
             Recording recording = null;
             try {
                 Configuration config = Configuration.getConfiguration(template);
@@ -126,13 +140,6 @@ public class Harvester implements FlightRecorderListener {
         });
     }
 
-    private void startPeriodic() {
-        if (this.task != null) {
-            this.task.cancel(true);
-        }
-        this.task = executor.scheduleAtFixedRate(this::upload, period, period, TimeUnit.MILLISECONDS);
-    }
-
     public void stop() {
         log.info("Harvester stopping");
         if (this.task != null) {
@@ -141,71 +148,86 @@ public class Harvester implements FlightRecorderListener {
         }
         FlightRecorder.removeListener(this);
         log.info("Harvester stopped");
+        shutdown = true;
     }
 
     public Future<Void> exitUpload() {
+        shutdown = true;
         if (flightRecorder == null || period <= 0) {
             return CompletableFuture.completedFuture(null);
         }
-        long id = recordingId.get();
         // TODO on stop, should we upload a smaller emergency dump recording?
         try {
-            upload().get();
+            uploadOngoing().get();
         } catch (ExecutionException | InterruptedException e) {
             log.warn("Exit upload failed", e);
             return CompletableFuture.failedFuture(e);
-        }
-        if (flightRecorder != null) {
-            for (Recording r : flightRecorder.getRecordings()) {
-                if (id == r.getId()) {
-                    r.close();
-                    break;
-                }
-            }
+        } finally {
+            safeCloseCurrentRecording();
         }
         log.info("Harvester stopped");
         return CompletableFuture.completedFuture(null);
     }
 
-    private Future<Void> upload() {
-        long id = this.recordingId.get();
+    private void safeCloseCurrentRecording() {
+        getById(recordingId.get()).ifPresent(Recording::close);
+    }
+
+    private Optional<Recording> getById(long id) {
         if (id < 0) {
+            return Optional.empty();
+        }
+        for (Recording recording : this.flightRecorder.getRecordings()) {
+            if (id == recording.getId()) {
+                return Optional.of(recording);
+            }
+        }
+        return Optional.empty();
+    }
+
+    private Future<Void> uploadOngoing() {
+        Optional<Recording> o = getById(this.recordingId.get());
+        if (o.isEmpty()) {
             return CompletableFuture.failedFuture(new IllegalStateException("No source recording"));
         }
+        Recording recording = o.get();
         try {
-            for (Recording recording : this.flightRecorder.getRecordings()) {
-                if (id != recording.getId()) {
-                    continue;
-                }
-                Files.write(exitPath, new byte[0], StandardOpenOption.TRUNCATE_EXISTING);
-                recording.dump(exitPath);
-                return client.upload(exitPath);
-            }
-            return CompletableFuture.failedFuture(new FileNotFoundException("Could not locate source recording"));
+            Files.write(exitPath, new byte[0], StandardOpenOption.TRUNCATE_EXISTING);
+            recording.dump(exitPath);
+            return client.upload(exitPath);
         } catch (IOException e) {
             return CompletableFuture.failedFuture(e);
         }
     }
 
+    private Future<Void> uploadDumpedFile() throws FileNotFoundException {
+        return client.upload(exitPath);
+    }
+
     @Override
     public void recordingStateChanged(Recording recording) {
+        log.info("{}({}) {}", recording.getName(), recording.getId(), recording.getState().name());
         if (this.recordingId.get() == recording.getId()) {
             switch (recording.getState()) {
                 case NEW:
-                    // do nothing
                     break;
                 case DELAYED:
-                    // do nothing
                     break;
                 case RUNNING:
-                    // do nothing
                     break;
                 case STOPPED:
-                    // TODO handle by uploading current recording data to server and restarting
-                    // recording
+                    recording.close(); // we should get notified for the CLOSED state next
                     break;
                 case CLOSED:
-                    // TODO handle by checking if file was dumped to disk and uploading that
+                    if (!shutdown) {
+                        try {
+                            uploadDumpedFile().get();
+                        } catch (ExecutionException | InterruptedException | FileNotFoundException e) {
+                            log.warn("Could not upload exit dump file", e);
+                        } finally {
+                            startRecording();
+                        }
+                    }
                     break;
                 default:
                     log.warn(
