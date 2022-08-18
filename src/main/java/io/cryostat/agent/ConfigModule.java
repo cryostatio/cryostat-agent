@@ -172,7 +172,9 @@ public abstract class ConfigModule {
     @Named(CRYOSTAT_AGENT_APP_JMX_PORT)
     public static int provideCryostatAgentAppJmxPort(SmallRyeConfig config) {
         return config.getOptionalValue(CRYOSTAT_AGENT_APP_JMX_PORT, int.class)
-                .orElse(Integer.valueOf(System.getProperty("com.sun.management.jmxremote.port")));
+                .orElse(
+                        Integer.valueOf(
+                                System.getProperty("com.sun.management.jmxremote.port", "-1")));
     }
 
     @Provides
