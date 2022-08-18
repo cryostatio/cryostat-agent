@@ -102,6 +102,7 @@ public class Harvester implements FlightRecorderListener {
             try {
                 Configuration config = Configuration.getConfiguration(template);
                 recording = new Recording(config);
+                recording.setName("cryostat-agent");
                 recording.setToDisk(true);
                 recording.setMaxAge(Duration.ofMillis(period));
                 recording.setDumpOnExit(true);
