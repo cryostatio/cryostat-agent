@@ -134,6 +134,7 @@ public class Harvester implements FlightRecorderListener {
     }
 
     public void stop() {
+        log.info("Harvester stopping");
         this.task.cancel(true);
         FlightRecorder.removeListener(this);
 
