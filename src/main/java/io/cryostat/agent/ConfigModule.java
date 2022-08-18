@@ -74,6 +74,11 @@ public abstract class ConfigModule {
     public static final String CRYOSTAT_AGENT_REGISTRATION_RETRY_MS =
             "cryostat.agent.registration.retry-ms";
 
+    public static final String CRYOSTAT_AGENT_HARVESTER_PERIOD_MS =
+            "cryostat.agent.harvester.period-ms";
+    public static final String CRYOSTAT_AGENT_HARVESTER_TEMPLATE =
+            "cryostat.agent.harvester.template";
+
     @Provides
     @Singleton
     public static SmallRyeConfig provideConfig() {
@@ -175,5 +180,19 @@ public abstract class ConfigModule {
     @Named(CRYOSTAT_AGENT_REGISTRATION_RETRY_MS)
     public static int provideCryostatAgentRegistrationRetryMs(SmallRyeConfig config) {
         return config.getValue(CRYOSTAT_AGENT_REGISTRATION_RETRY_MS, int.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_HARVESTER_PERIOD_MS)
+    public static long provideCryostatAgentHarvesterPeriod(SmallRyeConfig config) {
+        return config.getValue(CRYOSTAT_AGENT_HARVESTER_PERIOD_MS, long.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_HARVESTER_TEMPLATE)
+    public static String provideCryostatAgentHarvesterTemplate(SmallRyeConfig config) {
+        return config.getValue(CRYOSTAT_AGENT_HARVESTER_TEMPLATE, String.class);
     }
 }

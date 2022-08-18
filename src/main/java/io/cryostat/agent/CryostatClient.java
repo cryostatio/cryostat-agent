@@ -37,6 +37,7 @@
  */
 package io.cryostat.agent;
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -45,7 +46,11 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandlers;
 import java.time.Duration;
+import java.nio.file.Path;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 import io.cryostat.agent.model.DiscoveryNode;
@@ -58,7 +63,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-class CryostatClient {
+public class CryostatClient {
 
     private static final String API_PATH = "/api/v2.2/discovery";
 
@@ -66,13 +71,18 @@ class CryostatClient {
 
     private final ObjectMapper mapper;
     private final HttpClient http;
+
+    private final String appName;
+    private final UUID instanceId;
     private final URI baseUri;
     private final URI callback;
     private final String realm;
     private final String authorization;
 
-    CryostatClient(HttpClient http, URI baseUri, URI callback, String realm, String authorization) {
+    CryostatClient(HttpClient http, UUID instanceId, String appName, URI baseUri, URI callback, String realm, String authorization) {
         this.http = http;
+        this.instanceId = instanceId;
+        this.appName = appName;
         this.baseUri = baseUri;
         this.callback = callback;
         this.realm = realm;
@@ -82,7 +92,7 @@ class CryostatClient {
         log.info("Using Cryostat baseuri {}", baseUri);
     }
 
-    CompletableFuture<PluginInfo> register(PluginInfo pluginInfo) {
+    public CompletableFuture<PluginInfo> register(PluginInfo pluginInfo) {
         RegistrationInfo registrationInfo =
                 new RegistrationInfo(pluginInfo.getId(), realm, callback, pluginInfo.getToken());
         HttpRequest req;
@@ -132,7 +142,7 @@ class CryostatClient {
                         });
     }
 
-    CompletableFuture<Void> deregister(PluginInfo pluginInfo) {
+    public CompletableFuture<Void> deregister(PluginInfo pluginInfo) {
         HttpRequest req =
                 HttpRequest.newBuilder(
                                 baseUri.resolve(
@@ -159,7 +169,7 @@ class CryostatClient {
                 .thenApply(res -> null);
     }
 
-    CompletableFuture<Void> update(PluginInfo pluginInfo, Set<DiscoveryNode> subtree) {
+    public CompletableFuture<Void> update(PluginInfo pluginInfo, Set<DiscoveryNode> subtree) {
         HttpRequest req;
         try {
             req =
@@ -177,9 +187,36 @@ class CryostatClient {
                             .timeout(Duration.ofSeconds(1))
                             .build();
             log.trace("{}", req);
+        return http.sendAsync(req, BodyHandlers.discarding())
+                .thenApply(
+                        res -> {
+                            log.trace(
+                                    "{} {} : {}",
+                                    res.request().method(),
+                                    res.request().uri(),
+                                    res.statusCode());
+                            return res;
+                        })
+                .thenApply(this::assertOkStatus)
+                .thenApply(res -> null);
         } catch (JsonProcessingException e) {
             return CompletableFuture.failedFuture(e);
         }
+    }
+
+    public CompletableFuture<Void> upload(Path recording) throws FileNotFoundException {
+        String timestamp =
+                Instant.now().truncatedTo(ChronoUnit.SECONDS).toString().replaceAll("[-:]", "");
+        String fileName = String.format("%s_%s_%s.jfr", appName, "agent-" + instanceId, timestamp);
+        HttpRequest req =
+                    HttpRequest.newBuilder(baseUri.resolve("/api/v1/recordings"))
+                            .POST(HttpRequest.BodyPublishers.ofFile(recording))
+                            .setHeader("Authorization", authorization)
+                            .setHeader("Content-Type", "application/octet-stream")
+                            .setHeader("Content-Disposition", "form-data; name=\"recording\"; filename=\"" + fileName + "\"")
+                            .timeout(Duration.ofSeconds(30))
+                            .build();
+            log.trace("{}", req);
         return http.sendAsync(req, BodyHandlers.discarding())
                 .thenApply(
                         res -> {
