@@ -44,8 +44,6 @@ import java.util.concurrent.TimeUnit;
 
 import javax.inject.Singleton;
 
-import io.cryostat.agent.publish.Harvester;
-
 import dagger.Component;
 
 import org.slf4j.Logger;
