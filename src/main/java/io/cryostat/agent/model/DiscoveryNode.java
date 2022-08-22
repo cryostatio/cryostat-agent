@@ -82,6 +82,7 @@ public class DiscoveryNode {
 
     public static class Target {
 
+        private UUID id;
         private URI connectUrl;
         private String alias;
         private Annotations annotations;
@@ -89,12 +90,14 @@ public class DiscoveryNode {
         Target() {}
 
         Target(Target o) {
+            this.id = o.id;
             this.connectUrl = o.connectUrl;
             this.alias = o.alias;
             this.annotations = new Annotations(o.annotations);
         }
 
         public Target(
+                UUID id,
                 String realm,
                 URI connectUrl,
                 String alias,
@@ -104,6 +107,7 @@ public class DiscoveryNode {
                 int port,
                 String javaMain,
                 long startTime) {
+            this.id = id;
             this.connectUrl = connectUrl;
             this.alias = alias;
             this.annotations = new Annotations();
@@ -124,6 +128,10 @@ public class DiscoveryNode {
                             startTime));
         }
 
+        public UUID getId() {
+            return id;
+        }
+
         public URI getConnectUrl() {
             return connectUrl;
         }
@@ -134,6 +142,10 @@ public class DiscoveryNode {
 
         public Annotations getAnnotations() {
             return new Annotations(annotations);
+        }
+
+        void setId(UUID id) {
+            this.id = id;
         }
 
         void setConnectUrl(URI connectUrl) {

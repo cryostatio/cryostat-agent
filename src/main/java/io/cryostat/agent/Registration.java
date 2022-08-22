@@ -132,7 +132,7 @@ class Registration {
             log.error("Unable to define self", uhe);
             return;
         }
-        log.info("publishing self as {}", selfNode.getTarget().getConnectUrl());
+        log.info("publishing self as {} ({})", selfNode.getTarget().getConnectUrl(), instanceId);
         Future<Void> f =
                 cryostat.update(pluginInfo, Set.of(selfNode))
                         .handleAsync(
@@ -176,6 +176,7 @@ class Registration {
                         .getEpochSecond();
         DiscoveryNode.Target target =
                 new DiscoveryNode.Target(
+                        instanceId,
                         realm,
                         URI.create(
                                 String.format(
