@@ -43,12 +43,14 @@ public class RegistrationInfo {
 
     private String realm;
     private URI callback;
+    private String token;
 
     RegistrationInfo() {}
 
-    public RegistrationInfo(String realm, URI callback) {
+    public RegistrationInfo(String realm, URI callback, String token) {
         this.realm = realm;
         this.callback = callback;
+        this.token = token;
     }
 
     public String getRealm() {
@@ -59,11 +61,19 @@ public class RegistrationInfo {
         return callback;
     }
 
+    public String getToken() {
+        return token;
+    }
+
     void setRealm(String realm) {
         this.realm = realm;
     }
 
     void setCallback(URI callback) {
         this.callback = callback;
+    }
+
+    void setToken(String token) {
+        this.token = token;
     }
 }
