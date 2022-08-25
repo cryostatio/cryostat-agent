@@ -24,7 +24,7 @@ jobs:
         submodules: true
     - uses: actions/setup-java@v2
       with:
-        java-version: '17'
+        java-version: '11'
         distribution: 'adopt'
     - uses: skjolber/maven-cache-github-action@v1
       with:
