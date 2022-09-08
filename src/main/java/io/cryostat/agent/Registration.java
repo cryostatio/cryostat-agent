@@ -51,7 +51,6 @@ import java.util.concurrent.TimeUnit;
 import io.cryostat.agent.model.DiscoveryNode;
 import io.cryostat.agent.model.PluginInfo;
 
-import dagger.Lazy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -62,7 +61,6 @@ class Registration {
     private final Logger log = LoggerFactory.getLogger(getClass());
 
     private final ScheduledExecutorService executor;
-    private final Lazy<WebServer> webServer;
     private final CryostatClient cryostat;
     private final UUID instanceId;
     private final String appName;
@@ -75,7 +73,6 @@ class Registration {
 
     Registration(
             ScheduledExecutorService executor,
-            Lazy<WebServer> webServer,
             CryostatClient cryostat,
             UUID instanceId,
             String appName,
@@ -84,7 +81,6 @@ class Registration {
             int jmxPort,
             int registrationRetryMs) {
         this.executor = executor;
-        this.webServer = webServer;
         this.cryostat = cryostat;
         this.instanceId = instanceId;
         this.appName = appName;
@@ -94,7 +90,7 @@ class Registration {
         this.registrationRetryMs = registrationRetryMs;
     }
 
-    public void start() {
+    void start() {
         executor.submit(this::tryRegister);
         log.info("{} started", getClass().getName());
     }
@@ -139,23 +135,25 @@ class Registration {
         log.info("publishing self as {}", selfNode.getTarget().getConnectUrl());
         Future<Void> f =
                 cryostat.update(pluginInfo, Set.of(selfNode))
-                        .handle(
+                        .handleAsync(
                                 (n, t) -> {
                                     if (n != null) {
                                         log.info("publish success");
                                     } else if (t != null) {
                                         log.error("Update failure", t);
                                         deregister()
-                                                .thenRun(
+                                                .thenRunAsync(
                                                         () -> {
                                                             executor.schedule(
                                                                     this::tryRegister,
                                                                     registrationRetryMs,
                                                                     TimeUnit.MILLISECONDS);
-                                                        });
+                                                        },
+                                                        executor);
                                     }
                                     return (Void) null;
-                                });
+                                },
+                                executor);
         try {
             f.get();
         } catch (ExecutionException | InterruptedException e) {
@@ -196,15 +194,15 @@ class Registration {
         return selfNode;
     }
 
-    public void stop() {}
+    void stop() {}
 
     CompletableFuture<Void> deregister() {
         if (!this.pluginInfo.isInitialized()) {
+            log.info("Deregistration requested before registration complete!");
             return CompletableFuture.completedFuture(null);
         }
         return cryostat.deregister(pluginInfo)
-                .thenRun(() -> webServer.get().stop())
-                .handle(
+                .handleAsync(
                         (n, t) -> {
                             if (t != null) {
                                 log.warn(
@@ -217,6 +215,7 @@ class Registration {
                             }
                             this.pluginInfo.clear();
                             return null;
-                        });
+                        },
+                        executor);
     }
 }

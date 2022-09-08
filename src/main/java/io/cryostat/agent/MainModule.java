@@ -71,7 +71,7 @@ public abstract class MainModule {
     @Singleton
     public static ScheduledExecutorService provideExecutor(AtomicInteger threadId) {
         return Executors.newScheduledThreadPool(
-                2,
+                3,
                 r -> {
                     Thread thread = new Thread(r);
                     thread.setName("cryostat-agent-worker-" + threadId.getAndIncrement());
@@ -151,7 +151,6 @@ public abstract class MainModule {
     @Singleton
     public static Registration provideRegistration(
             ScheduledExecutorService executor,
-            Lazy<WebServer> webServer,
             CryostatClient cryostat,
             UUID instanceId,
             @Named(ConfigModule.CRYOSTAT_AGENT_APP_NAME) String appName,
@@ -161,7 +160,6 @@ public abstract class MainModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_REGISTRATION_RETRY_MS) int registrationRetryMs) {
         return new Registration(
                 executor,
-                webServer,
                 cryostat,
                 instanceId,
                 appName,

@@ -41,6 +41,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandlers;
 import java.time.Duration;
 import java.util.Set;
@@ -128,6 +129,7 @@ class CryostatClient {
                                     res.statusCode());
                             return res;
                         })
+                .thenApply(this::assertOkStatus)
                 .thenApply(
                         resp -> {
                             try {
@@ -173,6 +175,7 @@ class CryostatClient {
                                     res.statusCode());
                             return res;
                         })
+                .thenApply(this::assertOkStatus)
                 .thenApply(res -> null);
     }
 
@@ -207,6 +210,16 @@ class CryostatClient {
                                     res.statusCode());
                             return res;
                         })
+                .thenApply(this::assertOkStatus)
                 .thenApply(res -> null);
+    }
+
+    private <T> HttpResponse<T> assertOkStatus(HttpResponse<T> res) {
+        int sc = res.statusCode();
+        boolean isOk = 200 <= sc && sc < 300;
+        if (isOk) {
+            return res;
+        }
+        throw new RuntimeException(String.format("HTTP API %d", sc));
     }
 }

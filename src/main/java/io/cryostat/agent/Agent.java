@@ -39,6 +39,7 @@ package io.cryostat.agent;
 
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 import javax.inject.Singleton;
 
@@ -64,9 +65,11 @@ public class Agent {
                                         log.info("Caught SIG{}({})", s.getName(), s.getNumber());
                                         client.registration()
                                                 .deregister()
-                                                .thenRun(
+                                                .orTimeout(1, TimeUnit.SECONDS)
+                                                .thenRunAsync(
                                                         () -> {
                                                             try {
+                                                                log.info("Shutting down...");
                                                                 client.webServer().stop();
                                                                 client.registration().stop();
                                                                 client.executor().shutdown();
@@ -78,7 +81,8 @@ public class Agent {
                                                                 log.info("Shutdown complete");
                                                                 oldHandler.handle(s);
                                                             }
-                                                        });
+                                                        },
+                                                        client.executor());
                                     };
                             Signal.handle(signal, handler);
                         });

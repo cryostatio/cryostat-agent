@@ -69,7 +69,7 @@ class WebServer {
         this.registration = registration;
     }
 
-    public void start() throws IOException {
+    void start() throws IOException {
         if (this.http != null) {
             stop();
         }
@@ -96,7 +96,7 @@ class WebServer {
         this.http.start();
     }
 
-    public void stop() {
+    void stop() {
         this.http.stop(0);
         this.http = null;
     }
