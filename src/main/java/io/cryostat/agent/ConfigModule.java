@@ -122,7 +122,7 @@ public abstract class ConfigModule {
     @Singleton
     @Named(CRYOSTAT_AGENT_SSL_VERIFY_HOSTNAME)
     public static boolean provideCryostatAgentVerifyHostname(SmallRyeConfig config) {
-        return config.getValue(CRYOSTAT_AGENT_SSL_TRUST_ALL, boolean.class);
+        return config.getValue(CRYOSTAT_AGENT_SSL_VERIFY_HOSTNAME, boolean.class);
     }
 
     @Provides
