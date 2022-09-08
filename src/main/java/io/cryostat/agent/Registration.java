@@ -42,24 +42,26 @@ import java.net.UnknownHostException;
 import java.time.Instant;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 import io.cryostat.agent.model.DiscoveryNode;
 import io.cryostat.agent.model.PluginInfo;
 
 import dagger.Lazy;
-import io.vertx.core.AbstractVerticle;
-import io.vertx.core.Future;
-import io.vertx.core.eventbus.MessageConsumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-class Registration extends AbstractVerticle {
+class Registration {
 
-    static final String EVENT_BUS_ADDRESS = Registration.class.getName() + ".UPDATE";
     private static final String NODE_TYPE = "JVM";
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
+    private final ScheduledExecutorService executor;
     private final Lazy<WebServer> webServer;
     private final CryostatClient cryostat;
     private final UUID instanceId;
@@ -70,10 +72,9 @@ class Registration extends AbstractVerticle {
     private final int registrationRetryMs;
 
     private final PluginInfo pluginInfo = new PluginInfo();
-    private volatile String webServerId;
-    private MessageConsumer<Object> consumer;
 
     Registration(
+            ScheduledExecutorService executor,
             Lazy<WebServer> webServer,
             CryostatClient cryostat,
             UUID instanceId,
@@ -82,6 +83,7 @@ class Registration extends AbstractVerticle {
             String hostname,
             int jmxPort,
             int registrationRetryMs) {
+        this.executor = executor;
         this.webServer = webServer;
         this.cryostat = cryostat;
         this.instanceId = instanceId;
@@ -92,54 +94,39 @@ class Registration extends AbstractVerticle {
         this.registrationRetryMs = registrationRetryMs;
     }
 
-    @Override
     public void start() {
-        getVertx().setTimer(1, this::tryRegister);
+        executor.submit(this::tryRegister);
         log.info("{} started", getClass().getName());
-
-        consumer =
-                getVertx()
-                        .eventBus()
-                        .consumer(
-                                EVENT_BUS_ADDRESS,
-                                msg -> {
-                                    log.info("Called back, attempting to re-register");
-                                    vertx.setTimer(1, this::tryRegister);
-                                });
     }
 
-    private void tryRegister(Long id) {
-        cryostat.register(pluginInfo)
-                .onSuccess(
-                        plugin -> {
-                            this.pluginInfo.copyFrom(plugin);
-                            log.info("Registered as {}", plugin.getId());
-                            Future<String> serverId;
-                            if (this.webServerId != null) {
-                                serverId = Future.succeededFuture(this.webServerId);
-                            } else {
-                                serverId =
-                                        getVertx()
-                                                .deployVerticle(webServer.get())
-                                                .onSuccess(i -> this.webServerId = i);
-                            }
-                            serverId.onSuccess(unused -> tryUpdate(id));
-                        })
-                .onFailure(
-                        t -> {
-                            log.error("Registration failure", t);
-                            log.info("Registration retry period: {}(ms)", registrationRetryMs);
-                            this.webServerId = null;
-                            vertx.setTimer(registrationRetryMs, this::tryRegister);
-                        });
+    void tryRegister() {
+        Future<Void> f =
+                cryostat.register(pluginInfo)
+                        .handleAsync(
+                                (plugin, t) -> {
+                                    if (plugin != null) {
+                                        this.pluginInfo.copyFrom(plugin);
+                                        log.info("Registered as {}", this.pluginInfo.getId());
+                                        tryUpdate();
+                                    } else if (t != null) {
+                                        throw new RuntimeException(t);
+                                    }
+
+                                    return (Void) null;
+                                },
+                                executor);
+        try {
+            f.get();
+        } catch (ExecutionException | InterruptedException e) {
+            log.error("Registration failure", e);
+            log.info("Registration retry period: {}(ms)", registrationRetryMs);
+            executor.schedule(this::tryRegister, registrationRetryMs, TimeUnit.MILLISECONDS);
+        }
     }
 
-    void tryUpdate() {
-        tryUpdate(null);
-    }
-
-    private void tryUpdate(Long id) {
+    private void tryUpdate() {
         if (!this.pluginInfo.isInitialized()) {
+            log.warn("update attempted before initialized");
             return;
         }
         DiscoveryNode selfNode;
@@ -150,26 +137,30 @@ class Registration extends AbstractVerticle {
             return;
         }
         log.info("publishing self as {}", selfNode.getTarget().getConnectUrl());
-        cryostat.update(pluginInfo, Set.of(selfNode))
-                .onSuccess(
-                        ar -> {
-                            if (id != null) {
-                                getVertx().cancelTimer(id);
-                            }
-                        })
-                .onFailure(
-                        t -> {
-                            log.error("Update failure", t);
-                            deregister()
-                                    .onComplete(
-                                            ar -> {
-                                                if (ar.failed()) {
-                                                    vertx.setTimer(
-                                                            registrationRetryMs, this::tryRegister);
-                                                    return;
-                                                }
-                                            });
-                        });
+        Future<Void> f =
+                cryostat.update(pluginInfo, Set.of(selfNode))
+                        .handle(
+                                (n, t) -> {
+                                    if (n != null) {
+                                        log.info("publish success");
+                                    } else if (t != null) {
+                                        log.error("Update failure", t);
+                                        deregister()
+                                                .thenRun(
+                                                        () -> {
+                                                            executor.schedule(
+                                                                    this::tryRegister,
+                                                                    registrationRetryMs,
+                                                                    TimeUnit.MILLISECONDS);
+                                                        });
+                                    }
+                                    return (Void) null;
+                                });
+        try {
+            f.get();
+        } catch (ExecutionException | InterruptedException e) {
+            log.warn("Failed to update", e);
+        }
     }
 
     private DiscoveryNode defineSelf() throws UnknownHostException {
@@ -205,28 +196,17 @@ class Registration extends AbstractVerticle {
         return selfNode;
     }
 
-    @Override
-    public void stop() {
-        if (consumer != null) {
-            consumer.unregister();
-        }
-        log.info("{} stopped", getClass().getName());
-    }
+    public void stop() {}
 
-    Future<Void> deregister() {
+    CompletableFuture<Void> deregister() {
         if (!this.pluginInfo.isInitialized()) {
-            return Future.succeededFuture();
+            return CompletableFuture.completedFuture(null);
         }
         return cryostat.deregister(pluginInfo)
-                .onComplete(
-                        ar -> {
-                            if (this.webServerId != null) {
-                                getVertx().undeploy(this.webServerId);
-                            }
-                        })
-                .onComplete(
-                        ar -> {
-                            if (ar.failed()) {
+                .thenRun(() -> webServer.get().stop())
+                .handle(
+                        (n, t) -> {
+                            if (t != null) {
                                 log.warn(
                                         "Failed to deregister as Cryostat discovery plugin [{}]",
                                         this.pluginInfo.getId());
@@ -236,6 +216,7 @@ class Registration extends AbstractVerticle {
                                         this.pluginInfo.getId());
                             }
                             this.pluginInfo.clear();
+                            return null;
                         });
     }
 }

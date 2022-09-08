@@ -37,97 +37,176 @@
  */
 package io.cryostat.agent;
 
-import java.io.Closeable;
+import java.io.IOException;
 import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse.BodyHandlers;
+import java.time.Duration;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ScheduledExecutorService;
+
+import javax.net.ssl.SSLContext;
 
 import io.cryostat.agent.model.DiscoveryNode;
 import io.cryostat.agent.model.PluginInfo;
 import io.cryostat.agent.model.RegistrationInfo;
 
-import io.vertx.core.Future;
-import io.vertx.core.Vertx;
-import io.vertx.core.http.HttpHeaders;
-import io.vertx.ext.web.client.WebClient;
-import io.vertx.ext.web.client.WebClientOptions;
-import io.vertx.ext.web.client.predicate.ResponsePredicate;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-class CryostatClient implements Closeable {
+class CryostatClient {
+
+    private static final String API_PATH = "/api/v2.2/discovery";
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
-    private WebClient http;
+    private final ObjectMapper mapper;
+    private final HttpClient http;
+    private final URI baseUri;
     private final URI callback;
     private final String realm;
     private final String authorization;
 
     CryostatClient(
-            Vertx vertx,
+            ScheduledExecutorService executor,
+            SSLContext sslCtx,
             UUID instanceId,
             URI baseUri,
             URI callback,
             String realm,
             String authorization,
-            boolean trustAll) {
+            boolean verifyHostname) {
+        System.getProperties()
+                .setProperty(
+                        "jdk.internal.httpclient.disableHostnameVerification",
+                        Boolean.toString(!verifyHostname));
+        this.http =
+                HttpClient.newBuilder()
+                        .executor(executor)
+                        .connectTimeout(Duration.ofSeconds(1))
+                        .sslContext(sslCtx)
+                        .build();
+        this.baseUri = baseUri;
         this.callback = callback;
         this.realm = realm;
         this.authorization = authorization;
+        this.mapper = new ObjectMapper();
 
         log.info("Using Cryostat baseuri {}", baseUri);
-
-        WebClientOptions opts = new WebClientOptions();
-        opts.setDefaultHost(baseUri.getHost());
-        opts.setDefaultPort(baseUri.getPort());
-        opts.setSsl("https".equals(baseUri.getScheme()));
-        if (trustAll) {
-            opts.setTrustAll(true);
-            opts.setVerifyHost(false);
-        }
-
-        this.http = WebClient.create(vertx, opts);
     }
 
-    Future<PluginInfo> register(PluginInfo pluginInfo) {
+    CompletableFuture<PluginInfo> register(PluginInfo pluginInfo) {
         RegistrationInfo registrationInfo =
-                new RegistrationInfo(pluginInfo.getId(), realm, callback, pluginInfo.getToken());
-        return http.post("/api/v2.2/discovery")
-                .putHeader(HttpHeaders.AUTHORIZATION.toString(), authorization)
-                .expect(ResponsePredicate.SC_SUCCESS)
-                .expect(ResponsePredicate.JSON)
-                .timeout(1_000L)
-                .sendJson(registrationInfo)
-                .map(resp -> resp.bodyAsJsonObject())
-                .map(json -> json.getJsonObject("data").getJsonObject("result"))
-                .map(json -> json.mapTo(PluginInfo.class));
-    }
-
-    Future<Void> deregister(PluginInfo pluginInfo) {
-        return http.delete("/api/v2.2/discovery/" + pluginInfo.getId())
-                .addQueryParam("token", pluginInfo.getToken())
-                .expect(ResponsePredicate.SC_SUCCESS)
-                .expect(ResponsePredicate.JSON)
-                .timeout(1_000L)
-                .send()
-                .map(t -> null);
-    }
-
-    Future<Void> update(PluginInfo pluginInfo, Set<DiscoveryNode> subtree) {
-        return http.post("/api/v2.2/discovery/" + pluginInfo.getId())
-                .addQueryParam("token", pluginInfo.getToken())
-                .expect(ResponsePredicate.SC_SUCCESS)
-                .expect(ResponsePredicate.JSON)
-                .timeout(1_000L)
-                .sendJson(subtree)
-                .map(t -> null);
-    }
-
-    @Override
-    public void close() {
-        if (this.http != null) {
-            this.http.close();
+                new RegistrationInfo(realm, callback, pluginInfo.getToken());
+        HttpRequest req;
+        try {
+            req =
+                    HttpRequest.newBuilder(baseUri.resolve(API_PATH))
+                            .POST(
+                                    HttpRequest.BodyPublishers.ofString(
+                                            mapper.writeValueAsString(registrationInfo)))
+                            .setHeader("Authorization", authorization)
+                            .timeout(Duration.ofSeconds(1))
+                            .build();
+            log.trace("{}", req);
+        } catch (JsonProcessingException e) {
+            return CompletableFuture.failedFuture(e);
         }
+        return http.sendAsync(req, BodyHandlers.ofInputStream())
+                .thenApply(
+                        res -> {
+                            log.trace(
+                                    "{} {} : {}",
+                                    res.request().method(),
+                                    res.request().uri(),
+                                    res.statusCode());
+                            return res;
+                        })
+                .thenApply(
+                        resp -> {
+                            try {
+                                return mapper.readValue(resp.body(), ObjectNode.class);
+                            } catch (IOException e) {
+                                e.printStackTrace();
+                                throw new RuntimeException(e);
+                            }
+                        })
+                .thenApply(
+                        node -> {
+                            try {
+                                return mapper.readValue(
+                                        node.get("data").get("result").toString(),
+                                        PluginInfo.class);
+                            } catch (IOException e) {
+                                e.printStackTrace();
+                                throw new RuntimeException(e);
+                            }
+                        });
+    }
+
+    CompletableFuture<Void> deregister(PluginInfo pluginInfo) {
+        HttpRequest req =
+                HttpRequest.newBuilder(
+                                baseUri.resolve(
+                                        API_PATH
+                                                + "/"
+                                                + pluginInfo.getId()
+                                                + "?token="
+                                                + pluginInfo.getToken()))
+                        .DELETE()
+                        .timeout(Duration.ofSeconds(1))
+                        .build();
+        log.trace("{}", req);
+        return http.sendAsync(req, BodyHandlers.discarding())
+                .thenApply(
+                        res -> {
+                            log.trace(
+                                    "{} {} : {}",
+                                    res.request().method(),
+                                    res.request().uri(),
+                                    res.statusCode());
+                            return res;
+                        })
+                .thenApply(res -> null);
+    }
+
+    CompletableFuture<Void> update(PluginInfo pluginInfo, Set<DiscoveryNode> subtree) {
+        HttpRequest req;
+        try {
+            req =
+                    HttpRequest.newBuilder(
+                                    baseUri.resolve(
+                                            API_PATH
+                                                    + "/"
+                                                    + pluginInfo.getId()
+                                                    + "?token="
+                                                    + pluginInfo.getToken()))
+                            .POST(
+                                    HttpRequest.BodyPublishers.ofString(
+                                            mapper.writeValueAsString(subtree)))
+                            .setHeader("Authorization", authorization)
+                            .timeout(Duration.ofSeconds(1))
+                            .build();
+            log.trace("{}", req);
+        } catch (JsonProcessingException e) {
+            return CompletableFuture.failedFuture(e);
+        }
+        return http.sendAsync(req, BodyHandlers.discarding())
+                .thenApply(
+                        res -> {
+                            log.trace(
+                                    "{} {} : {}",
+                                    res.request().method(),
+                                    res.request().uri(),
+                                    res.statusCode());
+                            return res;
+                        })
+                .thenApply(res -> null);
     }
 }

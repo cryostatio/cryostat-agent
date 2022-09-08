@@ -61,7 +61,9 @@ public abstract class ConfigModule {
     public static final String CRYOSTAT_AGENT_CALLBACK = "cryostat.agent.callback";
     public static final String CRYOSTAT_AGENT_REALM = "cryostat.agent.realm";
     public static final String CRYOSTAT_AGENT_AUTHORIZATION = "cryostat.agent.authorization";
-    public static final String CRYOSTAT_AGENT_TRUST_ALL = "cryostat.agent.trust-all";
+    public static final String CRYOSTAT_AGENT_SSL_TRUST_ALL = "cryostat.agent.ssl.trust-all";
+    public static final String CRYOSTAT_AGENT_SSL_VERIFY_HOSTNAME =
+            "cryostat.agent.ssl.verify-hostname";
 
     public static final String CRYOSTAT_AGENT_WEBSERVER_HOST = "cryostat.agent.webserver.host";
     public static final String CRYOSTAT_AGENT_WEBSERVER_PORT = "cryostat.agent.webserver.port";
@@ -111,9 +113,16 @@ public abstract class ConfigModule {
 
     @Provides
     @Singleton
-    @Named(CRYOSTAT_AGENT_TRUST_ALL)
+    @Named(CRYOSTAT_AGENT_SSL_TRUST_ALL)
     public static boolean provideCryostatAgentTrustAll(SmallRyeConfig config) {
-        return config.getValue(CRYOSTAT_AGENT_TRUST_ALL, boolean.class);
+        return config.getValue(CRYOSTAT_AGENT_SSL_TRUST_ALL, boolean.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_SSL_VERIFY_HOSTNAME)
+    public static boolean provideCryostatAgentVerifyHostname(SmallRyeConfig config) {
+        return config.getValue(CRYOSTAT_AGENT_SSL_TRUST_ALL, boolean.class);
     }
 
     @Provides
