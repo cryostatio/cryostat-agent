@@ -45,11 +45,7 @@ import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandlers;
 import java.time.Duration;
 import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ScheduledExecutorService;
-
-import javax.net.ssl.SSLContext;
 
 import io.cryostat.agent.model.DiscoveryNode;
 import io.cryostat.agent.model.PluginInfo;
@@ -74,25 +70,8 @@ class CryostatClient {
     private final String realm;
     private final String authorization;
 
-    CryostatClient(
-            ScheduledExecutorService executor,
-            SSLContext sslCtx,
-            UUID instanceId,
-            URI baseUri,
-            URI callback,
-            String realm,
-            String authorization,
-            boolean verifyHostname) {
-        System.getProperties()
-                .setProperty(
-                        "jdk.internal.httpclient.disableHostnameVerification",
-                        Boolean.toString(!verifyHostname));
-        this.http =
-                HttpClient.newBuilder()
-                        .executor(executor)
-                        .connectTimeout(Duration.ofSeconds(1))
-                        .sslContext(sslCtx)
-                        .build();
+    CryostatClient(HttpClient http, URI baseUri, URI callback, String realm, String authorization) {
+        this.http = http;
         this.baseUri = baseUri;
         this.callback = callback;
         this.realm = realm;

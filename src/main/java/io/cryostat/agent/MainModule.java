@@ -38,11 +38,13 @@
 package io.cryostat.agent;
 
 import java.net.URI;
+import java.net.http.HttpClient;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
+import java.time.Duration;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -127,24 +129,30 @@ public abstract class MainModule {
 
     @Provides
     @Singleton
-    public static CryostatClient provideCryostatClient(
+    public static HttpClient provideHttpClient(
             ScheduledExecutorService executor,
-            SSLContext sslCtx,
-            UUID instanceId,
+            SSLContext sslContext,
+            @Named(ConfigModule.CRYOSTAT_AGENT_SSL_VERIFY_HOSTNAME) boolean verifyHostname) {
+        System.getProperties()
+                .setProperty(
+                        "jdk.internal.httpclient.disableHostnameVerification",
+                        Boolean.toString(!verifyHostname));
+        return HttpClient.newBuilder()
+                .executor(executor)
+                .connectTimeout(Duration.ofSeconds(1))
+                .sslContext(sslContext)
+                .build();
+    }
+
+    @Provides
+    @Singleton
+    public static CryostatClient provideCryostatClient(
+            HttpClient http,
             @Named(ConfigModule.CRYOSTAT_AGENT_BASEURI) URI baseUri,
             @Named(ConfigModule.CRYOSTAT_AGENT_CALLBACK) URI callback,
             @Named(ConfigModule.CRYOSTAT_AGENT_REALM) String realm,
-            @Named(ConfigModule.CRYOSTAT_AGENT_AUTHORIZATION) String authorization,
-            @Named(ConfigModule.CRYOSTAT_AGENT_SSL_VERIFY_HOSTNAME) boolean verifyHostname) {
-        return new CryostatClient(
-                executor,
-                sslCtx,
-                instanceId,
-                baseUri,
-                callback,
-                realm,
-                authorization,
-                verifyHostname);
+            @Named(ConfigModule.CRYOSTAT_AGENT_AUTHORIZATION) String authorization) {
+        return new CryostatClient(http, baseUri, callback, realm, authorization);
     }
 
     @Provides
