@@ -41,16 +41,22 @@ import java.net.URI;
 
 public class RegistrationInfo {
 
+    private String id;
     private String realm;
     private URI callback;
     private String token;
 
     RegistrationInfo() {}
 
-    public RegistrationInfo(String realm, URI callback, String token) {
+    public RegistrationInfo(String id, String realm, URI callback, String token) {
+        this.id = id;
         this.realm = realm;
         this.callback = callback;
         this.token = token;
+    }
+
+    public String getId() {
+        return id;
     }
 
     public String getRealm() {
@@ -63,6 +69,10 @@ public class RegistrationInfo {
 
     public String getToken() {
         return token;
+    }
+
+    void setId(String id) {
+        this.id = id;
     }
 
     void setRealm(String realm) {

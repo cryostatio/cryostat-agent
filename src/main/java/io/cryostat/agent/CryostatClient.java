@@ -92,7 +92,7 @@ class CryostatClient implements Closeable {
 
     Future<PluginInfo> register(PluginInfo pluginInfo) {
         RegistrationInfo registrationInfo =
-                new RegistrationInfo(realm, callback, pluginInfo.getToken());
+                new RegistrationInfo(pluginInfo.getId(), realm, callback, pluginInfo.getToken());
         return http.post("/api/v2.2/discovery")
                 .putHeader(HttpHeaders.AUTHORIZATION.toString(), authorization)
                 .expect(ResponsePredicate.SC_SUCCESS)
