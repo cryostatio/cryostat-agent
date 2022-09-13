@@ -99,8 +99,7 @@ public abstract class ConfigModule {
             SmallRyeConfig config,
             @Named(CRYOSTAT_AGENT_APP_NAME) String appName,
             UUID instanceId) {
-        return config.getOptionalValue(CRYOSTAT_AGENT_REALM, String.class)
-                .orElseGet(() -> String.format("%s-%s", appName, instanceId));
+        return config.getOptionalValue(CRYOSTAT_AGENT_REALM, String.class).orElse(appName);
     }
 
     @Provides
