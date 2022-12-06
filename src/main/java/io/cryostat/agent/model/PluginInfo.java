@@ -37,16 +37,31 @@
  */
 package io.cryostat.agent.model;
 
+import java.util.Objects;
+
 public class PluginInfo {
 
     private String id;
     private String token;
 
-    PluginInfo() {}
+    public PluginInfo() {}
 
     public PluginInfo(String id, String token) {
         this.id = id;
         this.token = token;
+    }
+
+    public void copyFrom(PluginInfo o) {
+        setId(o.getId());
+        setToken(o.getToken());
+    }
+
+    public void clear() {
+        copyFrom(new PluginInfo());
+    }
+
+    public boolean isInitialized() {
+        return id != null && token != null;
     }
 
     public String getId() {
@@ -57,11 +72,31 @@ public class PluginInfo {
         return token;
     }
 
-    void setId(String id) {
+    public void setId(String id) {
         this.id = id;
     }
 
-    void setToken(String token) {
+    public void setToken(String token) {
         this.token = token;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(id, token);
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) {
+            return true;
+        }
+        if (obj == null) {
+            return false;
+        }
+        if (getClass() != obj.getClass()) {
+            return false;
+        }
+        PluginInfo other = (PluginInfo) obj;
+        return Objects.equals(id, other.id) && Objects.equals(token, other.token);
     }
 }

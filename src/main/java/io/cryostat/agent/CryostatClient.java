@@ -60,12 +60,9 @@ class CryostatClient implements Closeable {
     private final Logger log = LoggerFactory.getLogger(getClass());
 
     private WebClient http;
-    private final UUID instanceId;
-    private final URI baseUri;
     private final URI callback;
     private final String realm;
     private final String authorization;
-    private final boolean trustAll;
 
     CryostatClient(
             Vertx vertx,
@@ -75,12 +72,9 @@ class CryostatClient implements Closeable {
             String realm,
             String authorization,
             boolean trustAll) {
-        this.instanceId = instanceId;
-        this.baseUri = baseUri;
         this.callback = callback;
         this.realm = realm;
         this.authorization = authorization;
-        this.trustAll = trustAll;
 
         log.info("Using Cryostat baseuri {}", baseUri);
 
@@ -96,8 +90,9 @@ class CryostatClient implements Closeable {
         this.http = WebClient.create(vertx, opts);
     }
 
-    Future<PluginInfo> register() {
-        RegistrationInfo registrationInfo = new RegistrationInfo(realm, callback);
+    Future<PluginInfo> register(PluginInfo pluginInfo) {
+        RegistrationInfo registrationInfo =
+                new RegistrationInfo(pluginInfo.getId(), realm, callback, pluginInfo.getToken());
         return http.post("/api/v2.2/discovery")
                 .putHeader(HttpHeaders.AUTHORIZATION.toString(), authorization)
                 .expect(ResponsePredicate.SC_SUCCESS)
@@ -109,9 +104,9 @@ class CryostatClient implements Closeable {
                 .map(json -> json.mapTo(PluginInfo.class));
     }
 
-    Future<Void> deregister(String id) {
-        return http.delete("/api/v2.2/discovery/" + id)
-                .putHeader(HttpHeaders.AUTHORIZATION.toString(), authorization)
+    Future<Void> deregister(PluginInfo pluginInfo) {
+        return http.delete("/api/v2.2/discovery/" + pluginInfo.getId())
+                .addQueryParam("token", pluginInfo.getToken())
                 .expect(ResponsePredicate.SC_SUCCESS)
                 .expect(ResponsePredicate.JSON)
                 .timeout(1_000L)
@@ -119,9 +114,9 @@ class CryostatClient implements Closeable {
                 .map(t -> null);
     }
 
-    Future<Void> update(String id, Set<DiscoveryNode> subtree) {
-        return http.post("/api/v2.2/discovery/" + id)
-                .putHeader(HttpHeaders.AUTHORIZATION.toString(), authorization)
+    Future<Void> update(PluginInfo pluginInfo, Set<DiscoveryNode> subtree) {
+        return http.post("/api/v2.2/discovery/" + pluginInfo.getId())
+                .addQueryParam("token", pluginInfo.getToken())
                 .expect(ResponsePredicate.SC_SUCCESS)
                 .expect(ResponsePredicate.JSON)
                 .timeout(1_000L)
