@@ -83,7 +83,7 @@ class CryostatClient {
 
     CompletableFuture<PluginInfo> register(PluginInfo pluginInfo) {
         RegistrationInfo registrationInfo =
-                new RegistrationInfo(realm, callback, pluginInfo.getToken());
+                new RegistrationInfo(pluginInfo.getId(), realm, callback, pluginInfo.getToken());
         HttpRequest req;
         try {
             req =
