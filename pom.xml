@@ -43,7 +43,6 @@
   <com.google.dagger.compiler.version>2.26</com.google.dagger.compiler.version>
 
   <org.apache.httpcomponents.version>4.5.13</org.apache.httpcomponents.version>
-  <io.fabric8.client.version>5.12.2</io.fabric8.client.version>
   <com.fasterxml.jackson.version>2.13.3</com.fasterxml.jackson.version>
   <javax.annotation.version>1.3.2</javax.annotation.version><!-- used by smallrye -->
   <io.smallrye.config.version>2.11.1</io.smallrye.config.version>
