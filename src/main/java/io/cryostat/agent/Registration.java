@@ -137,9 +137,7 @@ class Registration {
                 cryostat.update(pluginInfo, Set.of(selfNode))
                         .handleAsync(
                                 (n, t) -> {
-                                    if (n != null) {
-                                        log.info("publish success");
-                                    } else if (t != null) {
+                                    if (t != null) {
                                         log.error("Update failure", t);
                                         deregister()
                                                 .thenRunAsync(
@@ -150,6 +148,8 @@ class Registration {
                                                                     TimeUnit.MILLISECONDS);
                                                         },
                                                         executor);
+                                    } else {
+                                        log.info("Publish success");
                                     }
                                     return (Void) null;
                                 },
