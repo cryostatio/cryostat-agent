@@ -114,8 +114,8 @@ class CryostatClient {
                             try {
                                 return mapper.readValue(resp.body(), ObjectNode.class);
                             } catch (IOException e) {
-                                e.printStackTrace();
-                                throw new RuntimeException(e);
+                                log.error("Unable to parse response as JSON", e);
+                                return null;
                             }
                         })
                 .thenApply(
@@ -125,8 +125,8 @@ class CryostatClient {
                                         node.get("data").get("result").toString(),
                                         PluginInfo.class);
                             } catch (IOException e) {
-                                e.printStackTrace();
-                                throw new RuntimeException(e);
+                                log.error("Unable to parse response as JSON", e);
+                                return null;
                             }
                         });
     }
@@ -196,9 +196,10 @@ class CryostatClient {
     private <T> HttpResponse<T> assertOkStatus(HttpResponse<T> res) {
         int sc = res.statusCode();
         boolean isOk = 200 <= sc && sc < 300;
-        if (isOk) {
-            return res;
+        if (!isOk) {
+            log.error("Non-OK response ({}) on HTTP API {}", sc, res.request().uri());
+            return null;
         }
-        throw new RuntimeException(String.format("HTTP API %d", sc));
+        return res;
     }
 }
