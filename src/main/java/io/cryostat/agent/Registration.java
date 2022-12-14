@@ -105,7 +105,7 @@ class Registration {
                                         log.info("Registered as {}", this.pluginInfo.getId());
                                         tryUpdate();
                                     } else if (t != null) {
-                                        throw new RuntimeException(t);
+                                        throw new RegistrationException(t);
                                     }
 
                                     return (Void) null;
