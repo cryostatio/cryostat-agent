@@ -63,6 +63,9 @@ import dagger.Provides;
 @Module(includes = {ConfigModule.class})
 public abstract class MainModule {
 
+    // one for outbound HTTP requests, one for incoming HTTP requests, and one as a general worker
+    private static final int NUM_WORKER_THREADS = 3;
+
     @Provides
     @Singleton
     public static AtomicInteger provideThreadId() {
@@ -73,7 +76,7 @@ public abstract class MainModule {
     @Singleton
     public static ScheduledExecutorService provideExecutor(AtomicInteger threadId) {
         return Executors.newScheduledThreadPool(
-                3,
+                NUM_WORKER_THREADS,
                 r -> {
                     Thread thread = new Thread(r);
                     thread.setName("cryostat-agent-worker-" + threadId.getAndIncrement());
