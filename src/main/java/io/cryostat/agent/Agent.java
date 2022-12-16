@@ -37,17 +37,13 @@
  */
 package io.cryostat.agent;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.function.Consumer;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 import javax.inject.Singleton;
 
 import dagger.Component;
-import io.vertx.core.CompositeFuture;
-import io.vertx.core.Future;
-import io.vertx.core.Promise;
-import io.vertx.core.Vertx;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import sun.misc.Signal;
@@ -58,20 +54,7 @@ public class Agent {
     private static Logger log = LoggerFactory.getLogger(Agent.class);
 
     public static void main(String[] args) {
-        List<Future> futures = new ArrayList<>();
         final Client client = DaggerAgent_Client.builder().build();
-
-        Consumer<Promise<Void>> shutdown =
-                promise -> {
-                    log.info("Shutting down...");
-                    client.vertx()
-                            .close()
-                            .onComplete(
-                                    ar -> {
-                                        log.info("Shutdown complete");
-                                        promise.complete();
-                                    });
-                };
 
         List.of(new Signal("INT"), new Signal("TERM"))
                 .forEach(
@@ -82,31 +65,36 @@ public class Agent {
                                         log.info("Caught SIG{}({})", s.getName(), s.getNumber());
                                         client.registration()
                                                 .deregister()
-                                                .onComplete(
-                                                        ar -> {
-                                                            Promise<Void> promise =
-                                                                    Promise.promise();
-                                                            shutdown.accept(promise);
-                                                            promise.future()
-                                                                    .onComplete(
-                                                                            unused ->
-                                                                                    oldHandler
-                                                                                            .handle(
-                                                                                                    s));
-                                                        });
+                                                .orTimeout(1, TimeUnit.SECONDS)
+                                                .thenRunAsync(
+                                                        () -> {
+                                                            try {
+                                                                log.info("Shutting down...");
+                                                                client.webServer().stop();
+                                                                client.registration().stop();
+                                                                client.executor().shutdown();
+                                                            } catch (Exception e) {
+                                                                log.warn(
+                                                                        "Exception during shutdown",
+                                                                        e);
+                                                            } finally {
+                                                                log.info("Shutdown complete");
+                                                                oldHandler.handle(s);
+                                                            }
+                                                        },
+                                                        client.executor());
                                     };
                             Signal.handle(signal, handler);
                         });
 
-        futures.add(client.vertx().deployVerticle(client.registration()));
-
-        CompositeFuture.join(futures)
-                .onSuccess(ar -> log.info("Startup complete"))
-                .onFailure(
-                        t -> {
-                            log.error("Verticle failure", t);
-                            client.vertx().close();
-                        });
+        try {
+            client.registration().start();
+            client.webServer().start();
+        } catch (Exception e) {
+            log.error(Agent.class.getSimpleName() + " startup failure", e);
+            return;
+        }
+        log.info("Startup complete");
     }
 
     public static void agentmain(String args) {
@@ -128,11 +116,11 @@ public class Agent {
     @Singleton
     @Component(modules = {MainModule.class})
     interface Client {
-        Vertx vertx();
-
         WebServer webServer();
 
         Registration registration();
+
+        ScheduledExecutorService executor();
 
         @Component.Builder
         interface Builder {

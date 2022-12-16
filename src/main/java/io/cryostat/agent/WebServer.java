@@ -37,69 +37,67 @@
  */
 package io.cryostat.agent;
 
-import io.vertx.core.AbstractVerticle;
-import io.vertx.core.Promise;
-import io.vertx.core.http.HttpMethod;
-import io.vertx.core.http.HttpServer;
-import io.vertx.core.http.HttpServerOptions;
-import io.vertx.ext.web.Router;
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.util.concurrent.ScheduledExecutorService;
+
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpHandler;
+import com.sun.net.httpserver.HttpServer;
+import dagger.Lazy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-class WebServer extends AbstractVerticle {
+class WebServer {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
+    private final ScheduledExecutorService executor;
     private final String host;
     private final int port;
+    private final Lazy<Registration> registration;
     private HttpServer http;
 
-    WebServer(String host, int port) {
+    WebServer(
+            ScheduledExecutorService executor,
+            String host,
+            int port,
+            Lazy<Registration> registration) {
+        this.executor = executor;
         this.host = host;
         this.port = port;
+        this.registration = registration;
     }
 
-    @Override
-    public void start(Promise<Void> promise) {
-        this.http =
-                getVertx().createHttpServer(new HttpServerOptions().setHost(host).setPort(port));
-
-        Router router = Router.router(getVertx());
-        router.route()
-                .path("/")
-                .method(HttpMethod.POST)
-                .method(HttpMethod.GET)
-                .handler(
-                        rc -> {
-                            getVertx().eventBus().publish(Registration.EVENT_BUS_ADDRESS, null);
-                            rc.end();
-                        });
-
-        this.http
-                .requestHandler(router)
-                .listen(
-                        ar -> {
-                            if (ar.failed()) {
-                                promise.fail(ar.cause());
-                                return;
-                            }
-                            promise.complete();
-                            log.info(
-                                    "HTTP Server started on {}:{}", host, ar.result().actualPort());
-                        });
-    }
-
-    @Override
-    public void stop(Promise<Void> promise) {
-        log.info("HTTP Server stopping");
+    void start() throws IOException {
         if (this.http != null) {
-            this.http.close(
-                    ar -> {
-                        promise.complete();
-                        log.info("HTTP Server stopped");
-                    });
-        } else {
-            log.info("HTTP Server not started?");
+            stop();
         }
+        this.http = com.sun.net.httpserver.HttpServer.create(new InetSocketAddress(host, port), 0);
+
+        this.http.setExecutor(executor);
+        this.http
+                .createContext("/")
+                .setHandler(
+                        new HttpHandler() {
+                            @Override
+                            public void handle(HttpExchange exchange) throws IOException {
+                                String mtd = exchange.getRequestMethod();
+                                if ("POST".equals(mtd)) {
+                                    executor.execute(registration.get()::tryRegister);
+                                }
+                                log.trace("{} {}: 204", mtd, exchange.getRequestURI());
+
+                                exchange.sendResponseHeaders(204, -1);
+                                exchange.close();
+                            }
+                        });
+
+        this.http.start();
+    }
+
+    void stop() {
+        this.http.stop(0);
+        this.http = null;
     }
 }

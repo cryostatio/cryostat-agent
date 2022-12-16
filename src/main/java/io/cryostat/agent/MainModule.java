@@ -38,52 +38,130 @@
 package io.cryostat.agent;
 
 import java.net.URI;
+import java.net.http.HttpClient;
+import java.security.KeyManagementException;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
+import java.security.cert.CertificateException;
+import java.security.cert.X509Certificate;
+import java.time.Duration;
 import java.util.UUID;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.inject.Named;
 import javax.inject.Singleton;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 
 import dagger.Lazy;
 import dagger.Module;
 import dagger.Provides;
-import io.vertx.core.Vertx;
-import io.vertx.core.VertxOptions;
 
 @Module(includes = {ConfigModule.class})
 public abstract class MainModule {
 
+    // one for outbound HTTP requests, one for incoming HTTP requests, and one as a general worker
+    private static final int NUM_WORKER_THREADS = 3;
+
     @Provides
     @Singleton
-    public static Vertx provideVertx() {
-        return Vertx.vertx(new VertxOptions().setEventLoopPoolSize(1).setWorkerPoolSize(1));
+    public static AtomicInteger provideThreadId() {
+        return new AtomicInteger(0);
     }
 
     @Provides
     @Singleton
-    public static WebServer provideHttpServer(
+    public static ScheduledExecutorService provideExecutor(AtomicInteger threadId) {
+        return Executors.newScheduledThreadPool(
+                NUM_WORKER_THREADS,
+                r -> {
+                    Thread thread = new Thread(r);
+                    thread.setName("cryostat-agent-worker-" + threadId.getAndIncrement());
+                    thread.setDaemon(true);
+                    return thread;
+                });
+    }
+
+    @Provides
+    @Singleton
+    public static WebServer provideWebServer(
+            ScheduledExecutorService executor,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_HOST) String host,
-            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_PORT) int port) {
-        return new WebServer(host, port);
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_PORT) int port,
+            Lazy<Registration> registration) {
+        return new WebServer(executor, host, port, registration);
+    }
+
+    @Provides
+    @Singleton
+    public static SSLContext provideSslContext(
+            @Named(ConfigModule.CRYOSTAT_AGENT_SSL_TRUST_ALL) boolean trustAll) {
+        try {
+            if (!trustAll) {
+                return SSLContext.getDefault();
+            }
+
+            SSLContext sslCtx = SSLContext.getInstance("TLS");
+            sslCtx.init(
+                    null,
+                    new TrustManager[] {
+                        new X509TrustManager() {
+                            @Override
+                            public void checkClientTrusted(X509Certificate[] chain, String authType)
+                                    throws CertificateException {}
+
+                            @Override
+                            public void checkServerTrusted(X509Certificate[] chain, String authType)
+                                    throws CertificateException {}
+
+                            @Override
+                            public X509Certificate[] getAcceptedIssuers() {
+                                return new X509Certificate[0];
+                            }
+                        }
+                    },
+                    new SecureRandom());
+            return sslCtx;
+        } catch (NoSuchAlgorithmException | KeyManagementException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    @Provides
+    @Singleton
+    public static HttpClient provideHttpClient(
+            ScheduledExecutorService executor,
+            SSLContext sslContext,
+            @Named(ConfigModule.CRYOSTAT_AGENT_SSL_VERIFY_HOSTNAME) boolean verifyHostname) {
+        System.getProperties()
+                .setProperty(
+                        "jdk.internal.httpclient.disableHostnameVerification",
+                        Boolean.toString(!verifyHostname));
+        return HttpClient.newBuilder()
+                .executor(executor)
+                .connectTimeout(Duration.ofSeconds(1))
+                .sslContext(sslContext)
+                .build();
     }
 
     @Provides
     @Singleton
     public static CryostatClient provideCryostatClient(
-            Vertx vertx,
-            UUID instanceId,
+            HttpClient http,
             @Named(ConfigModule.CRYOSTAT_AGENT_BASEURI) URI baseUri,
             @Named(ConfigModule.CRYOSTAT_AGENT_CALLBACK) URI callback,
             @Named(ConfigModule.CRYOSTAT_AGENT_REALM) String realm,
-            @Named(ConfigModule.CRYOSTAT_AGENT_AUTHORIZATION) String authorization,
-            @Named(ConfigModule.CRYOSTAT_AGENT_TRUST_ALL) boolean trustAll) {
-        return new CryostatClient(
-                vertx, instanceId, baseUri, callback, realm, authorization, trustAll);
+            @Named(ConfigModule.CRYOSTAT_AGENT_AUTHORIZATION) String authorization) {
+        return new CryostatClient(http, baseUri, callback, realm, authorization);
     }
 
     @Provides
     @Singleton
     public static Registration provideRegistration(
-            Lazy<WebServer> webServer,
+            ScheduledExecutorService executor,
             CryostatClient cryostat,
             UUID instanceId,
             @Named(ConfigModule.CRYOSTAT_AGENT_APP_NAME) String appName,
@@ -92,7 +170,7 @@ public abstract class MainModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_APP_JMX_PORT) int jmxPort,
             @Named(ConfigModule.CRYOSTAT_AGENT_REGISTRATION_RETRY_MS) int registrationRetryMs) {
         return new Registration(
-                webServer,
+                executor,
                 cryostat,
                 instanceId,
                 appName,
