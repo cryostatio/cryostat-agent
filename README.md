@@ -12,7 +12,7 @@ location to Cryostat.
 ## REQUIREMENTS
 Build Requirements:
 - Git
-- JDK17+
+- JDK11+
 - Maven 3+
 
 Run Requirements:
