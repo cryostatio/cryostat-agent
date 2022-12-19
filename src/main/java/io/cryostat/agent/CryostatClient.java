@@ -39,6 +39,7 @@ package io.cryostat.agent;
 
 import java.io.IOException;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -115,7 +116,7 @@ class CryostatClient {
                                 return mapper.readValue(resp.body(), ObjectNode.class);
                             } catch (IOException e) {
                                 log.error("Unable to parse response as JSON", e);
-                                return null;
+                                throw new RegistrationException(e);
                             }
                         })
                 .thenApply(
@@ -126,7 +127,7 @@ class CryostatClient {
                                         PluginInfo.class);
                             } catch (IOException e) {
                                 log.error("Unable to parse response as JSON", e);
-                                return null;
+                                throw new RegistrationException(e);
                             }
                         });
     }
@@ -198,7 +199,14 @@ class CryostatClient {
         boolean isOk = 200 <= sc && sc < 300;
         if (!isOk) {
             log.error("Non-OK response ({}) on HTTP API {}", sc, res.request().uri());
-            return null;
+            URI uri = res.request().uri();
+            try {
+                throw new HttpException(
+                        sc,
+                        new URI(uri.getScheme(), uri.getAuthority(), uri.getPath(), null, null));
+            } catch (URISyntaxException use) {
+                throw new IllegalStateException(use);
+            }
         }
         return res;
     }
