@@ -109,42 +109,6 @@ class Harvester implements FlightRecorderListener {
         shutdown = false;
     }
 
-    private void startPeriodic() {
-        if (this.task != null) {
-            this.task.cancel(true);
-        }
-        this.task =
-                executor.scheduleAtFixedRate(
-                        this::uploadOngoing, period, period, TimeUnit.MILLISECONDS);
-    }
-
-    private Future<?> startRecording() {
-        return executor.submit(
-                () -> {
-                    safeCloseCurrentRecording();
-                    Recording recording = null;
-                    try {
-                        Configuration config = Configuration.getConfiguration(template);
-                        recording = new Recording(config);
-                        recording.setName("cryostat-agent");
-                        recording.setToDisk(true);
-                        recording.setMaxAge(Duration.ofMillis(period));
-                        recording.setDumpOnExit(true);
-                        this.exitPath = Files.createTempFile(null, null);
-                        Files.write(exitPath, new byte[0], StandardOpenOption.TRUNCATE_EXISTING);
-                        recording.setDestination(this.exitPath);
-                        recording.start();
-                        this.recordingId.set(recording.getId());
-                        startPeriodic();
-                    } catch (ParseException | IOException e) {
-                        if (recording != null) {
-                            recording.close();
-                        }
-                        log.error("Unable to start recording", e);
-                    }
-                });
-    }
-
     public void stop() {
         log.info("Harvester stopping");
         if (this.task != null) {
@@ -154,59 +118,6 @@ class Harvester implements FlightRecorderListener {
         FlightRecorder.removeListener(this);
         log.info("Harvester stopped");
         shutdown = true;
-    }
-
-    Future<Void> exitUpload() {
-        shutdown = true;
-        if (flightRecorder == null || period <= 0) {
-            return CompletableFuture.completedFuture(null);
-        }
-        // TODO on stop, should we upload a smaller emergency dump recording?
-        try {
-            uploadOngoing().get();
-        } catch (ExecutionException | InterruptedException e) {
-            log.warn("Exit upload failed", e);
-            return CompletableFuture.failedFuture(e);
-        } finally {
-            safeCloseCurrentRecording();
-        }
-        log.info("Harvester stopped");
-        return CompletableFuture.completedFuture(null);
-    }
-
-    private void safeCloseCurrentRecording() {
-        getById(recordingId.get()).ifPresent(Recording::close);
-    }
-
-    private Optional<Recording> getById(long id) {
-        if (id < 0) {
-            return Optional.empty();
-        }
-        for (Recording recording : this.flightRecorder.getRecordings()) {
-            if (id == recording.getId()) {
-                return Optional.of(recording);
-            }
-        }
-        return Optional.empty();
-    }
-
-    private Future<Void> uploadOngoing() {
-        Optional<Recording> o = getById(this.recordingId.get());
-        if (o.isEmpty()) {
-            return CompletableFuture.failedFuture(new IllegalStateException("No source recording"));
-        }
-        Recording recording = o.get();
-        try {
-            Files.write(exitPath, new byte[0], StandardOpenOption.TRUNCATE_EXISTING);
-            recording.dump(exitPath);
-            return client.upload(exitPath);
-        } catch (IOException e) {
-            return CompletableFuture.failedFuture(e);
-        }
-    }
-
-    private Future<Void> uploadDumpedFile() throws FileNotFoundException {
-        return client.upload(exitPath);
     }
 
     @Override
@@ -244,5 +155,94 @@ class Harvester implements FlightRecorderListener {
                     break;
             }
         }
+    }
+
+    Future<Void> exitUpload() {
+        shutdown = true;
+        if (flightRecorder == null || period <= 0) {
+            return CompletableFuture.completedFuture(null);
+        }
+        // TODO on stop, should we upload a smaller emergency dump recording?
+        try {
+            uploadOngoing().get();
+        } catch (ExecutionException | InterruptedException e) {
+            log.warn("Exit upload failed", e);
+            return CompletableFuture.failedFuture(e);
+        } finally {
+            safeCloseCurrentRecording();
+        }
+        log.info("Harvester stopped");
+        return CompletableFuture.completedFuture(null);
+    }
+
+    private Future<?> startRecording() {
+        return executor.submit(
+                () -> {
+                    safeCloseCurrentRecording();
+                    Recording recording = null;
+                    try {
+                        Configuration config = Configuration.getConfiguration(template);
+                        recording = new Recording(config);
+                        recording.setName("cryostat-agent");
+                        recording.setToDisk(true);
+                        recording.setMaxAge(Duration.ofMillis(period));
+                        recording.setDumpOnExit(true);
+                        this.exitPath = Files.createTempFile(null, null);
+                        Files.write(exitPath, new byte[0], StandardOpenOption.TRUNCATE_EXISTING);
+                        recording.setDestination(this.exitPath);
+                        recording.start();
+                        this.recordingId.set(recording.getId());
+                        startPeriodic();
+                    } catch (ParseException | IOException e) {
+                        if (recording != null) {
+                            recording.close();
+                        }
+                        log.error("Unable to start recording", e);
+                    }
+                });
+    }
+
+    private void startPeriodic() {
+        if (this.task != null) {
+            this.task.cancel(true);
+        }
+        this.task =
+                executor.scheduleAtFixedRate(
+                        this::uploadOngoing, period, period, TimeUnit.MILLISECONDS);
+    }
+
+    private void safeCloseCurrentRecording() {
+        getById(recordingId.get()).ifPresent(Recording::close);
+    }
+
+    private Optional<Recording> getById(long id) {
+        if (id < 0) {
+            return Optional.empty();
+        }
+        for (Recording recording : this.flightRecorder.getRecordings()) {
+            if (id == recording.getId()) {
+                return Optional.of(recording);
+            }
+        }
+        return Optional.empty();
+    }
+
+    private Future<Void> uploadOngoing() {
+        Optional<Recording> o = getById(this.recordingId.get());
+        if (o.isEmpty()) {
+            return CompletableFuture.failedFuture(new IllegalStateException("No source recording"));
+        }
+        Recording recording = o.get();
+        try {
+            Files.write(exitPath, new byte[0], StandardOpenOption.TRUNCATE_EXISTING);
+            recording.dump(exitPath);
+            return client.upload(exitPath);
+        } catch (IOException e) {
+            return CompletableFuture.failedFuture(e);
+        }
+    }
+
+    private Future<Void> uploadDumpedFile() throws FileNotFoundException {
+        return client.upload(exitPath);
     }
 }
