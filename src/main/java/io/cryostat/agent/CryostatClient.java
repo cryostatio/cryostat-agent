@@ -37,7 +37,11 @@
  */
 package io.cryostat.agent;
 
+import java.io.BufferedInputStream;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.SequenceInputStream;
 import java.math.BigInteger;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -51,11 +55,10 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
+import java.util.Vector;
 import java.util.concurrent.CompletableFuture;
 
 import io.cryostat.agent.model.DiscoveryNode;
@@ -256,51 +259,53 @@ public class CryostatClient {
         byte[] newline = new byte[] {'\r', '\n'};
         byte[] separator = ("--" + boundary).getBytes(StandardCharsets.UTF_8);
 
-        List<byte[]> byteArrays = new ArrayList<>();
+        Vector<InputStream> parts = new Vector<>();
 
         // recording file
         {
-            byteArrays.add(separator);
-            byteArrays.add(newline);
+            parts.add(new ByteArrayInputStream(separator));
+            parts.add(new ByteArrayInputStream(newline));
 
-            byteArrays.add(
-                    String.format(
-                                    "Content-Disposition: form-data; name=\"recording\";"
-                                            + " filename=\"%s\"",
-                                    uploadName)
-                            .getBytes(StandardCharsets.UTF_8));
-            byteArrays.add(newline);
-            byteArrays.add(
-                    "Content-Type: application/octet-stream".getBytes(StandardCharsets.UTF_8));
+            parts.add(
+                    new ByteArrayInputStream(
+                            String.format(
+                                            "Content-Disposition: form-data; name=\"recording\";"
+                                                    + " filename=\"%s\"",
+                                            uploadName)
+                                    .getBytes(StandardCharsets.UTF_8)));
+            parts.add(new ByteArrayInputStream(newline));
+            parts.add(
+                    new ByteArrayInputStream(
+                            "Content-Type: application/octet-stream"
+                                    .getBytes(StandardCharsets.UTF_8)));
 
-            byteArrays.add(newline);
-            byteArrays.add(newline);
-            byteArrays.add(
-                    Files.readAllBytes(
-                            filePath)); // FIXME this whole thing should be a stream so we don't
-            // read the file into memory here
-            byteArrays.add(newline);
+            parts.add(new ByteArrayInputStream(newline));
+            parts.add(new ByteArrayInputStream(newline));
+            parts.add(new BufferedInputStream(Files.newInputStream(filePath)));
+            parts.add(new ByteArrayInputStream(newline));
         }
 
         // recording labels
         {
-            byteArrays.add(separator);
-            byteArrays.add(newline);
+            parts.add(new ByteArrayInputStream(separator));
+            parts.add(new ByteArrayInputStream(newline));
 
-            byteArrays.add(
-                    ("Content-Disposition: form-data; name=\"labels\"")
-                            .getBytes(StandardCharsets.UTF_8));
+            parts.add(
+                    new ByteArrayInputStream(
+                            ("Content-Disposition: form-data; name=\"labels\"")
+                                    .getBytes(StandardCharsets.UTF_8)));
 
-            byteArrays.add(newline);
-            byteArrays.add(newline);
-            byteArrays.add(mapper.writeValueAsBytes(labels));
-            byteArrays.add(newline);
+            parts.add(new ByteArrayInputStream(newline));
+            parts.add(new ByteArrayInputStream(newline));
+            parts.add(new ByteArrayInputStream(mapper.writeValueAsBytes(labels)));
+            parts.add(new ByteArrayInputStream(newline));
         }
 
         byte[] endBoundary = ("--" + boundary + "--").getBytes(StandardCharsets.UTF_8);
-        byteArrays.add(endBoundary);
+        parts.add(new ByteArrayInputStream(endBoundary));
 
-        return HttpRequest.BodyPublishers.ofByteArrays(byteArrays);
+        return HttpRequest.BodyPublishers.ofInputStream(
+                () -> new SequenceInputStream(parts.elements()));
     }
 
     private <T> HttpResponse<T> assertOkStatus(HttpResponse<T> res) {
