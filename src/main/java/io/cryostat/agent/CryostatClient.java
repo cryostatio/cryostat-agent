@@ -220,13 +220,22 @@ public class CryostatClient {
         }
     }
 
-    public CompletableFuture<Void> upload(String template, Path recording) throws IOException {
+    public CompletableFuture<Void> upload(
+            Harvester.PushType pushType, String template, Path recording) throws IOException {
         String timestamp =
                 Instant.now().truncatedTo(ChronoUnit.SECONDS).toString().replaceAll("[-:]", "");
         String fileName = String.format("%s_%s_%s.jfr", appName, template, timestamp);
         log.info("Uploading {}", fileName);
         Map<String, String> labels =
-                Map.of("jvmId", jvmId, "template.name", template, "template.type", "TARGET");
+                Map.of(
+                        "jvmId",
+                        jvmId,
+                        "template.name",
+                        template,
+                        "template.type",
+                        "TARGET",
+                        "pushType",
+                        pushType.name());
         String boundary = new BigInteger(256, new Random()).toString();
         HttpRequest req =
                 HttpRequest.newBuilder(baseUri.resolve("/api/v1/recordings"))
@@ -257,55 +266,56 @@ public class CryostatClient {
             String boundary, Path filePath, String uploadName, Map<String, String> labels)
             throws IOException {
         byte[] newline = new byte[] {'\r', '\n'};
-        byte[] separator = ("--" + boundary).getBytes(StandardCharsets.UTF_8);
+        String separator = "--" + boundary;
 
         Vector<InputStream> parts = new Vector<>();
 
         // recording file
         {
-            parts.add(new ByteArrayInputStream(separator));
-            parts.add(new ByteArrayInputStream(newline));
+            parts.add(asStream(separator));
+            parts.add(asStream(newline));
 
             parts.add(
-                    new ByteArrayInputStream(
+                    asStream(
                             String.format(
-                                            "Content-Disposition: form-data; name=\"recording\";"
-                                                    + " filename=\"%s\"",
-                                            uploadName)
-                                    .getBytes(StandardCharsets.UTF_8)));
-            parts.add(new ByteArrayInputStream(newline));
-            parts.add(
-                    new ByteArrayInputStream(
-                            "Content-Type: application/octet-stream"
-                                    .getBytes(StandardCharsets.UTF_8)));
+                                    "Content-Disposition: form-data; name=\"recording\";"
+                                            + " filename=\"%s\"",
+                                    uploadName)));
+            parts.add(asStream(newline));
+            parts.add(asStream("Content-Type: application/octet-stream"));
 
-            parts.add(new ByteArrayInputStream(newline));
-            parts.add(new ByteArrayInputStream(newline));
+            parts.add(asStream(newline));
+            parts.add(asStream(newline));
             parts.add(new BufferedInputStream(Files.newInputStream(filePath)));
-            parts.add(new ByteArrayInputStream(newline));
+            parts.add(asStream(newline));
         }
 
         // recording labels
         {
-            parts.add(new ByteArrayInputStream(separator));
-            parts.add(new ByteArrayInputStream(newline));
+            parts.add(asStream(separator));
+            parts.add(asStream(newline));
 
-            parts.add(
-                    new ByteArrayInputStream(
-                            ("Content-Disposition: form-data; name=\"labels\"")
-                                    .getBytes(StandardCharsets.UTF_8)));
+            parts.add(asStream(("Content-Disposition: form-data; name=\"labels\"")));
 
-            parts.add(new ByteArrayInputStream(newline));
-            parts.add(new ByteArrayInputStream(newline));
-            parts.add(new ByteArrayInputStream(mapper.writeValueAsBytes(labels)));
-            parts.add(new ByteArrayInputStream(newline));
+            parts.add(asStream(newline));
+            parts.add(asStream(newline));
+            parts.add(asStream(mapper.writeValueAsBytes(labels)));
+            parts.add(asStream(newline));
         }
 
-        byte[] endBoundary = ("--" + boundary + "--").getBytes(StandardCharsets.UTF_8);
-        parts.add(new ByteArrayInputStream(endBoundary));
+        String endBoundary = ("--" + boundary + "--");
+        parts.add(asStream(endBoundary));
 
         return HttpRequest.BodyPublishers.ofInputStream(
                 () -> new SequenceInputStream(parts.elements()));
+    }
+
+    private static InputStream asStream(byte[] arr) {
+        return new ByteArrayInputStream(arr);
+    }
+
+    private static InputStream asStream(String s) {
+        return new ByteArrayInputStream(s.getBytes(StandardCharsets.UTF_8));
     }
 
     private <T> HttpResponse<T> assertOkStatus(HttpResponse<T> res) {
