@@ -40,7 +40,6 @@ package io.cryostat.agent;
 import java.net.InetAddress;
 import java.net.URI;
 import java.net.UnknownHostException;
-import java.util.UUID;
 
 import javax.inject.Named;
 import javax.inject.Singleton;
@@ -103,9 +102,7 @@ public abstract class ConfigModule {
     @Singleton
     @Named(CRYOSTAT_AGENT_REALM)
     public static String provideCryostatAgentRealm(
-            SmallRyeConfig config,
-            @Named(CRYOSTAT_AGENT_APP_NAME) String appName,
-            UUID instanceId) {
+            SmallRyeConfig config, @Named(CRYOSTAT_AGENT_APP_NAME) String appName) {
         return config.getOptionalValue(CRYOSTAT_AGENT_REALM, String.class).orElse(appName);
     }
 

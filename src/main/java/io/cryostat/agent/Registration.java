@@ -42,7 +42,6 @@ import java.net.UnknownHostException;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -64,7 +63,7 @@ class Registration {
 
     private final ScheduledExecutorService executor;
     private final CryostatClient cryostat;
-    private final UUID instanceId;
+    private final String jvmId;
     private final String appName;
     private final String realm;
     private final String hostname;
@@ -78,7 +77,7 @@ class Registration {
     Registration(
             ScheduledExecutorService executor,
             CryostatClient cryostat,
-            UUID instanceId,
+            String jvmId,
             String appName,
             String realm,
             String hostname,
@@ -87,7 +86,7 @@ class Registration {
             int registrationRetryMs) {
         this.executor = executor;
         this.cryostat = cryostat;
-        this.instanceId = instanceId;
+        this.jvmId = jvmId;
         this.appName = appName;
         this.realm = realm;
         this.hostname = hostname;
@@ -198,15 +197,7 @@ class Registration {
         }
         DiscoveryNode.Target target =
                 new DiscoveryNode.Target(
-                        realm,
-                        uri,
-                        appName,
-                        instanceId,
-                        pid,
-                        hostname,
-                        jmxPort,
-                        javaMain,
-                        startTime);
+                        realm, uri, appName, jvmId, pid, hostname, jmxPort, javaMain, startTime);
 
         DiscoveryNode selfNode =
                 new DiscoveryNode(appName + "-" + pluginInfo.getId(), NODE_TYPE, target);
