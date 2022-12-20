@@ -44,21 +44,20 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.text.ParseException;
 import java.time.Duration;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import jdk.jfr.Configuration;
 import jdk.jfr.FlightRecorder;
 import jdk.jfr.FlightRecorderListener;
 import jdk.jfr.Recording;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 class Harvester implements FlightRecorderListener {
 
@@ -74,7 +73,11 @@ class Harvester implements FlightRecorderListener {
     private Future<?> task;
     private boolean shutdown;
 
-    Harvester(ScheduledExecutorService executor, long period, String template, CryostatClient client) {
+    Harvester(
+            ScheduledExecutorService executor,
+            long period,
+            String template,
+            CryostatClient client) {
         this.executor = executor;
         this.period = period;
         this.template = template;
@@ -107,36 +110,36 @@ class Harvester implements FlightRecorderListener {
         if (this.task != null) {
             this.task.cancel(true);
         }
-        this.task = executor.scheduleAtFixedRate(this::uploadOngoing, period, period, TimeUnit.MILLISECONDS);
+        this.task =
+                executor.scheduleAtFixedRate(
+                        this::uploadOngoing, period, period, TimeUnit.MILLISECONDS);
     }
 
     private Future<?> startRecording() {
-        return executor.submit(() -> {
-            safeCloseCurrentRecording();
-            Recording recording = null;
-            try {
-                Configuration config = Configuration.getConfiguration(template);
-                recording = new Recording(config);
-                recording.setName("cryostat-agent");
-                recording.setToDisk(true);
-                recording.setMaxAge(Duration.ofMillis(period));
-                recording.setDumpOnExit(true);
-                this.exitPath = Files.createTempFile(null, null);
-                Files.write(
-                        exitPath,
-                        new byte[0],
-                        StandardOpenOption.TRUNCATE_EXISTING);
-                recording.setDestination(this.exitPath);
-                recording.start();
-                this.recordingId.set(recording.getId());
-                startPeriodic();
-            } catch (ParseException | IOException e) {
-                if (recording != null) {
-                    recording.close();
-                }
-                log.error("Unable to start recording", e);
-            }
-        });
+        return executor.submit(
+                () -> {
+                    safeCloseCurrentRecording();
+                    Recording recording = null;
+                    try {
+                        Configuration config = Configuration.getConfiguration(template);
+                        recording = new Recording(config);
+                        recording.setName("cryostat-agent");
+                        recording.setToDisk(true);
+                        recording.setMaxAge(Duration.ofMillis(period));
+                        recording.setDumpOnExit(true);
+                        this.exitPath = Files.createTempFile(null, null);
+                        Files.write(exitPath, new byte[0], StandardOpenOption.TRUNCATE_EXISTING);
+                        recording.setDestination(this.exitPath);
+                        recording.start();
+                        this.recordingId.set(recording.getId());
+                        startPeriodic();
+                    } catch (ParseException | IOException e) {
+                        if (recording != null) {
+                            recording.close();
+                        }
+                        log.error("Unable to start recording", e);
+                    }
+                });
     }
 
     public void stop() {
@@ -221,7 +224,9 @@ class Harvester implements FlightRecorderListener {
                     if (!shutdown) {
                         try {
                             uploadDumpedFile().get();
-                        } catch (ExecutionException | InterruptedException | FileNotFoundException e) {
+                        } catch (ExecutionException
+                                | InterruptedException
+                                | FileNotFoundException e) {
                             log.warn("Could not upload exit dump file", e);
                         } finally {
                             startRecording();

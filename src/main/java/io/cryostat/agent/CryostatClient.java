@@ -45,8 +45,8 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandlers;
-import java.time.Duration;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Set;
@@ -79,7 +79,14 @@ public class CryostatClient {
     private final String realm;
     private final String authorization;
 
-    CryostatClient(HttpClient http, UUID instanceId, String appName, URI baseUri, URI callback, String realm, String authorization) {
+    CryostatClient(
+            HttpClient http,
+            UUID instanceId,
+            String appName,
+            URI baseUri,
+            URI callback,
+            String realm,
+            String authorization) {
         this.http = http;
         this.instanceId = instanceId;
         this.appName = appName;
@@ -187,18 +194,18 @@ public class CryostatClient {
                             .timeout(Duration.ofSeconds(1))
                             .build();
             log.trace("{}", req);
-        return http.sendAsync(req, BodyHandlers.discarding())
-                .thenApply(
-                        res -> {
-                            log.trace(
-                                    "{} {} : {}",
-                                    res.request().method(),
-                                    res.request().uri(),
-                                    res.statusCode());
-                            return res;
-                        })
-                .thenApply(this::assertOkStatus)
-                .thenApply(res -> null);
+            return http.sendAsync(req, BodyHandlers.discarding())
+                    .thenApply(
+                            res -> {
+                                log.trace(
+                                        "{} {} : {}",
+                                        res.request().method(),
+                                        res.request().uri(),
+                                        res.statusCode());
+                                return res;
+                            })
+                    .thenApply(this::assertOkStatus)
+                    .thenApply(res -> null);
         } catch (JsonProcessingException e) {
             return CompletableFuture.failedFuture(e);
         }
@@ -209,14 +216,16 @@ public class CryostatClient {
                 Instant.now().truncatedTo(ChronoUnit.SECONDS).toString().replaceAll("[-:]", "");
         String fileName = String.format("%s_%s_%s.jfr", appName, "agent-" + instanceId, timestamp);
         HttpRequest req =
-                    HttpRequest.newBuilder(baseUri.resolve("/api/v1/recordings"))
-                            .POST(HttpRequest.BodyPublishers.ofFile(recording))
-                            .setHeader("Authorization", authorization)
-                            .setHeader("Content-Type", "application/octet-stream")
-                            .setHeader("Content-Disposition", "form-data; name=\"recording\"; filename=\"" + fileName + "\"")
-                            .timeout(Duration.ofSeconds(30))
-                            .build();
-            log.trace("{}", req);
+                HttpRequest.newBuilder(baseUri.resolve("/api/v1/recordings"))
+                        .POST(HttpRequest.BodyPublishers.ofFile(recording))
+                        .setHeader("Authorization", authorization)
+                        .setHeader("Content-Type", "application/octet-stream")
+                        .setHeader(
+                                "Content-Disposition",
+                                "form-data; name=\"recording\"; filename=\"" + fileName + "\"")
+                        .timeout(Duration.ofSeconds(30))
+                        .build();
+        log.trace("{}", req);
         return http.sendAsync(req, BodyHandlers.discarding())
                 .thenApply(
                         res -> {

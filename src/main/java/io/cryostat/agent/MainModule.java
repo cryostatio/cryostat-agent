@@ -160,7 +160,8 @@ public abstract class MainModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_CALLBACK) URI callback,
             @Named(ConfigModule.CRYOSTAT_AGENT_REALM) String realm,
             @Named(ConfigModule.CRYOSTAT_AGENT_AUTHORIZATION) String authorization) {
-        return new CryostatClient(http, instanceId, appName, baseUri, callback, realm, authorization);
+        return new CryostatClient(
+                http, instanceId, appName, baseUri, callback, realm, authorization);
     }
 
     @Provides
