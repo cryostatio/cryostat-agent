@@ -37,7 +37,6 @@
  */
 package io.cryostat.agent;
 
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -141,9 +140,7 @@ class Harvester implements FlightRecorderListener {
                     if (running) {
                         try {
                             uploadDumpedFile().get();
-                        } catch (ExecutionException
-                                | InterruptedException
-                                | FileNotFoundException e) {
+                        } catch (ExecutionException | InterruptedException | IOException e) {
                             log.warn("Could not upload exit dump file", e);
                         } finally {
                             startRecording();
@@ -239,13 +236,13 @@ class Harvester implements FlightRecorderListener {
         try {
             Files.write(exitPath, new byte[0], StandardOpenOption.TRUNCATE_EXISTING);
             recording.dump(exitPath);
-            return client.upload(exitPath);
+            return client.upload(template, exitPath);
         } catch (IOException e) {
             return CompletableFuture.failedFuture(e);
         }
     }
 
-    private Future<Void> uploadDumpedFile() throws FileNotFoundException {
-        return client.upload(exitPath);
+    private Future<Void> uploadDumpedFile() throws IOException {
+        return client.upload(template, exitPath);
     }
 }
