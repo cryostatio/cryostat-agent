@@ -37,20 +37,25 @@
  */
 package io.cryostat.agent;
 
-import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.math.BigInteger;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandlers;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
 import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 import io.cryostat.agent.model.DiscoveryNode;
@@ -60,6 +65,7 @@ import io.cryostat.agent.model.RegistrationInfo;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -73,7 +79,7 @@ public class CryostatClient {
     private final HttpClient http;
 
     private final String appName;
-    private final UUID instanceId;
+    private final String jvmId;
     private final URI baseUri;
     private final URI callback;
     private final String realm;
@@ -81,14 +87,14 @@ public class CryostatClient {
 
     CryostatClient(
             HttpClient http,
-            UUID instanceId,
+            String jvmId,
             String appName,
             URI baseUri,
             URI callback,
             String realm,
             String authorization) {
         this.http = http;
-        this.instanceId = instanceId;
+        this.jvmId = jvmId;
         this.appName = appName;
         this.baseUri = baseUri;
         this.callback = callback;
@@ -211,18 +217,21 @@ public class CryostatClient {
         }
     }
 
-    public CompletableFuture<Void> upload(Path recording) throws FileNotFoundException {
+    public CompletableFuture<Void> upload(String template, Path recording) throws IOException {
         String timestamp =
                 Instant.now().truncatedTo(ChronoUnit.SECONDS).toString().replaceAll("[-:]", "");
-        String fileName = String.format("%s_%s_%s.jfr", appName, "agent-" + instanceId, timestamp);
+        String fileName = String.format("%s_%s_%s.jfr", appName, template, timestamp);
+        log.info("Uploading {}", fileName);
+        Map<String, String> labels =
+                Map.of("jvmId", jvmId, "template.name", template, "template.type", "TARGET");
+        String boundary = new BigInteger(256, new Random()).toString();
         HttpRequest req =
                 HttpRequest.newBuilder(baseUri.resolve("/api/v1/recordings"))
-                        .POST(HttpRequest.BodyPublishers.ofFile(recording))
+                        .POST(ofMultipartData(boundary, recording, fileName, labels))
                         .setHeader("Authorization", authorization)
-                        .setHeader("Content-Type", "application/octet-stream")
                         .setHeader(
-                                "Content-Disposition",
-                                "form-data; name=\"recording\"; filename=\"" + fileName + "\"")
+                                "Content-Type",
+                                String.format("multipart/form-data; boundary=%s", boundary))
                         .timeout(Duration.ofSeconds(30))
                         .build();
         log.trace("{}", req);
@@ -238,6 +247,60 @@ public class CryostatClient {
                         })
                 .thenApply(this::assertOkStatus)
                 .thenApply(res -> null);
+    }
+
+    @SuppressFBWarnings("VA_FORMAT_STRING_USES_NEWLINE")
+    private HttpRequest.BodyPublisher ofMultipartData(
+            String boundary, Path filePath, String uploadName, Map<String, String> labels)
+            throws IOException {
+        byte[] newline = new byte[] {'\r', '\n'};
+        byte[] separator = ("--" + boundary).getBytes(StandardCharsets.UTF_8);
+
+        List<byte[]> byteArrays = new ArrayList<>();
+
+        // recording file
+        {
+            byteArrays.add(separator);
+            byteArrays.add(newline);
+
+            byteArrays.add(
+                    String.format(
+                                    "Content-Disposition: form-data; name=\"recording\";"
+                                            + " filename=\"%s\"",
+                                    uploadName)
+                            .getBytes(StandardCharsets.UTF_8));
+            byteArrays.add(newline);
+            byteArrays.add(
+                    "Content-Type: application/octet-stream".getBytes(StandardCharsets.UTF_8));
+
+            byteArrays.add(newline);
+            byteArrays.add(newline);
+            byteArrays.add(
+                    Files.readAllBytes(
+                            filePath)); // FIXME this whole thing should be a stream so we don't
+            // read the file into memory here
+            byteArrays.add(newline);
+        }
+
+        // recording labels
+        {
+            byteArrays.add(separator);
+            byteArrays.add(newline);
+
+            byteArrays.add(
+                    ("Content-Disposition: form-data; name=\"labels\"")
+                            .getBytes(StandardCharsets.UTF_8));
+
+            byteArrays.add(newline);
+            byteArrays.add(newline);
+            byteArrays.add(mapper.writeValueAsBytes(labels));
+            byteArrays.add(newline);
+        }
+
+        byte[] endBoundary = ("--" + boundary + "--").getBytes(StandardCharsets.UTF_8);
+        byteArrays.add(endBoundary);
+
+        return HttpRequest.BodyPublishers.ofByteArrays(byteArrays);
     }
 
     private <T> HttpResponse<T> assertOkStatus(HttpResponse<T> res) {

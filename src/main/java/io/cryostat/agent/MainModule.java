@@ -37,6 +37,7 @@
  */
 package io.cryostat.agent;
 
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.security.KeyManagementException;
@@ -45,20 +46,31 @@ import java.security.SecureRandom;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.time.Duration;
-import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.inject.Named;
 import javax.inject.Singleton;
+import javax.management.AttributeNotFoundException;
+import javax.management.InstanceNotFoundException;
+import javax.management.MBeanException;
+import javax.management.ReflectionException;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 
+import io.cryostat.core.net.JFRConnection;
+import io.cryostat.core.net.JFRConnectionToolkit;
+import io.cryostat.core.sys.Environment;
+import io.cryostat.core.sys.FileSystem;
+import io.cryostat.core.tui.ClientWriter;
+
 import dagger.Lazy;
 import dagger.Module;
 import dagger.Provides;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Module(
         includes = {
@@ -68,6 +80,7 @@ public abstract class MainModule {
 
     // one for outbound HTTP requests, one for incoming HTTP requests, and one as a general worker
     private static final int NUM_WORKER_THREADS = 3;
+    private static final String JVM_ID = "JVM_ID";
 
     @Provides
     @Singleton
@@ -154,14 +167,13 @@ public abstract class MainModule {
     @Singleton
     public static CryostatClient provideCryostatClient(
             HttpClient http,
-            UUID instanceId,
+            @Named(JVM_ID) String jvmId,
             @Named(ConfigModule.CRYOSTAT_AGENT_APP_NAME) String appName,
             @Named(ConfigModule.CRYOSTAT_AGENT_BASEURI) URI baseUri,
             @Named(ConfigModule.CRYOSTAT_AGENT_CALLBACK) URI callback,
             @Named(ConfigModule.CRYOSTAT_AGENT_REALM) String realm,
             @Named(ConfigModule.CRYOSTAT_AGENT_AUTHORIZATION) String authorization) {
-        return new CryostatClient(
-                http, instanceId, appName, baseUri, callback, realm, authorization);
+        return new CryostatClient(http, jvmId, appName, baseUri, callback, realm, authorization);
     }
 
     @Provides
@@ -169,7 +181,7 @@ public abstract class MainModule {
     public static Registration provideRegistration(
             ScheduledExecutorService executor,
             CryostatClient cryostat,
-            UUID instanceId,
+            @Named(JVM_ID) String jvmId,
             @Named(ConfigModule.CRYOSTAT_AGENT_APP_NAME) String appName,
             @Named(ConfigModule.CRYOSTAT_AGENT_REALM) String realm,
             @Named(ConfigModule.CRYOSTAT_AGENT_HOSTNAME) String hostname,
@@ -179,7 +191,7 @@ public abstract class MainModule {
         return new Registration(
                 executor,
                 cryostat,
-                instanceId,
+                jvmId,
                 appName,
                 realm,
                 hostname,
@@ -200,7 +212,29 @@ public abstract class MainModule {
 
     @Provides
     @Singleton
-    public static UUID provideInstanceID() {
-        return UUID.randomUUID();
+    @Named(JVM_ID)
+    public static String provideJvmId() {
+        Logger log = LoggerFactory.getLogger(JFRConnectionToolkit.class);
+        JFRConnectionToolkit tk =
+                new JFRConnectionToolkit(
+                        new ClientWriter() {
+                            @Override
+                            public void print(String msg) {
+                                log.warn(msg);
+                            }
+                        },
+                        new FileSystem(),
+                        new Environment());
+        try (JFRConnection connection = tk.connect(tk.createServiceURL("localhost", 0))) {
+            String id = connection.getJvmId();
+            log.info("Computed self JVM ID: {}", id);
+            return id;
+        } catch (IOException
+                | ReflectionException
+                | MBeanException
+                | InstanceNotFoundException
+                | AttributeNotFoundException e) {
+            throw new RuntimeException(e);
+        }
     }
 }

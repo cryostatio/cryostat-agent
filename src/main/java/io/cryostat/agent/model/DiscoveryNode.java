@@ -40,7 +40,6 @@ package io.cryostat.agent.model;
 import java.net.URI;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.UUID;
 
 public class DiscoveryNode {
 
@@ -98,7 +97,7 @@ public class DiscoveryNode {
                 String realm,
                 URI connectUrl,
                 String alias,
-                UUID instanceId,
+                String jvmId,
                 long pid,
                 String hostname,
                 int port,
@@ -107,7 +106,7 @@ public class DiscoveryNode {
             this.connectUrl = connectUrl;
             this.alias = alias;
             this.annotations = new Annotations();
-            annotations.setPlatform(Map.of("INSTANCE_ID", instanceId));
+            annotations.setPlatform(Map.of("JVM_ID", jvmId));
             annotations.setCryostat(
                     Map.of(
                             "REALM",
