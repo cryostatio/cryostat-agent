@@ -164,7 +164,7 @@ class Harvester implements FlightRecorderListener {
         }
         // TODO on stop, should we upload a smaller emergency dump recording?
         try {
-            uploadOngoing().get();
+            uploadOngoing(PushType.ON_STOP).get();
         } catch (ExecutionException | InterruptedException e) {
             log.warn("Exit upload failed", e);
             return CompletableFuture.failedFuture(e);
@@ -228,6 +228,10 @@ class Harvester implements FlightRecorderListener {
     }
 
     private Future<Void> uploadOngoing() {
+        return uploadOngoing(PushType.SCHEDULED);
+    }
+
+    private Future<Void> uploadOngoing(PushType pushType) {
         Optional<Recording> o = getById(this.recordingId.get());
         if (o.isEmpty()) {
             return CompletableFuture.failedFuture(new IllegalStateException("No source recording"));
@@ -236,13 +240,19 @@ class Harvester implements FlightRecorderListener {
         try {
             Files.write(exitPath, new byte[0], StandardOpenOption.TRUNCATE_EXISTING);
             recording.dump(exitPath);
-            return client.upload(template, exitPath);
+            return client.upload(pushType, template, exitPath);
         } catch (IOException e) {
             return CompletableFuture.failedFuture(e);
         }
     }
 
     private Future<Void> uploadDumpedFile() throws IOException {
-        return client.upload(template, exitPath);
+        return client.upload(PushType.EMERGENCY, template, exitPath);
+    }
+
+    enum PushType {
+        SCHEDULED,
+        ON_STOP,
+        EMERGENCY,
     }
 }
