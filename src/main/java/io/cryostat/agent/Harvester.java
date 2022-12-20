@@ -89,6 +89,9 @@ class Harvester implements FlightRecorderListener {
             log.info("Harvester disabled, period {} < 0", period);
             return;
         }
+        if (StringUtils.isBlank(template)) {
+            log.info("Harvester disabled, template not specified");
+        }
         if (!FlightRecorder.isAvailable()) {
             log.error("FlightRecorder is unavailable");
             return;
