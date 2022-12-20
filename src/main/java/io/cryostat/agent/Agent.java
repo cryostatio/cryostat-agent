@@ -45,7 +45,6 @@ import java.util.concurrent.TimeUnit;
 import javax.inject.Singleton;
 
 import dagger.Component;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import sun.misc.Signal;
@@ -82,7 +81,8 @@ public class Agent {
                                                                     client.executor().shutdown();
                                                                 } catch (Exception e) {
                                                                     log.warn(
-                                                                            "Exception during shutdown",
+                                                                            "Exception during"
+                                                                                    + " shutdown",
                                                                             e);
                                                                 } finally {
                                                                     log.info("Shutdown complete");
@@ -96,13 +96,15 @@ public class Agent {
                         });
 
         try {
-            client.registration().addRegistrationListener(evt -> {
-                if (evt.state) {
-                    client.harvester().start();
-                } else {
-                    client.harvester().stop();
-                }
-            });
+            client.registration()
+                    .addRegistrationListener(
+                            evt -> {
+                                if (evt.state) {
+                                    client.harvester().start();
+                                } else {
+                                    client.harvester().stop();
+                                }
+                            });
             client.registration().start();
             client.webServer().start();
         } catch (Exception e) {
