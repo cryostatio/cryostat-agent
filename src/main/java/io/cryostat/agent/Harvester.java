@@ -71,7 +71,7 @@ class Harvester implements FlightRecorderListener {
     private volatile Path exitPath;
     private FlightRecorder flightRecorder;
     private Future<?> task;
-    private boolean shutdown;
+    private boolean running;
 
     Harvester(
             ScheduledExecutorService executor,
@@ -106,10 +106,13 @@ class Harvester implements FlightRecorderListener {
             return;
         }
         startRecording();
-        shutdown = false;
+        running = true;
     }
 
     public void stop() {
+        if (!running) {
+            return;
+        }
         log.info("Harvester stopping");
         if (this.task != null) {
             this.task.cancel(true);
@@ -117,7 +120,7 @@ class Harvester implements FlightRecorderListener {
         }
         FlightRecorder.removeListener(this);
         log.info("Harvester stopped");
-        shutdown = true;
+        running = false;
     }
 
     @Override
@@ -135,7 +138,7 @@ class Harvester implements FlightRecorderListener {
                     recording.close(); // we should get notified for the CLOSED state next
                     break;
                 case CLOSED:
-                    if (!shutdown) {
+                    if (running) {
                         try {
                             uploadDumpedFile().get();
                         } catch (ExecutionException
@@ -158,7 +161,7 @@ class Harvester implements FlightRecorderListener {
     }
 
     Future<Void> exitUpload() {
-        shutdown = true;
+        running = false;
         if (flightRecorder == null || period <= 0) {
             return CompletableFuture.completedFuture(null);
         }
