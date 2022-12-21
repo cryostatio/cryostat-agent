@@ -12,7 +12,7 @@
 
 <repositories>
   <repository>
-    <id>github-cryostat-core</id>
+    <id>github</id>
     <url>https://maven.pkg.github.com/cryostatio/cryostat-core</url>
   </repository>
 </repositories>
