@@ -26,12 +26,17 @@ jobs:
       with:
         java-version: '11'
         distribution: 'adopt'
-        server-id: github # Value of the distributionManagement/repository/id field of the pom.xml
-        settings-path: ${{ github.workspace }} # location for the settings.xml file
+    - name: maven-settings
+      uses: s4u/maven-settings-action@v2
+      with:
+        servers: '[{"id": "github", "username": "dummy", "password": "${GITHUB_TOKEN_REF}"}]'
+        githubServer: false
     - uses: skjolber/maven-cache-github-action@v1
       with:
         step: restore
-    - run: mvn -B -U -s $GITHUB_WORKSPACE/settings.xml clean verify
+    - run: mvn -B -U clean verify
+      env:
+        GITHUB_TOKEN_REF: ${{ secrets.GH_PKGS_READ_TOKEN }}
     - uses: skjolber/maven-cache-github-action@v1
       with:
         step: save
