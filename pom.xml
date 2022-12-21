@@ -10,6 +10,13 @@
 <name>cryostat</name>
 <url>http://maven.apache.org</url>
 
+<repositories>
+  <repository>
+    <id>github-cryostat-core</id>
+    <url>https://maven.pkg.github.com/cryostatio/cryostat-core</url>
+  </repository>
+</repositories>
+
 <distributionManagement>
   <repository>
     <id>github</id>
