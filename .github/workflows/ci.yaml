@@ -29,7 +29,7 @@ jobs:
     - uses: skjolber/maven-cache-github-action@v1
       with:
         step: restore
-    - run: mvn -B -U clean verify
+    - run: mvn -B -U -s $GITHUB_WORKSPACE/settings.xml clean verify
     - uses: skjolber/maven-cache-github-action@v1
       with:
         step: save
