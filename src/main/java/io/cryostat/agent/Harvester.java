@@ -65,6 +65,8 @@ class Harvester implements FlightRecorderListener {
     private final ScheduledExecutorService executor;
     private final long period;
     private final String template;
+    private final long maxAge;
+    private final long maxSize;
     private final CryostatClient client;
     private final AtomicLong recordingId = new AtomicLong(-1L);
     private volatile Path exitPath;
@@ -76,21 +78,18 @@ class Harvester implements FlightRecorderListener {
             ScheduledExecutorService executor,
             long period,
             String template,
+            long maxAge,
+            long maxSize,
             CryostatClient client) {
         this.executor = executor;
         this.period = period;
         this.template = template;
+        this.maxAge = maxAge;
+        this.maxSize = maxSize;
         this.client = client;
     }
 
     public void start() {
-        if (period <= 0) {
-            log.info("Harvester disabled, period {} < 0", period);
-            return;
-        }
-        if (StringUtils.isBlank(template)) {
-            log.info("Harvester disabled, template not specified");
-        }
         if (!FlightRecorder.isAvailable()) {
             log.error("FlightRecorder is unavailable");
             return;
@@ -158,8 +157,7 @@ class Harvester implements FlightRecorderListener {
     }
 
     Future<Void> exitUpload() {
-        running = false;
-        if (flightRecorder == null || period <= 0) {
+        if (!running) {
             return CompletableFuture.completedFuture(null);
         }
         // TODO on stop, should we upload a smaller emergency dump recording?
@@ -172,6 +170,7 @@ class Harvester implements FlightRecorderListener {
             safeCloseCurrentRecording();
         }
         log.info("Harvester stopped");
+        running = false;
         return CompletableFuture.completedFuture(null);
     }
 
@@ -183,15 +182,28 @@ class Harvester implements FlightRecorderListener {
                     try {
                         Configuration config = Configuration.getConfiguration(template);
                         recording = new Recording(config);
-                        recording.setName("cryostat-agent");
+                        String name = "cryostat-agent";
+                        recording.setName(name);
                         recording.setToDisk(true);
-                        recording.setMaxAge(Duration.ofMillis(period));
+                        long duration = period;
+                        if (period <= 0) {
+                            duration = maxAge;
+                        }
+                        recording.setMaxAge(duration <= 0 ? null : Duration.ofMillis(duration));
+                        recording.setMaxSize(maxSize);
                         recording.setDumpOnExit(true);
                         this.exitPath = Files.createTempFile(null, null);
                         Files.write(exitPath, new byte[0], StandardOpenOption.TRUNCATE_EXISTING);
                         recording.setDestination(this.exitPath);
                         recording.start();
                         this.recordingId.set(recording.getId());
+                        log.info(
+                                "Started recording {}({}) template:{} maxAge:{} maxSize:{}",
+                                name,
+                                this.recordingId,
+                                template,
+                                maxAge,
+                                maxSize);
                         startPeriodic();
                     } catch (ParseException | IOException e) {
                         if (recording != null) {
@@ -206,9 +218,12 @@ class Harvester implements FlightRecorderListener {
         if (this.task != null) {
             this.task.cancel(true);
         }
-        this.task =
-                executor.scheduleAtFixedRate(
-                        this::uploadOngoing, period, period, TimeUnit.MILLISECONDS);
+        if (period > 0) {
+            this.task =
+                    executor.scheduleAtFixedRate(
+                            this::uploadOngoing, period, period, TimeUnit.MILLISECONDS);
+            log.info("Uploading every {}ms ...", period);
+        }
     }
 
     private void safeCloseCurrentRecording() {

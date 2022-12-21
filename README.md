@@ -46,6 +46,8 @@ and how it advertises itself to a Cryostat server instance. Required properties 
 - [ ] `cryostat.agent.registration.retry-ms` [`int`]: the duration in milliseconds between attempts to register with the Cryostat server. Default `5000`.
 - [ ] `cryostat.agent.harvester.period-ms` [`int`]: the length of time between JFR collections and pushes by the harvester. This also controls the maximum age of data stored in the buffer for the harvester's managed Flight Recording. Every `period-ms` the harvester will upload a JFR binary file to the `cryostat.agent.baseuri` archives. Default `-1`, which indicates no harvesting will be performed.
 - [ ] `cryostat.agent.harvester.template` [`String`]: the name of the `.jfc` event template configuration to use for the harvester's managed Flight Recording. Default `default`, the continous monitoring event template.
+- [ ] `cryostat.agent.harvester.max-age` [`long`]: the maximum age of data to hold in the JFR ring buffer. If not specified then the upload period is used, or if there is no upload period then no limit is applied.
+- [ ] `cryostat.agent.harvester.max-size` [`long`]: the maximum size )in bytes) of the JFR ring buffer. Defaults to 0, allowing the JVM to use the maximum buffer size.
 
 These properties can be set by JVM system properties or by environment variables. For example, the property
 `cryostat.agent.baseuri` can be set using `-Dcryostat.agent.baseuri=https://mycryostat.example.com:1234/` or

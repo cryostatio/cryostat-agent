@@ -206,8 +206,10 @@ public abstract class MainModule {
             ScheduledExecutorService executor,
             @Named(ConfigModule.CRYOSTAT_AGENT_HARVESTER_PERIOD_MS) long period,
             @Named(ConfigModule.CRYOSTAT_AGENT_HARVESTER_TEMPLATE) String template,
+            @Named(ConfigModule.CRYOSTAT_AGENT_HARVESTER_MAX_AGE) long maxAge,
+            @Named(ConfigModule.CRYOSTAT_AGENT_HARVESTER_MAX_SIZE) long maxSize,
             CryostatClient client) {
-        return new Harvester(executor, period, template, client);
+        return new Harvester(executor, period, template, maxAge, maxSize, client);
     }
 
     @Provides

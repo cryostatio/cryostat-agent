@@ -77,6 +77,10 @@ public abstract class ConfigModule {
             "cryostat.agent.harvester.period-ms";
     public static final String CRYOSTAT_AGENT_HARVESTER_TEMPLATE =
             "cryostat.agent.harvester.template";
+    public static final String CRYOSTAT_AGENT_HARVESTER_MAX_AGE =
+            "cryostat.agent.harvester.max-age";
+    public static final String CRYOSTAT_AGENT_HARVESTER_MAX_SIZE =
+            "cryostat.agent.harvester.max-size";
 
     @Provides
     @Singleton
@@ -193,5 +197,19 @@ public abstract class ConfigModule {
     @Named(CRYOSTAT_AGENT_HARVESTER_TEMPLATE)
     public static String provideCryostatAgentHarvesterTemplate(SmallRyeConfig config) {
         return config.getValue(CRYOSTAT_AGENT_HARVESTER_TEMPLATE, String.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_HARVESTER_MAX_AGE)
+    public static long provideCryostatAgentHarvesterMaxAge(SmallRyeConfig config) {
+        return config.getValue(CRYOSTAT_AGENT_HARVESTER_MAX_AGE, long.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_HARVESTER_MAX_SIZE)
+    public static long provideCryostatAgentHarvesterMaxSize(SmallRyeConfig config) {
+        return config.getValue(CRYOSTAT_AGENT_HARVESTER_MAX_SIZE, long.class);
     }
 }
