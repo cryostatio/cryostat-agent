@@ -40,7 +40,6 @@ package io.cryostat.agent;
 import java.net.InetAddress;
 import java.net.URI;
 import java.net.UnknownHostException;
-import java.util.UUID;
 
 import javax.inject.Named;
 import javax.inject.Singleton;
@@ -74,6 +73,11 @@ public abstract class ConfigModule {
     public static final String CRYOSTAT_AGENT_REGISTRATION_RETRY_MS =
             "cryostat.agent.registration.retry-ms";
 
+    public static final String CRYOSTAT_AGENT_HARVESTER_PERIOD_MS =
+            "cryostat.agent.harvester.period-ms";
+    public static final String CRYOSTAT_AGENT_HARVESTER_TEMPLATE =
+            "cryostat.agent.harvester.template";
+
     @Provides
     @Singleton
     public static SmallRyeConfig provideConfig() {
@@ -98,9 +102,7 @@ public abstract class ConfigModule {
     @Singleton
     @Named(CRYOSTAT_AGENT_REALM)
     public static String provideCryostatAgentRealm(
-            SmallRyeConfig config,
-            @Named(CRYOSTAT_AGENT_APP_NAME) String appName,
-            UUID instanceId) {
+            SmallRyeConfig config, @Named(CRYOSTAT_AGENT_APP_NAME) String appName) {
         return config.getOptionalValue(CRYOSTAT_AGENT_REALM, String.class).orElse(appName);
     }
 
@@ -167,7 +169,9 @@ public abstract class ConfigModule {
     @Named(CRYOSTAT_AGENT_APP_JMX_PORT)
     public static int provideCryostatAgentAppJmxPort(SmallRyeConfig config) {
         return config.getOptionalValue(CRYOSTAT_AGENT_APP_JMX_PORT, int.class)
-                .orElse(Integer.valueOf(System.getProperty("com.sun.management.jmxremote.port")));
+                .orElse(
+                        Integer.valueOf(
+                                System.getProperty("com.sun.management.jmxremote.port", "-1")));
     }
 
     @Provides
@@ -175,5 +179,19 @@ public abstract class ConfigModule {
     @Named(CRYOSTAT_AGENT_REGISTRATION_RETRY_MS)
     public static int provideCryostatAgentRegistrationRetryMs(SmallRyeConfig config) {
         return config.getValue(CRYOSTAT_AGENT_REGISTRATION_RETRY_MS, int.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_HARVESTER_PERIOD_MS)
+    public static long provideCryostatAgentHarvesterPeriod(SmallRyeConfig config) {
+        return config.getValue(CRYOSTAT_AGENT_HARVESTER_PERIOD_MS, long.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_HARVESTER_TEMPLATE)
+    public static String provideCryostatAgentHarvesterTemplate(SmallRyeConfig config) {
+        return config.getValue(CRYOSTAT_AGENT_HARVESTER_TEMPLATE, String.class);
     }
 }

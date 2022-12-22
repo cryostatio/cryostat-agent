@@ -38,6 +38,7 @@
 package io.cryostat.agent;
 
 import java.util.List;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
@@ -63,31 +64,47 @@ public class Agent {
                             SignalHandler handler =
                                     s -> {
                                         log.info("Caught SIG{}({})", s.getName(), s.getNumber());
-                                        client.registration()
-                                                .deregister()
-                                                .orTimeout(1, TimeUnit.SECONDS)
-                                                .thenRunAsync(
-                                                        () -> {
-                                                            try {
-                                                                log.info("Shutting down...");
-                                                                client.webServer().stop();
-                                                                client.registration().stop();
-                                                                client.executor().shutdown();
-                                                            } catch (Exception e) {
-                                                                log.warn(
-                                                                        "Exception during shutdown",
-                                                                        e);
-                                                            } finally {
-                                                                log.info("Shutdown complete");
-                                                                oldHandler.handle(s);
-                                                            }
-                                                        },
-                                                        client.executor());
+                                        try {
+                                            client.harvester().exitUpload().get();
+                                        } catch (InterruptedException | ExecutionException e) {
+                                            log.error("Exit upload failed", e);
+                                        } finally {
+                                            client.registration()
+                                                    .deregister()
+                                                    .orTimeout(1, TimeUnit.SECONDS)
+                                                    .thenRunAsync(
+                                                            () -> {
+                                                                try {
+                                                                    log.info("Shutting down...");
+                                                                    client.webServer().stop();
+                                                                    client.registration().stop();
+                                                                    client.executor().shutdown();
+                                                                } catch (Exception e) {
+                                                                    log.warn(
+                                                                            "Exception during"
+                                                                                    + " shutdown",
+                                                                            e);
+                                                                } finally {
+                                                                    log.info("Shutdown complete");
+                                                                    oldHandler.handle(s);
+                                                                }
+                                                            },
+                                                            client.executor());
+                                        }
                                     };
                             Signal.handle(signal, handler);
                         });
 
         try {
+            client.registration()
+                    .addRegistrationListener(
+                            evt -> {
+                                if (evt.state) {
+                                    client.harvester().start();
+                                } else {
+                                    client.harvester().stop();
+                                }
+                            });
             client.registration().start();
             client.webServer().start();
         } catch (Exception e) {
@@ -119,6 +136,8 @@ public class Agent {
         WebServer webServer();
 
         Registration registration();
+
+        Harvester harvester();
 
         ScheduledExecutorService executor();
 

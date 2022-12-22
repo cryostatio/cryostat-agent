@@ -40,13 +40,14 @@ package io.cryostat.agent;
 import java.net.URI;
 import java.net.UnknownHostException;
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 import io.cryostat.agent.model.DiscoveryNode;
 import io.cryostat.agent.model.PluginInfo;
@@ -62,30 +63,34 @@ class Registration {
 
     private final ScheduledExecutorService executor;
     private final CryostatClient cryostat;
-    private final UUID instanceId;
+    private final String jvmId;
     private final String appName;
     private final String realm;
     private final String hostname;
+    private final URI callback;
     private final int jmxPort;
     private final int registrationRetryMs;
 
     private final PluginInfo pluginInfo = new PluginInfo();
+    private final Set<Consumer<RegistrationEvent>> listeners = new HashSet<>();
 
     Registration(
             ScheduledExecutorService executor,
             CryostatClient cryostat,
-            UUID instanceId,
+            String jvmId,
             String appName,
             String realm,
             String hostname,
+            URI callback,
             int jmxPort,
             int registrationRetryMs) {
         this.executor = executor;
         this.cryostat = cryostat;
-        this.instanceId = instanceId;
+        this.jvmId = jvmId;
         this.appName = appName;
         this.realm = realm;
         this.hostname = hostname;
+        this.callback = callback;
         this.jmxPort = jmxPort;
         this.registrationRetryMs = registrationRetryMs;
     }
@@ -93,6 +98,10 @@ class Registration {
     void start() {
         executor.submit(this::tryRegister);
         log.info("{} started", getClass().getName());
+    }
+
+    void addRegistrationListener(Consumer<RegistrationEvent> listener) {
+        this.listeners.add(listener);
     }
 
     void tryRegister() {
@@ -103,8 +112,10 @@ class Registration {
                                     if (plugin != null) {
                                         this.pluginInfo.copyFrom(plugin);
                                         log.info("Registered as {}", this.pluginInfo.getId());
+                                        notify(true);
                                         tryUpdate();
                                     } else if (t != null) {
+                                        notify(false);
                                         throw new RegistrationException(t);
                                     }
 
@@ -174,20 +185,19 @@ class Registration {
                         .startInstant()
                         .orElse(Instant.EPOCH)
                         .getEpochSecond();
+        URI uri;
+        if (jmxPort > 0) {
+            uri =
+                    URI.create(
+                            String.format(
+                                    "service:jmx:rmi:///jndi/rmi://%s:%d/jmxrmi",
+                                    hostname, jmxPort));
+        } else {
+            uri = callback;
+        }
         DiscoveryNode.Target target =
                 new DiscoveryNode.Target(
-                        realm,
-                        URI.create(
-                                String.format(
-                                        "service:jmx:rmi:///jndi/rmi://%s:%d/jmxrmi",
-                                        hostname, jmxPort)),
-                        appName,
-                        instanceId,
-                        pid,
-                        hostname,
-                        jmxPort,
-                        javaMain,
-                        startTime);
+                        realm, uri, appName, jvmId, pid, hostname, jmxPort, javaMain, startTime);
 
         DiscoveryNode selfNode =
                 new DiscoveryNode(appName + "-" + pluginInfo.getId(), NODE_TYPE, target);
@@ -205,10 +215,12 @@ class Registration {
                 .handleAsync(
                         (n, t) -> {
                             if (t != null) {
+                                notify(false);
                                 log.warn(
                                         "Failed to deregister as Cryostat discovery plugin [{}]",
                                         this.pluginInfo.getId());
                             } else {
+                                notify(false);
                                 log.info(
                                         "Deregistered from Cryostat discovery plugin [{}]",
                                         this.pluginInfo.getId());
@@ -217,5 +229,18 @@ class Registration {
                             return null;
                         },
                         executor);
+    }
+
+    private void notify(boolean state) {
+        RegistrationEvent evt = new RegistrationEvent(state);
+        this.listeners.forEach(listener -> listener.accept(evt));
+    }
+
+    static class RegistrationEvent {
+        boolean state;
+
+        RegistrationEvent(boolean state) {
+            this.state = state;
+        }
     }
 }

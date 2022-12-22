@@ -37,15 +37,28 @@
  */
 package io.cryostat.agent;
 
+import java.io.BufferedInputStream;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.SequenceInputStream;
+import java.math.BigInteger;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandlers;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.Map;
+import java.util.Random;
 import java.util.Set;
+import java.util.Vector;
 import java.util.concurrent.CompletableFuture;
 
 import io.cryostat.agent.model.DiscoveryNode;
@@ -55,10 +68,11 @@ import io.cryostat.agent.model.RegistrationInfo;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-class CryostatClient {
+public class CryostatClient {
 
     private static final String API_PATH = "/api/v2.2/discovery";
 
@@ -66,13 +80,25 @@ class CryostatClient {
 
     private final ObjectMapper mapper;
     private final HttpClient http;
+
+    private final String appName;
+    private final String jvmId;
     private final URI baseUri;
     private final URI callback;
     private final String realm;
     private final String authorization;
 
-    CryostatClient(HttpClient http, URI baseUri, URI callback, String realm, String authorization) {
+    CryostatClient(
+            HttpClient http,
+            String jvmId,
+            String appName,
+            URI baseUri,
+            URI callback,
+            String realm,
+            String authorization) {
         this.http = http;
+        this.jvmId = jvmId;
+        this.appName = appName;
         this.baseUri = baseUri;
         this.callback = callback;
         this.realm = realm;
@@ -82,7 +108,7 @@ class CryostatClient {
         log.info("Using Cryostat baseuri {}", baseUri);
     }
 
-    CompletableFuture<PluginInfo> register(PluginInfo pluginInfo) {
+    public CompletableFuture<PluginInfo> register(PluginInfo pluginInfo) {
         RegistrationInfo registrationInfo =
                 new RegistrationInfo(pluginInfo.getId(), realm, callback, pluginInfo.getToken());
         HttpRequest req;
@@ -132,7 +158,7 @@ class CryostatClient {
                         });
     }
 
-    CompletableFuture<Void> deregister(PluginInfo pluginInfo) {
+    public CompletableFuture<Void> deregister(PluginInfo pluginInfo) {
         HttpRequest req =
                 HttpRequest.newBuilder(
                                 baseUri.resolve(
@@ -159,7 +185,7 @@ class CryostatClient {
                 .thenApply(res -> null);
     }
 
-    CompletableFuture<Void> update(PluginInfo pluginInfo, Set<DiscoveryNode> subtree) {
+    public CompletableFuture<Void> update(PluginInfo pluginInfo, Set<DiscoveryNode> subtree) {
         HttpRequest req;
         try {
             req =
@@ -177,9 +203,50 @@ class CryostatClient {
                             .timeout(Duration.ofSeconds(1))
                             .build();
             log.trace("{}", req);
+            return http.sendAsync(req, BodyHandlers.discarding())
+                    .thenApply(
+                            res -> {
+                                log.trace(
+                                        "{} {} : {}",
+                                        res.request().method(),
+                                        res.request().uri(),
+                                        res.statusCode());
+                                return res;
+                            })
+                    .thenApply(this::assertOkStatus)
+                    .thenApply(res -> null);
         } catch (JsonProcessingException e) {
             return CompletableFuture.failedFuture(e);
         }
+    }
+
+    public CompletableFuture<Void> upload(
+            Harvester.PushType pushType, String template, Path recording) throws IOException {
+        String timestamp =
+                Instant.now().truncatedTo(ChronoUnit.SECONDS).toString().replaceAll("[-:]", "");
+        String fileName = String.format("%s_%s_%s.jfr", appName, template, timestamp);
+        log.info("Uploading {}", fileName);
+        Map<String, String> labels =
+                Map.of(
+                        "jvmId",
+                        jvmId,
+                        "template.name",
+                        template,
+                        "template.type",
+                        "TARGET",
+                        "pushType",
+                        pushType.name());
+        String boundary = new BigInteger(256, new Random()).toString();
+        HttpRequest req =
+                HttpRequest.newBuilder(baseUri.resolve("/api/v1/recordings"))
+                        .POST(ofMultipartData(boundary, recording, fileName, labels))
+                        .setHeader("Authorization", authorization)
+                        .setHeader(
+                                "Content-Type",
+                                String.format("multipart/form-data; boundary=%s", boundary))
+                        .timeout(Duration.ofSeconds(30))
+                        .build();
+        log.trace("{}", req);
         return http.sendAsync(req, BodyHandlers.discarding())
                 .thenApply(
                         res -> {
@@ -192,6 +259,63 @@ class CryostatClient {
                         })
                 .thenApply(this::assertOkStatus)
                 .thenApply(res -> null);
+    }
+
+    @SuppressFBWarnings("VA_FORMAT_STRING_USES_NEWLINE")
+    private HttpRequest.BodyPublisher ofMultipartData(
+            String boundary, Path filePath, String uploadName, Map<String, String> labels)
+            throws IOException {
+        byte[] newline = new byte[] {'\r', '\n'};
+        String separator = "--" + boundary;
+
+        Vector<InputStream> parts = new Vector<>();
+
+        // recording file
+        {
+            parts.add(asStream(separator));
+            parts.add(asStream(newline));
+
+            parts.add(
+                    asStream(
+                            String.format(
+                                    "Content-Disposition: form-data; name=\"recording\";"
+                                            + " filename=\"%s\"",
+                                    uploadName)));
+            parts.add(asStream(newline));
+            parts.add(asStream("Content-Type: application/octet-stream"));
+
+            parts.add(asStream(newline));
+            parts.add(asStream(newline));
+            parts.add(new BufferedInputStream(Files.newInputStream(filePath)));
+            parts.add(asStream(newline));
+        }
+
+        // recording labels
+        {
+            parts.add(asStream(separator));
+            parts.add(asStream(newline));
+
+            parts.add(asStream(("Content-Disposition: form-data; name=\"labels\"")));
+
+            parts.add(asStream(newline));
+            parts.add(asStream(newline));
+            parts.add(asStream(mapper.writeValueAsBytes(labels)));
+            parts.add(asStream(newline));
+        }
+
+        String endBoundary = ("--" + boundary + "--");
+        parts.add(asStream(endBoundary));
+
+        return HttpRequest.BodyPublishers.ofInputStream(
+                () -> new SequenceInputStream(parts.elements()));
+    }
+
+    private static InputStream asStream(byte[] arr) {
+        return new ByteArrayInputStream(arr);
+    }
+
+    private static InputStream asStream(String s) {
+        return new ByteArrayInputStream(s.getBytes(StandardCharsets.UTF_8));
     }
 
     private <T> HttpResponse<T> assertOkStatus(HttpResponse<T> res) {
