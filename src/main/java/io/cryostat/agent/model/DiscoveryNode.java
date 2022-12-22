@@ -81,6 +81,7 @@ public class DiscoveryNode {
 
     public static class Target {
 
+        private String jvmId;
         private URI connectUrl;
         private String alias;
         private Annotations annotations;
@@ -88,6 +89,7 @@ public class DiscoveryNode {
         Target() {}
 
         Target(Target o) {
+            this.jvmId = o.jvmId;
             this.connectUrl = o.connectUrl;
             this.alias = o.alias;
             this.annotations = new Annotations(o.annotations);
@@ -103,10 +105,11 @@ public class DiscoveryNode {
                 int port,
                 String javaMain,
                 long startTime) {
+            this.jvmId = jvmId;
             this.connectUrl = connectUrl;
             this.alias = alias;
             this.annotations = new Annotations();
-            annotations.setPlatform(Map.of("JVM_ID", jvmId));
+            annotations.setPlatform(Map.of());
             annotations.setCryostat(
                     Map.of(
                             "REALM",
@@ -123,6 +126,10 @@ public class DiscoveryNode {
                             startTime));
         }
 
+        public String getJvmId() {
+            return this.jvmId;
+        }
+
         public URI getConnectUrl() {
             return connectUrl;
         }
@@ -133,6 +140,10 @@ public class DiscoveryNode {
 
         public Annotations getAnnotations() {
             return new Annotations(annotations);
+        }
+
+        void setJvmId(String jvmId) {
+            this.jvmId = jvmId;
         }
 
         void setConnectUrl(URI connectUrl) {
