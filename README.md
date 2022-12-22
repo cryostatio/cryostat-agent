@@ -1,5 +1,7 @@
 # `cryostat-agent`
 
+NOOP
+
 Discovery agent plugin for [Cryostat](https://github.com/cryostatio/cryostat).
 
 Cryostat has a Discovery API to allow service locator bridges ("Discovery Plugins") to inform Cryostat about the
