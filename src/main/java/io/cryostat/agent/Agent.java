@@ -107,6 +107,7 @@ public class Agent {
                                         client.harvester().stop();
                                         break;
                                     case REFRESHED:
+                                        break;
                                     default:
                                         log.error("Unknown registration state: {}", evt.state);
                                         break;
