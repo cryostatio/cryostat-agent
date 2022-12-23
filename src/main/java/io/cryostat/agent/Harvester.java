@@ -84,6 +84,9 @@ class Harvester implements FlightRecorderListener {
     }
 
     public void start() {
+        if (running) {
+            return;
+        }
         if (period <= 0) {
             log.info("Harvester disabled, period {} < 0", period);
             return;
