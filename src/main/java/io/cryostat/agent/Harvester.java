@@ -102,7 +102,7 @@ class Harvester implements FlightRecorderListener {
         try {
             FlightRecorder.addListener(this);
             this.flightRecorder = FlightRecorder.getFlightRecorder();
-            log.info("JFR Harvester started");
+            log.info("JFR Harvester started using template {} with period {}ms", template, period);
         } catch (SecurityException | IllegalStateException e) {
             log.error("Harvester could not start", e);
             return;
