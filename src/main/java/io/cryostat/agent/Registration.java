@@ -110,12 +110,18 @@ class Registration {
                         .handleAsync(
                                 (plugin, t) -> {
                                     if (plugin != null) {
+                                        boolean previouslyRegistered =
+                                                this.pluginInfo.isInitialized();
                                         this.pluginInfo.copyFrom(plugin);
                                         log.info("Registered as {}", this.pluginInfo.getId());
-                                        notify(true);
+                                        notify(
+                                                previouslyRegistered
+                                                        ? RegistrationEvent.State.REFRESHED
+                                                        : RegistrationEvent.State.REGISTERED);
                                         tryUpdate();
                                     } else if (t != null) {
-                                        notify(false);
+                                        this.pluginInfo.clear();
+                                        notify(RegistrationEvent.State.UNREGISTERED);
                                         throw new RegistrationException(t);
                                     }
 
@@ -214,32 +220,38 @@ class Registration {
         return cryostat.deregister(pluginInfo)
                 .handleAsync(
                         (n, t) -> {
+                            this.pluginInfo.clear();
+                            notify(RegistrationEvent.State.UNREGISTERED);
                             if (t != null) {
-                                notify(false);
                                 log.warn(
                                         "Failed to deregister as Cryostat discovery plugin [{}]",
                                         this.pluginInfo.getId());
                             } else {
-                                notify(false);
                                 log.info(
                                         "Deregistered from Cryostat discovery plugin [{}]",
                                         this.pluginInfo.getId());
                             }
-                            this.pluginInfo.clear();
                             return null;
                         },
                         executor);
     }
 
-    private void notify(boolean state) {
+    private void notify(RegistrationEvent.State state) {
         RegistrationEvent evt = new RegistrationEvent(state);
         this.listeners.forEach(listener -> listener.accept(evt));
     }
 
     static class RegistrationEvent {
-        boolean state;
 
-        RegistrationEvent(boolean state) {
+        enum State {
+            REGISTERED,
+            UNREGISTERED,
+            REFRESHED,
+        }
+
+        final State state;
+
+        RegistrationEvent(State state) {
             this.state = state;
         }
     }

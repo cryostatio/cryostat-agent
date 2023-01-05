@@ -99,10 +99,18 @@ public class Agent {
             client.registration()
                     .addRegistrationListener(
                             evt -> {
-                                if (evt.state) {
-                                    client.harvester().start();
-                                } else {
-                                    client.harvester().stop();
+                                switch (evt.state) {
+                                    case REGISTERED:
+                                        client.harvester().start();
+                                        break;
+                                    case UNREGISTERED:
+                                        client.harvester().stop();
+                                        break;
+                                    case REFRESHED:
+                                        break;
+                                    default:
+                                        log.error("Unknown registration state: {}", evt.state);
+                                        break;
                                 }
                             });
             client.registration().start();
