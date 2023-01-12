@@ -39,6 +39,7 @@ package io.cryostat.agent;
 
 import java.net.URI;
 import java.net.UnknownHostException;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.Set;
@@ -132,7 +133,7 @@ class Registration {
             f.get();
         } catch (ExecutionException | InterruptedException e) {
             log.error("Registration failure", e);
-            log.info("Registration retry period: {}(ms)", registrationRetryMs);
+            log.info("Registration retry period: {}", Duration.ofMillis(registrationRetryMs));
             executor.schedule(this::tryRegister, registrationRetryMs, TimeUnit.MILLISECONDS);
         }
     }

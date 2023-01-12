@@ -60,6 +60,7 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 
+import io.cryostat.agent.Harvester.RecordingSettings;
 import io.cryostat.core.net.JFRConnection;
 import io.cryostat.core.net.JFRConnectionToolkit;
 import io.cryostat.core.sys.Environment;
@@ -206,8 +207,13 @@ public abstract class MainModule {
             ScheduledExecutorService executor,
             @Named(ConfigModule.CRYOSTAT_AGENT_HARVESTER_PERIOD_MS) long period,
             @Named(ConfigModule.CRYOSTAT_AGENT_HARVESTER_TEMPLATE) String template,
+            @Named(ConfigModule.CRYOSTAT_AGENT_HARVESTER_MAX_AGE_MS) long maxAge,
+            @Named(ConfigModule.CRYOSTAT_AGENT_HARVESTER_MAX_SIZE_B) long maxSize,
             CryostatClient client) {
-        return new Harvester(executor, period, template, client);
+        RecordingSettings settings = new RecordingSettings();
+        settings.maxAge = maxAge;
+        settings.maxSize = maxSize;
+        return new Harvester(executor, period, template, settings, client);
     }
 
     @Provides
