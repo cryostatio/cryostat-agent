@@ -69,6 +69,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.input.CountingInputStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -222,10 +224,9 @@ public class CryostatClient {
 
     public CompletableFuture<Void> upload(
             Harvester.PushType pushType, String template, Path recording) throws IOException {
-        String timestamp =
-                Instant.now().truncatedTo(ChronoUnit.SECONDS).toString().replaceAll("[-:]", "");
+        Instant start = Instant.now();
+        String timestamp = start.truncatedTo(ChronoUnit.SECONDS).toString().replaceAll("[-:]", "");
         String fileName = String.format("%s_%s_%s.jfr", appName, template, timestamp);
-        log.info("Uploading {}", fileName);
         Map<String, String> labels =
                 Map.of(
                         "jvmId",
@@ -237,9 +238,10 @@ public class CryostatClient {
                         "pushType",
                         pushType.name());
         String boundary = new BigInteger(256, new Random()).toString();
+        CountingInputStream is = getRecordingInputStream(recording);
         HttpRequest req =
                 HttpRequest.newBuilder(baseUri.resolve("/api/v1/recordings"))
-                        .POST(ofMultipartData(boundary, recording, fileName, labels))
+                        .POST(ofMultipartData(boundary, is, fileName, labels))
                         .setHeader("Authorization", authorization)
                         .setHeader(
                                 "Content-Type",
@@ -250,20 +252,28 @@ public class CryostatClient {
         return http.sendAsync(req, BodyHandlers.discarding())
                 .thenApply(
                         res -> {
-                            log.trace(
-                                    "{} {} : {}",
+                            Instant finish = Instant.now();
+                            log.info(
+                                    "{} {} ({} -> {}): {}/{}",
                                     res.request().method(),
+                                    res.statusCode(),
+                                    fileName,
                                     res.request().uri(),
-                                    res.statusCode());
+                                    FileUtils.byteCountToDisplaySize(is.getByteCount()),
+                                    Duration.between(start, finish));
                             return res;
                         })
                 .thenApply(this::assertOkStatus)
                 .thenApply(res -> null);
     }
 
+    private CountingInputStream getRecordingInputStream(Path filePath) throws IOException {
+        return new CountingInputStream(new BufferedInputStream(Files.newInputStream(filePath)));
+    }
+
     @SuppressFBWarnings("VA_FORMAT_STRING_USES_NEWLINE")
     private HttpRequest.BodyPublisher ofMultipartData(
-            String boundary, Path filePath, String uploadName, Map<String, String> labels)
+            String boundary, InputStream stream, String uploadName, Map<String, String> labels)
             throws IOException {
         byte[] newline = new byte[] {'\r', '\n'};
         String separator = "--" + boundary;
@@ -286,7 +296,7 @@ public class CryostatClient {
 
             parts.add(asStream(newline));
             parts.add(asStream(newline));
-            parts.add(new BufferedInputStream(Files.newInputStream(filePath)));
+            parts.add(stream);
             parts.add(asStream(newline));
         }
 

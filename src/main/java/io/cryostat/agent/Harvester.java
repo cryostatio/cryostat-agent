@@ -55,6 +55,7 @@ import jdk.jfr.Configuration;
 import jdk.jfr.FlightRecorder;
 import jdk.jfr.FlightRecorderListener;
 import jdk.jfr.Recording;
+import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -65,6 +66,7 @@ class Harvester implements FlightRecorderListener {
     private final ScheduledExecutorService executor;
     private final long period;
     private final String template;
+    private final RecordingSettings exitSettings;
     private final CryostatClient client;
     private final AtomicLong recordingId = new AtomicLong(-1L);
     private volatile Path exitPath;
@@ -76,10 +78,12 @@ class Harvester implements FlightRecorderListener {
             ScheduledExecutorService executor,
             long period,
             String template,
+            RecordingSettings exitSettings,
             CryostatClient client) {
         this.executor = executor;
         this.period = period;
         this.template = template;
+        this.exitSettings = exitSettings;
         this.client = client;
     }
 
@@ -102,7 +106,24 @@ class Harvester implements FlightRecorderListener {
         try {
             FlightRecorder.addListener(this);
             this.flightRecorder = FlightRecorder.getFlightRecorder();
-            log.info("JFR Harvester started using template {} with period {}ms", template, period);
+            log.info(
+                    "JFR Harvester started using template \"{}\" with period {}",
+                    template,
+                    Duration.ofMillis(period));
+            if (exitSettings.maxAge > 0) {
+                log.info(
+                        "On-stop uploads will contain approximately the most recent {}ms ({}) of"
+                                + " data",
+                        exitSettings.maxAge,
+                        Duration.ofMillis(exitSettings.maxAge));
+            }
+            if (exitSettings.maxSize > 0) {
+                log.info(
+                        "On-stop uploads will contain approximately the most recent {} bytes ({})"
+                                + " of data",
+                        exitSettings.maxSize,
+                        FileUtils.byteCountToDisplaySize(exitSettings.maxSize));
+            }
         } catch (SecurityException | IllegalStateException e) {
             log.error("Harvester could not start", e);
             return;
@@ -165,9 +186,8 @@ class Harvester implements FlightRecorderListener {
         if (flightRecorder == null || period <= 0) {
             return CompletableFuture.completedFuture(null);
         }
-        // TODO on stop, should we upload a smaller emergency dump recording?
         try {
-            uploadOngoing(PushType.ON_STOP).get();
+            uploadOngoing(PushType.ON_STOP, exitSettings).get();
         } catch (ExecutionException | InterruptedException e) {
             log.warn("Exit upload failed", e);
             return CompletableFuture.failedFuture(e);
@@ -235,17 +255,37 @@ class Harvester implements FlightRecorderListener {
     }
 
     private Future<Void> uploadOngoing(PushType pushType) {
+        return uploadOngoing(pushType, null);
+    }
+
+    private Future<Void> uploadOngoing(PushType pushType, RecordingSettings settings) {
         Optional<Recording> o = getById(this.recordingId.get());
         if (o.isEmpty()) {
             return CompletableFuture.failedFuture(new IllegalStateException("No source recording"));
         }
-        Recording recording = o.get();
+        Recording recording;
+        boolean isSynthetic = settings != null && (settings.maxSize > 0 || settings.maxAge > 0);
+        if (isSynthetic) {
+            recording = FlightRecorder.getFlightRecorder().takeSnapshot();
+            if (settings.maxSize > 0) {
+                recording.setMaxSize(settings.maxSize);
+            }
+            if (settings.maxAge > 0) {
+                recording.setMaxAge(Duration.ofMillis(settings.maxAge));
+            }
+        } else {
+            recording = o.get();
+        }
         try {
             Files.write(exitPath, new byte[0], StandardOpenOption.TRUNCATE_EXISTING);
             recording.dump(exitPath);
             return client.upload(pushType, template, exitPath);
         } catch (IOException e) {
             return CompletableFuture.failedFuture(e);
+        } finally {
+            if (isSynthetic) {
+                recording.close();
+            }
         }
     }
 
@@ -257,5 +297,10 @@ class Harvester implements FlightRecorderListener {
         SCHEDULED,
         ON_STOP,
         EMERGENCY,
+    }
+
+    static class RecordingSettings {
+        long maxSize;
+        long maxAge;
     }
 }
