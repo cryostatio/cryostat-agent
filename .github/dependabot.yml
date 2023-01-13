@@ -1,0 +1,13 @@
+version: 2
+updates:
+  - package-ecosystem: "maven"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    reviewers:
+      - "cryostatio/reviewers"
+    labels:
+      - "dependencies"
+      - "chore"
+      - "safe-to-test"
+    open-pull-requests-limit: 10
