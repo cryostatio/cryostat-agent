@@ -231,15 +231,13 @@ public abstract class MainModule {
                         },
                         new FileSystem(),
                         new Environment());
-        try (JFRConnection connection = tk.connect(tk.createServiceURL("localhost", 0))) {
-            String id = connection.getJvmId();
-            log.info("Computed self JVM ID: {}", id);
-            return id;
-        } catch (IOException
-                | ReflectionException
-                | MBeanException
-                | InstanceNotFoundException
-                | AttributeNotFoundException e) {
+        try {
+            try (JFRConnection connection = tk.connect(tk.createServiceURL("localhost", 0))) {
+                String id = connection.getJvmId();
+                log.info("Computed self JVM ID: {}", id);
+                return id;
+            }
+        } catch (Exception e) {
             throw new RuntimeException(e);
         }
     }
