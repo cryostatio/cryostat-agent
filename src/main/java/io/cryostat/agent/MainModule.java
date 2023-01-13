@@ -37,7 +37,6 @@
  */
 package io.cryostat.agent;
 
-import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.security.KeyManagementException;
@@ -52,10 +51,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.inject.Named;
 import javax.inject.Singleton;
-import javax.management.AttributeNotFoundException;
-import javax.management.InstanceNotFoundException;
-import javax.management.MBeanException;
-import javax.management.ReflectionException;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
