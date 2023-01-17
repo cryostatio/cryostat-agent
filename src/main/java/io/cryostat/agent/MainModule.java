@@ -202,7 +202,7 @@ public abstract class MainModule {
             ScheduledExecutorService executor,
             @Named(ConfigModule.CRYOSTAT_AGENT_HARVESTER_PERIOD_MS) long period,
             @Named(ConfigModule.CRYOSTAT_AGENT_HARVESTER_TEMPLATE) String template,
-            @Named(ConfigModule.CRYOSTAT_AGENT_HARVESTER_MAX_FILES) String maxFiles,
+            @Named(ConfigModule.CRYOSTAT_AGENT_HARVESTER_MAX_FILES) int maxFiles,
             @Named(ConfigModule.CRYOSTAT_AGENT_HARVESTER_EXIT_MAX_AGE_MS) long maxAge,
             @Named(ConfigModule.CRYOSTAT_AGENT_HARVESTER_EXIT_MAX_SIZE_B) long maxSize,
             CryostatClient client) {

@@ -204,8 +204,8 @@ public abstract class ConfigModule {
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_HARVESTER_MAX_FILES)
-    public static String provideCryostatAgentHarvesterMaxFiles(SmallRyeConfig config) {
-        return config.getValue(CRYOSTAT_AGENT_HARVESTER_MAX_FILES, String.class);
+    public static int provideCryostatAgentHarvesterMaxFiles(SmallRyeConfig config) {
+        return config.getValue(CRYOSTAT_AGENT_HARVESTER_MAX_FILES, int.class);
     }
 
     @Provides

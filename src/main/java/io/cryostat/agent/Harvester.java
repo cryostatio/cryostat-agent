@@ -66,7 +66,7 @@ class Harvester implements FlightRecorderListener {
     private final ScheduledExecutorService executor;
     private final long period;
     private final String template;
-    private final String maxFiles;
+    private final int maxFiles;
     private final RecordingSettings exitSettings;
     private final CryostatClient client;
     private final AtomicLong recordingId = new AtomicLong(-1L);
@@ -79,7 +79,7 @@ class Harvester implements FlightRecorderListener {
             ScheduledExecutorService executor,
             long period,
             String template,
-            String maxFiles,
+            int maxFiles,
             RecordingSettings exitSettings,
             CryostatClient client) {
         this.executor = executor;
@@ -101,8 +101,8 @@ class Harvester implements FlightRecorderListener {
         if (StringUtils.isBlank(template)) {
             log.info("Template not specified");
         }
-        if (StringUtils.isBlank(maxFiles)) {
-            log.info("Maximum number of files to keep within target not specified");
+        if (maxFiles <= 0) {
+            log.info("Maximum number of files to keep within target is {} <= 0", maxFiles);
         }
         if (!FlightRecorder.isAvailable()) {
             log.error("FlightRecorder is unavailable");

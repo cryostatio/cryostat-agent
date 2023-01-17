@@ -49,6 +49,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandlers;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -223,7 +224,7 @@ public class CryostatClient {
     }
 
     public CompletableFuture<Void> upload(
-            Harvester.PushType pushType, String template, String maxFiles, Path recording)
+            Harvester.PushType pushType, String template, int maxFiles, Path recording)
             throws IOException {
         Instant start = Instant.now();
         String timestamp = start.truncatedTo(ChronoUnit.SECONDS).toString().replaceAll("[-:]", "");
@@ -278,7 +279,7 @@ public class CryostatClient {
             InputStream stream,
             String uploadName,
             Map<String, String> labels,
-            String maxFiles)
+            int maxFiles)
             throws IOException {
         byte[] newline = new byte[] {'\r', '\n'};
         String separator = "--" + boundary;
@@ -344,6 +345,10 @@ public class CryostatClient {
 
     private static InputStream asStream(String s) {
         return new ByteArrayInputStream(s.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static InputStream asStream(int i) {
+        return new ByteArrayInputStream(ByteBuffer.allocate(4).putInt(i).array());
     }
 
     private <T> HttpResponse<T> assertOkStatus(HttpResponse<T> res) {
