@@ -49,6 +49,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandlers;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -223,7 +224,8 @@ public class CryostatClient {
     }
 
     public CompletableFuture<Void> upload(
-            Harvester.PushType pushType, String template, Path recording) throws IOException {
+            Harvester.PushType pushType, String template, int maxFiles, Path recording)
+            throws IOException {
         Instant start = Instant.now();
         String timestamp = start.truncatedTo(ChronoUnit.SECONDS).toString().replaceAll("[-:]", "");
         String fileName = String.format("%s_%s_%s.jfr", appName, template, timestamp);
@@ -240,8 +242,8 @@ public class CryostatClient {
         String boundary = new BigInteger(256, new Random()).toString();
         CountingInputStream is = getRecordingInputStream(recording);
         HttpRequest req =
-                HttpRequest.newBuilder(baseUri.resolve("/api/v1/recordings"))
-                        .POST(ofMultipartData(boundary, is, fileName, labels))
+                HttpRequest.newBuilder(baseUri.resolve("/api/beta/recordings/" + jvmId))
+                        .POST(ofMultipartData(boundary, is, fileName, labels, maxFiles))
                         .setHeader("Authorization", authorization)
                         .setHeader(
                                 "Content-Type",
@@ -273,7 +275,11 @@ public class CryostatClient {
 
     @SuppressFBWarnings("VA_FORMAT_STRING_USES_NEWLINE")
     private HttpRequest.BodyPublisher ofMultipartData(
-            String boundary, InputStream stream, String uploadName, Map<String, String> labels)
+            String boundary,
+            InputStream stream,
+            String uploadName,
+            Map<String, String> labels,
+            int maxFiles)
             throws IOException {
         byte[] newline = new byte[] {'\r', '\n'};
         String separator = "--" + boundary;
@@ -313,6 +319,19 @@ public class CryostatClient {
             parts.add(asStream(newline));
         }
 
+        // maxFiles
+        {
+            parts.add(asStream(separator));
+            parts.add(asStream(newline));
+
+            parts.add(asStream(("Content-Disposition: form-data; name=\"maxFiles\"")));
+
+            parts.add(asStream(newline));
+            parts.add(asStream(newline));
+            parts.add(asStream(maxFiles));
+            parts.add(asStream(newline));
+        }
+
         String endBoundary = ("--" + boundary + "--");
         parts.add(asStream(endBoundary));
 
@@ -326,6 +345,10 @@ public class CryostatClient {
 
     private static InputStream asStream(String s) {
         return new ByteArrayInputStream(s.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static InputStream asStream(int i) {
+        return new ByteArrayInputStream(ByteBuffer.allocate(4).putInt(i).array());
     }
 
     private <T> HttpResponse<T> assertOkStatus(HttpResponse<T> res) {

@@ -66,6 +66,7 @@ class Harvester implements FlightRecorderListener {
     private final ScheduledExecutorService executor;
     private final long period;
     private final String template;
+    private final int maxFiles;
     private final RecordingSettings exitSettings;
     private final CryostatClient client;
     private final AtomicLong recordingId = new AtomicLong(-1L);
@@ -78,11 +79,13 @@ class Harvester implements FlightRecorderListener {
             ScheduledExecutorService executor,
             long period,
             String template,
+            int maxFiles,
             RecordingSettings exitSettings,
             CryostatClient client) {
         this.executor = executor;
         this.period = period;
         this.template = template;
+        this.maxFiles = maxFiles;
         this.exitSettings = exitSettings;
         this.client = client;
     }
@@ -96,7 +99,10 @@ class Harvester implements FlightRecorderListener {
             return;
         }
         if (StringUtils.isBlank(template)) {
-            log.info("Harvester disabled, template not specified");
+            log.info("Template not specified");
+        }
+        if (maxFiles <= 0) {
+            log.info("Maximum number of files to keep within target is {} <= 0", maxFiles);
         }
         if (!FlightRecorder.isAvailable()) {
             log.error("FlightRecorder is unavailable");
@@ -279,7 +285,7 @@ class Harvester implements FlightRecorderListener {
         try {
             Files.write(exitPath, new byte[0], StandardOpenOption.TRUNCATE_EXISTING);
             recording.dump(exitPath);
-            return client.upload(pushType, template, exitPath);
+            return client.upload(pushType, template, maxFiles, exitPath);
         } catch (IOException e) {
             return CompletableFuture.failedFuture(e);
         } finally {
@@ -290,7 +296,7 @@ class Harvester implements FlightRecorderListener {
     }
 
     private Future<Void> uploadDumpedFile() throws IOException {
-        return client.upload(PushType.EMERGENCY, template, exitPath);
+        return client.upload(PushType.EMERGENCY, template, maxFiles, exitPath);
     }
 
     enum PushType {
