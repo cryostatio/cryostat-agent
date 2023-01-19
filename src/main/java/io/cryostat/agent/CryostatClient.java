@@ -38,11 +38,7 @@
 package io.cryostat.agent;
 
 import java.io.BufferedInputStream;
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.SequenceInputStream;
-import java.math.BigInteger;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.http.HttpClient;
@@ -56,10 +52,10 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Map;
-import java.util.Random;
 import java.util.Set;
-import java.util.Vector;
 import java.util.concurrent.CompletableFuture;
+
+import javax.net.ssl.SSLContext;
 
 import io.cryostat.agent.model.DiscoveryNode;
 import io.cryostat.agent.model.PluginInfo;
@@ -68,9 +64,21 @@ import io.cryostat.agent.model.RegistrationInfo;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.input.CountingInputStream;
+import org.apache.http.client.config.RequestConfig;
+import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.client.methods.HttpRequestBase;
+import org.apache.http.entity.ContentType;
+import org.apache.http.entity.mime.FormBodyPartBuilder;
+import org.apache.http.entity.mime.HttpMultipartMode;
+import org.apache.http.entity.mime.MultipartEntityBuilder;
+import org.apache.http.entity.mime.content.InputStreamBody;
+import org.apache.http.entity.mime.content.StringBody;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.message.BasicHeader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -80,6 +88,7 @@ public class CryostatClient {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
+    private final SSLContext sslCtx;
     private final HttpClient http;
     private final ObjectMapper mapper;
 
@@ -93,6 +102,7 @@ public class CryostatClient {
     private final long uploadTimeoutMs;
 
     CryostatClient(
+            SSLContext sslCtx,
             HttpClient http,
             ObjectMapper mapper,
             String jvmId,
@@ -103,6 +113,7 @@ public class CryostatClient {
             String authorization,
             long responseTimeoutMs,
             long uploadTimeoutMs) {
+        this.sslCtx = sslCtx;
         this.http = http;
         this.mapper = mapper;
         this.jvmId = jvmId;
@@ -232,129 +243,84 @@ public class CryostatClient {
     public CompletableFuture<Void> upload(
             Harvester.PushType pushType, String template, int maxFiles, Path recording)
             throws IOException {
-        Instant start = Instant.now();
-        String timestamp = start.truncatedTo(ChronoUnit.SECONDS).toString().replaceAll("[-:]", "");
-        String fileName = String.format("%s_%s_%s.jfr", appName, template, timestamp);
-        Map<String, String> labels =
-                Map.of(
-                        "jvmId",
-                        jvmId,
-                        "template.name",
-                        template,
-                        "template.type",
-                        "TARGET",
-                        "pushType",
-                        pushType.name());
-        String boundary = new BigInteger(256, new Random()).toString();
-        CountingInputStream is = getRecordingInputStream(recording);
-        HttpRequest req =
-                HttpRequest.newBuilder(baseUri.resolve("/api/beta/recordings/" + jvmId))
-                        .POST(ofMultipartData(boundary, is, fileName, labels, maxFiles))
-                        .setHeader("Authorization", authorization)
-                        .setHeader(
-                                "Content-Type",
-                                String.format("multipart/form-data; boundary=%s", boundary))
-                        .timeout(Duration.ofMillis(uploadTimeoutMs))
-                        .build();
-        log.trace("{}", req);
-        return http.sendAsync(req, BodyHandlers.discarding())
-                .thenApply(
-                        res -> {
-                            Instant finish = Instant.now();
-                            log.info(
-                                    "{} {} ({} -> {}): {}/{}",
-                                    res.request().method(),
-                                    res.statusCode(),
-                                    fileName,
-                                    res.request().uri(),
-                                    FileUtils.byteCountToDisplaySize(is.getByteCount()),
-                                    Duration.between(start, finish));
-                            return res;
-                        })
-                .thenApply(this::assertOkStatus)
-                .thenApply(res -> null);
+        try (CloseableHttpClient ahttp =
+                HttpClients.custom()
+                        .setSSLContext(sslCtx)
+                        .setSSLHostnameVerifier((hostname, session) -> true)
+                        .setDefaultHeaders(Set.of(new BasicHeader("Authorization", authorization)))
+                        .build()) {
+            Instant start = Instant.now();
+            String timestamp =
+                    start.truncatedTo(ChronoUnit.SECONDS).toString().replaceAll("[-:]", "");
+            String fileName = String.format("%s_%s_%s.jfr", appName, template, timestamp);
+            Map<String, String> labels =
+                    Map.of(
+                            "jvmId",
+                            jvmId,
+                            "template.name",
+                            template,
+                            "template.type",
+                            "TARGET",
+                            "pushType",
+                            pushType.name());
+
+            HttpPost req = new HttpPost(baseUri.resolve("/api/beta/recordings/" + jvmId));
+            req.setConfig(
+                    RequestConfig.custom()
+                            .setExpectContinueEnabled(true)
+                            .setAuthenticationEnabled(true)
+                            .build());
+
+            CountingInputStream is = getRecordingInputStream(recording);
+            MultipartEntityBuilder entityBuilder =
+                    MultipartEntityBuilder.create()
+                            .setMode(HttpMultipartMode.RFC6532)
+                            .addPart(
+                                    FormBodyPartBuilder.create(
+                                                    "recording",
+                                                    new InputStreamBody(
+                                                            is,
+                                                            ContentType.APPLICATION_OCTET_STREAM,
+                                                            fileName))
+                                            .build())
+                            .addPart(
+                                    FormBodyPartBuilder.create(
+                                                    "labels",
+                                                    new StringBody(
+                                                            mapper.writeValueAsString(labels),
+                                                            ContentType.APPLICATION_JSON))
+                                            .build())
+                            .addPart(
+                                    FormBodyPartBuilder.create(
+                                                    "maxFiles",
+                                                    new StringBody(
+                                                            Integer.toString(maxFiles),
+                                                            ContentType.TEXT_PLAIN))
+                                            .build());
+            req.setEntity(entityBuilder.build());
+            try (CloseableHttpResponse res = ahttp.execute(req)) {
+                Instant finish = Instant.now();
+                log.info(
+                        "{} {} ({} -> {}): {}/{}",
+                        req.getMethod(),
+                        res.getStatusLine().getStatusCode(),
+                        fileName,
+                        req.getURI(),
+                        FileUtils.byteCountToDisplaySize(is.getByteCount()),
+                        Duration.between(start, finish));
+                assertOkStatus(req, res);
+                return CompletableFuture.completedFuture(null);
+            } finally {
+                req.releaseConnection();
+            }
+        } catch (IOException e) {
+            log.error("Upload failure", e);
+            throw e;
+        }
     }
 
     private CountingInputStream getRecordingInputStream(Path filePath) throws IOException {
         return new CountingInputStream(new BufferedInputStream(Files.newInputStream(filePath)));
-    }
-
-    @SuppressFBWarnings("VA_FORMAT_STRING_USES_NEWLINE")
-    private HttpRequest.BodyPublisher ofMultipartData(
-            String boundary,
-            InputStream stream,
-            String uploadName,
-            Map<String, String> labels,
-            int maxFiles)
-            throws IOException {
-        byte[] newline = new byte[] {'\r', '\n'};
-        String separator = "--" + boundary;
-
-        Vector<InputStream> parts = new Vector<>();
-
-        // recording file
-        {
-            parts.add(asStream(separator));
-            parts.add(asStream(newline));
-
-            parts.add(
-                    asStream(
-                            String.format(
-                                    "Content-Disposition: form-data; name=\"recording\";"
-                                            + " filename=\"%s\"",
-                                    uploadName)));
-            parts.add(asStream(newline));
-            parts.add(asStream("Content-Type: application/octet-stream"));
-
-            parts.add(asStream(newline));
-            parts.add(asStream(newline));
-            parts.add(stream);
-            parts.add(asStream(newline));
-        }
-
-        // recording labels
-        {
-            parts.add(asStream(separator));
-            parts.add(asStream(newline));
-
-            parts.add(asStream(("Content-Disposition: form-data; name=\"labels\"")));
-
-            parts.add(asStream(newline));
-            parts.add(asStream(newline));
-            parts.add(asStream(mapper.writeValueAsBytes(labels)));
-            parts.add(asStream(newline));
-        }
-
-        // maxFiles
-        {
-            parts.add(asStream(separator));
-            parts.add(asStream(newline));
-
-            parts.add(asStream(("Content-Disposition: form-data; name=\"maxFiles\"")));
-
-            parts.add(asStream(newline));
-            parts.add(asStream(newline));
-            parts.add(asStream(maxFiles));
-            parts.add(asStream(newline));
-        }
-
-        String endBoundary = ("--" + boundary + "--");
-        parts.add(asStream(endBoundary));
-
-        return HttpRequest.BodyPublishers.ofInputStream(
-                () -> new SequenceInputStream(parts.elements()));
-    }
-
-    private static InputStream asStream(byte[] arr) {
-        return new ByteArrayInputStream(arr);
-    }
-
-    private static InputStream asStream(String s) {
-        return new ByteArrayInputStream(s.getBytes(StandardCharsets.UTF_8));
-    }
-
-    private static InputStream asStream(int i) {
-        return new ByteArrayInputStream(Integer.toString(i).getBytes(StandardCharsets.UTF_8));
     }
 
     private <T> HttpResponse<T> assertOkStatus(HttpResponse<T> res) {
@@ -372,5 +338,21 @@ public class CryostatClient {
             }
         }
         return res;
+    }
+
+    private void assertOkStatus(HttpRequestBase req, CloseableHttpResponse res) {
+        int sc = res.getStatusLine().getStatusCode();
+        boolean isOk = 200 <= sc && sc < 300;
+        if (!isOk) {
+            URI uri = req.getURI();
+            log.error("Non-OK response ({}) on HTTP API {}", sc, uri);
+            try {
+                throw new HttpException(
+                        sc,
+                        new URI(uri.getScheme(), uri.getAuthority(), uri.getPath(), null, null));
+            } catch (URISyntaxException use) {
+                throw new IllegalStateException(use);
+            }
+        }
     }
 }

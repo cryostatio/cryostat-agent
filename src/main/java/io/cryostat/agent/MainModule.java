@@ -172,6 +172,7 @@ public abstract class MainModule {
     @Provides
     @Singleton
     public static CryostatClient provideCryostatClient(
+            SSLContext sslCtx,
             HttpClient http,
             ObjectMapper objectMapper,
             @Named(JVM_ID) String jvmId,
@@ -181,19 +182,9 @@ public abstract class MainModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_REALM) String realm,
             @Named(ConfigModule.CRYOSTAT_AGENT_AUTHORIZATION) String authorization,
             @Named(ConfigModule.CRYOSTAT_AGENT_HARVESTER_UPLOAD_TIMEOUT_MS) long responseTimeoutMs,
-            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_TIMEOUT_MS)
-                    long uploadTimeoutMs) {
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_TIMEOUT_MS) long uploadTimeoutMs) {
         return new CryostatClient(
-                http,
-                objectMapper,
-                jvmId,
-                appName,
-                baseUri,
-                callback,
-                realm,
-                authorization,
-                responseTimeoutMs,
-                uploadTimeoutMs);
+                sslCtx, http, objectMapper, jvmId, appName, baseUri, callback, realm, authorization, responseTimeoutMs, uploadTimeoutMs);
     }
 
     @Provides
