@@ -127,16 +127,7 @@ public class CryostatClient {
                             mapper.writeValueAsString(registrationInfo),
                             ContentType.APPLICATION_JSON));
             log.info("{}", req);
-            return supply(
-                            req,
-                            (res) -> {
-                                log.info(
-                                        "{} {} : {}",
-                                        req.getMethod(),
-                                        req.getURI(),
-                                        res.getStatusLine().getStatusCode());
-                                return res;
-                            })
+            return supply(req, (res) -> logResponse(req, res))
                     .thenApply(res -> assertOkStatus(req, res))
                     .thenApply(
                             res -> {
@@ -173,16 +164,7 @@ public class CryostatClient {
                                         + "?token="
                                         + pluginInfo.getToken()));
         log.info("{}", req);
-        return supply(
-                        req,
-                        (res) -> {
-                            log.info(
-                                    "{} {} : {}",
-                                    req.getMethod(),
-                                    req.getURI(),
-                                    res.getStatusLine().getStatusCode());
-                            return res;
-                        })
+        return supply(req, (res) -> logResponse(req, res))
                 .thenApply(res -> assertOkStatus(req, res))
                 .thenApply(res -> null);
     }
@@ -202,16 +184,7 @@ public class CryostatClient {
                             mapper.writeValueAsString(subtree), ContentType.APPLICATION_JSON));
 
             log.info("{}", req);
-            return supply(
-                            req,
-                            (res) -> {
-                                log.info(
-                                        "{} {} : {}",
-                                        req.getMethod(),
-                                        req.getURI(),
-                                        res.getStatusLine().getStatusCode());
-                                return res;
-                            })
+            return supply(req, (res) -> logResponse(req, res))
                     .thenApply(res -> assertOkStatus(req, res))
                     .thenApply(res -> null);
         } catch (JsonProcessingException e) {
@@ -279,6 +252,11 @@ public class CryostatClient {
                     assertOkStatus(req, res);
                     return (Void) null;
                 });
+    }
+
+    private HttpResponse logResponse(HttpRequestBase req, HttpResponse res) {
+        log.info("{} {} : {}", req.getMethod(), req.getURI(), res.getStatusLine().getStatusCode());
+        return res;
     }
 
     private <T> CompletableFuture<T> supply(HttpRequestBase req, Function<HttpResponse, T> fn) {
