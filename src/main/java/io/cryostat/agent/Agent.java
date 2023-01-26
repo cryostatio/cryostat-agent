@@ -37,8 +37,12 @@
  */
 package io.cryostat.agent;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
@@ -55,71 +59,56 @@ public class Agent {
     private static Logger log = LoggerFactory.getLogger(Agent.class);
 
     public static void main(String[] args) {
-        final Client client = DaggerAgent_Client.builder().build();
-
-        List.of(new Signal("INT"), new Signal("TERM"))
-                .forEach(
-                        signal -> {
-                            SignalHandler oldHandler = Signal.handle(signal, s -> {});
-                            SignalHandler handler =
-                                    s -> {
-                                        log.info("Caught SIG{}({})", s.getName(), s.getNumber());
-                                        try {
-                                            client.harvester().exitUpload().get();
-                                        } catch (InterruptedException | ExecutionException e) {
-                                            log.error("Exit upload failed", e);
-                                        } finally {
-                                            client.registration()
-                                                    .deregister()
-                                                    .orTimeout(1, TimeUnit.SECONDS)
-                                                    .thenRunAsync(
-                                                            () -> {
-                                                                try {
-                                                                    log.info("Shutting down...");
-                                                                    client.webServer().stop();
-                                                                    client.registration().stop();
-                                                                    client.executor().shutdown();
-                                                                } catch (Exception e) {
-                                                                    log.warn(
-                                                                            "Exception during"
-                                                                                    + " shutdown",
-                                                                            e);
-                                                                } finally {
-                                                                    log.info("Shutdown complete");
-                                                                    oldHandler.handle(s);
-                                                                }
-                                                            },
-                                                            client.executor());
-                                        }
-                                    };
-                            Signal.handle(signal, handler);
-                        });
-
+        AgentExitHandler agentExitHandler = null;
         try {
-            client.registration()
-                    .addRegistrationListener(
-                            evt -> {
-                                switch (evt.state) {
-                                    case REGISTERED:
-                                        client.harvester().start();
-                                        break;
-                                    case UNREGISTERED:
-                                        client.harvester().stop();
-                                        break;
-                                    case REFRESHED:
-                                        break;
-                                    default:
-                                        log.error("Unknown registration state: {}", evt.state);
-                                        break;
-                                }
-                            });
-            client.registration().start();
-            client.webServer().start();
+            final Client client = DaggerAgent_Client.builder().build();
+            Registration registration = client.registration();
+            Harvester harvester = client.harvester();
+            WebServer webServer = client.webServer();
+            ExecutorService executor = client.executor();
+
+            agentExitHandler = installSignalHandlers(registration, harvester, webServer, executor);
+
+            registration.addRegistrationListener(
+                    evt -> {
+                        switch (evt.state) {
+                            case REGISTERED:
+                                client.harvester().start();
+                                break;
+                            case UNREGISTERED:
+                                client.harvester().stop();
+                                break;
+                            case REFRESHED:
+                                break;
+                            default:
+                                log.error("Unknown registration state: {}", evt.state);
+                                break;
+                        }
+                    });
+            registration.start();
+            webServer.start();
+            log.info("Startup complete");
         } catch (Exception e) {
             log.error(Agent.class.getSimpleName() + " startup failure", e);
-            return;
+            if (agentExitHandler != null) {
+                agentExitHandler.reset();
+            }
         }
-        log.info("Startup complete");
+    }
+
+    private static AgentExitHandler installSignalHandlers(
+            final Registration registration,
+            final Harvester harvester,
+            final WebServer webServer,
+            final ExecutorService executor) {
+        AgentExitHandler agentExitHandler =
+                new AgentExitHandler(registration, harvester, webServer, executor);
+        for (String s : List.of("INT", "TERM", "QUIT")) {
+            Signal signal = new Signal(s);
+            SignalHandler oldHandler = Signal.handle(signal, agentExitHandler);
+            agentExitHandler.setOldHandler(signal, oldHandler);
+        }
+        return agentExitHandler;
     }
 
     public static void agentmain(String args) {
@@ -130,7 +119,7 @@ public class Agent {
                             main(args == null ? new String[0] : args.split("\\s"));
                         });
         t.setDaemon(true);
-        t.setName("cryostat-agent");
+        t.setName("cryostat-agent-main");
         t.start();
     }
 
@@ -152,6 +141,76 @@ public class Agent {
         @Component.Builder
         interface Builder {
             Client build();
+        }
+    }
+
+    private static class AgentExitHandler implements SignalHandler {
+
+        private static Logger log = LoggerFactory.getLogger(Agent.class);
+
+        private final Map<Signal, SignalHandler> oldHandlers = new HashMap<>();
+        private final Registration registration;
+        private final Harvester harvester;
+        private final WebServer webServer;
+        private final ExecutorService executor;
+
+        private AgentExitHandler(
+                Registration registration,
+                Harvester harvester,
+                WebServer webServer,
+                ExecutorService executor) {
+            this.registration = Objects.requireNonNull(registration);
+            this.harvester = Objects.requireNonNull(harvester);
+            this.webServer = Objects.requireNonNull(webServer);
+            this.executor = Objects.requireNonNull(executor);
+        }
+
+        void setOldHandler(Signal signal, SignalHandler oldHandler) {
+            this.oldHandlers.put(signal, oldHandler);
+        }
+
+        @Override
+        public void handle(Signal sig) {
+            log.info("Caught SIG{}({})", sig.getName(), sig.getNumber());
+            try {
+                harvester.exitUpload().get();
+            } catch (InterruptedException | ExecutionException e) {
+                log.error("Exit upload failed", e);
+            } finally {
+                registration
+                        .deregister()
+                        .orTimeout(3, TimeUnit.SECONDS)
+                        .handleAsync(
+                                (v, t) -> {
+                                    try {
+                                        log.info("Shutting down...");
+                                        safeCall(webServer::stop);
+                                        safeCall(registration::stop);
+                                        safeCall(executor::shutdown);
+                                    } finally {
+                                        log.info("Shutdown complete");
+                                        // pass signal on to whatever would have handled it had this
+                                        // Agent not been installed, so host application has a
+                                        // chance to perform a graceful shutdown
+                                        oldHandlers.get(sig).handle(sig);
+                                    }
+                                    return null;
+                                },
+                                executor);
+            }
+        }
+
+        void reset() {
+            this.oldHandlers.forEach(Signal::handle);
+            this.oldHandlers.clear();
+        }
+
+        private void safeCall(Runnable r) {
+            try {
+                r.run();
+            } catch (Exception e) {
+                log.warn("Exception during shutdown", e);
+            }
         }
     }
 }
