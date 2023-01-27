@@ -147,7 +147,8 @@ public abstract class MainModule {
     public static HttpClient provideHttpClient(
             ScheduledExecutorService executor,
             SSLContext sslContext,
-            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_SSL_VERIFY_HOSTNAME) boolean verifyHostname,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_SSL_VERIFY_HOSTNAME)
+                    boolean verifyHostname,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_CONNECT_TIMEOUT_MS)
                     long connectTimeoutMs) {
         System.getProperties()
@@ -170,8 +171,11 @@ public abstract class MainModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_BASEURI) URI baseUri,
             @Named(ConfigModule.CRYOSTAT_AGENT_CALLBACK) URI callback,
             @Named(ConfigModule.CRYOSTAT_AGENT_REALM) String realm,
-            @Named(ConfigModule.CRYOSTAT_AGENT_AUTHORIZATION) String authorization) {
-        return new CryostatClient(http, jvmId, appName, baseUri, callback, realm, authorization);
+            @Named(ConfigModule.CRYOSTAT_AGENT_AUTHORIZATION) String authorization,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_TIMEOUT_MS)
+                    long responseTimeoutMs) {
+        return new CryostatClient(
+                http, jvmId, appName, baseUri, callback, realm, authorization, responseTimeoutMs);
     }
 
     @Provides

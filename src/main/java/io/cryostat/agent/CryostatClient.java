@@ -90,6 +90,7 @@ public class CryostatClient {
     private final URI callback;
     private final String realm;
     private final String authorization;
+    private final long responseTimeoutMs;
 
     CryostatClient(
             HttpClient http,
@@ -98,7 +99,8 @@ public class CryostatClient {
             URI baseUri,
             URI callback,
             String realm,
-            String authorization) {
+            String authorization,
+            long responseTimeoutMs) {
         this.http = http;
         this.jvmId = jvmId;
         this.appName = appName;
@@ -106,6 +108,7 @@ public class CryostatClient {
         this.callback = callback;
         this.realm = realm;
         this.authorization = authorization;
+        this.responseTimeoutMs = responseTimeoutMs;
         this.mapper = new ObjectMapper();
 
         log.info("Using Cryostat baseuri {}", baseUri);
@@ -122,7 +125,7 @@ public class CryostatClient {
                                     HttpRequest.BodyPublishers.ofString(
                                             mapper.writeValueAsString(registrationInfo)))
                             .setHeader("Authorization", authorization)
-                            .timeout(Duration.ofSeconds(1))
+                            .timeout(Duration.ofMillis(responseTimeoutMs))
                             .build();
             log.trace("{}", req);
         } catch (JsonProcessingException e) {
@@ -171,7 +174,7 @@ public class CryostatClient {
                                                 + "?token="
                                                 + pluginInfo.getToken()))
                         .DELETE()
-                        .timeout(Duration.ofSeconds(1))
+                        .timeout(Duration.ofMillis(responseTimeoutMs))
                         .build();
         log.trace("{}", req);
         return http.sendAsync(req, BodyHandlers.discarding())
@@ -203,7 +206,7 @@ public class CryostatClient {
                                     HttpRequest.BodyPublishers.ofString(
                                             mapper.writeValueAsString(subtree)))
                             .setHeader("Authorization", authorization)
-                            .timeout(Duration.ofSeconds(1))
+                            .timeout(Duration.ofMillis(responseTimeoutMs))
                             .build();
             log.trace("{}", req);
             return http.sendAsync(req, BodyHandlers.discarding())
