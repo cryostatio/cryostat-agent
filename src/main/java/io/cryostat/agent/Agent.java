@@ -46,6 +46,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
+import javax.inject.Named;
 import javax.inject.Singleton;
 
 import dagger.Component;
@@ -66,8 +67,15 @@ public class Agent {
             Harvester harvester = client.harvester();
             WebServer webServer = client.webServer();
             ExecutorService executor = client.executor();
+            long exitDeregistrationTimeout = client.exitDeregistrationTimeout();
 
-            agentExitHandler = installSignalHandlers(registration, harvester, webServer, executor);
+            agentExitHandler =
+                    installSignalHandlers(
+                            registration,
+                            harvester,
+                            webServer,
+                            executor,
+                            exitDeregistrationTimeout);
 
             registration.addRegistrationListener(
                     evt -> {
@@ -97,16 +105,22 @@ public class Agent {
     }
 
     private static AgentExitHandler installSignalHandlers(
-            final Registration registration,
-            final Harvester harvester,
-            final WebServer webServer,
-            final ExecutorService executor) {
+            Registration registration,
+            Harvester harvester,
+            WebServer webServer,
+            ExecutorService executor,
+            long exitDeregistrationTimeout) {
         AgentExitHandler agentExitHandler =
-                new AgentExitHandler(registration, harvester, webServer, executor);
+                new AgentExitHandler(
+                        registration, harvester, webServer, executor, exitDeregistrationTimeout);
         for (String s : List.of("INT", "TERM", "QUIT")) {
             Signal signal = new Signal(s);
-            SignalHandler oldHandler = Signal.handle(signal, agentExitHandler);
-            agentExitHandler.setOldHandler(signal, oldHandler);
+            try {
+                SignalHandler oldHandler = Signal.handle(signal, agentExitHandler);
+                agentExitHandler.setOldHandler(signal, oldHandler);
+            } catch (IllegalArgumentException iae) {
+                log.warn("Unable to register signal handler for SIG" + s, iae);
+            }
         }
         return agentExitHandler;
     }
@@ -138,6 +152,9 @@ public class Agent {
 
         ScheduledExecutorService executor();
 
+        @Named(ConfigModule.CRYOSTAT_AGENT_EXIT_DEREGISTRATION_TIMEOUT_MS)
+        long exitDeregistrationTimeout();
+
         @Component.Builder
         interface Builder {
             Client build();
@@ -153,16 +170,19 @@ public class Agent {
         private final Harvester harvester;
         private final WebServer webServer;
         private final ExecutorService executor;
+        private final long exitDeregistrationTimeout;
 
         private AgentExitHandler(
                 Registration registration,
                 Harvester harvester,
                 WebServer webServer,
-                ExecutorService executor) {
+                ExecutorService executor,
+                long exitDeregistrationTimeout) {
             this.registration = Objects.requireNonNull(registration);
             this.harvester = Objects.requireNonNull(harvester);
             this.webServer = Objects.requireNonNull(webServer);
             this.executor = Objects.requireNonNull(executor);
+            this.exitDeregistrationTimeout = exitDeregistrationTimeout;
         }
 
         void setOldHandler(Signal signal, SignalHandler oldHandler) {
@@ -179,7 +199,7 @@ public class Agent {
             } finally {
                 registration
                         .deregister()
-                        .orTimeout(3, TimeUnit.SECONDS)
+                        .orTimeout(exitDeregistrationTimeout, TimeUnit.MILLISECONDS)
                         .handleAsync(
                                 (v, t) -> {
                                     try {
