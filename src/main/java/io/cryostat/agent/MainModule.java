@@ -110,7 +110,7 @@ public abstract class MainModule {
     @Provides
     @Singleton
     public static SSLContext provideSslContext(
-            @Named(ConfigModule.CRYOSTAT_AGENT_SSL_TRUST_ALL) boolean trustAll) {
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_SSL_TRUST_ALL) boolean trustAll) {
         try {
             if (!trustAll) {
                 return SSLContext.getDefault();
@@ -147,7 +147,7 @@ public abstract class MainModule {
     public static HttpClient provideHttpClient(
             ScheduledExecutorService executor,
             SSLContext sslContext,
-            @Named(ConfigModule.CRYOSTAT_AGENT_SSL_VERIFY_HOSTNAME) boolean verifyHostname,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_SSL_VERIFY_HOSTNAME) boolean verifyHostname,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_CONNECT_TIMEOUT_MS)
                     long connectTimeoutMs) {
         System.getProperties()
