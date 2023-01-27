@@ -221,8 +221,6 @@ class Registration {
         return cryostat.deregister(pluginInfo)
                 .handleAsync(
                         (n, t) -> {
-                            this.pluginInfo.clear();
-                            notify(RegistrationEvent.State.UNREGISTERED);
                             if (t != null) {
                                 log.warn(
                                         "Failed to deregister as Cryostat discovery plugin [{}]",
@@ -232,6 +230,8 @@ class Registration {
                                         "Deregistered from Cryostat discovery plugin [{}]",
                                         this.pluginInfo.getId());
                             }
+                            this.pluginInfo.clear();
+                            notify(RegistrationEvent.State.UNREGISTERED);
                             return null;
                         },
                         executor);
