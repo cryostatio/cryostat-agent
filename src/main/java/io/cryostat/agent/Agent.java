@@ -231,9 +231,8 @@ public class Agent {
                                         log.info("Shutdown complete");
                                         if (sig != null) {
                                             // pass signal on to whatever would have handled it had
-                                            // this
-                                            // Agent not been installed, so host application has a
-                                            // chance to perform a graceful shutdown
+                                            // this Agent not been installed, so host application
+                                            // has a chance to perform a graceful shutdown
                                             oldHandlers.get(sig).handle(sig);
                                         }
                                     }
