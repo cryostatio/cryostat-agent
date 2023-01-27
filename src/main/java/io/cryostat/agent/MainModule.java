@@ -62,6 +62,7 @@ import io.cryostat.core.sys.Environment;
 import io.cryostat.core.sys.FileSystem;
 import io.cryostat.core.tui.ClientWriter;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import dagger.Lazy;
 import dagger.Module;
 import dagger.Provides;
@@ -164,8 +165,15 @@ public abstract class MainModule {
 
     @Provides
     @Singleton
+    public static ObjectMapper provideObjectMapper() {
+        return new ObjectMapper();
+    }
+
+    @Provides
+    @Singleton
     public static CryostatClient provideCryostatClient(
             HttpClient http,
+            ObjectMapper objectMapper,
             @Named(JVM_ID) String jvmId,
             @Named(ConfigModule.CRYOSTAT_AGENT_APP_NAME) String appName,
             @Named(ConfigModule.CRYOSTAT_AGENT_BASEURI) URI baseUri,
@@ -177,6 +185,7 @@ public abstract class MainModule {
                     long uploadTimeoutMs) {
         return new CryostatClient(
                 http,
+                objectMapper,
                 jvmId,
                 appName,
                 baseUri,

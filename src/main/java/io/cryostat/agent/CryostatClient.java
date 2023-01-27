@@ -81,8 +81,8 @@ public class CryostatClient {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
-    private final ObjectMapper mapper;
     private final HttpClient http;
+    private final ObjectMapper mapper;
 
     private final String appName;
     private final String jvmId;
@@ -95,6 +95,7 @@ public class CryostatClient {
 
     CryostatClient(
             HttpClient http,
+            ObjectMapper mapper,
             String jvmId,
             String appName,
             URI baseUri,
@@ -104,6 +105,7 @@ public class CryostatClient {
             long responseTimeoutMs,
             long uploadTimeoutMs) {
         this.http = http;
+        this.mapper = mapper;
         this.jvmId = jvmId;
         this.appName = appName;
         this.baseUri = baseUri;
@@ -112,7 +114,6 @@ public class CryostatClient {
         this.authorization = authorization;
         this.responseTimeoutMs = responseTimeoutMs;
         this.uploadTimeoutMs = uploadTimeoutMs;
-        this.mapper = new ObjectMapper();
 
         log.info("Using Cryostat baseuri {}", baseUri);
     }
