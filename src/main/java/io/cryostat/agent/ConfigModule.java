@@ -65,6 +65,8 @@ public abstract class ConfigModule {
             "cryostat.agent.webclient.ssl.trust-all";
     public static final String CRYOSTAT_AGENT_SSL_VERIFY_HOSTNAME =
             "cryostat.agent.webclient.ssl.verify-hostname";
+    public static final String CRYOSTAT_AGENT_WEBCLIENT_CONNECT_TIMEOUT_MS =
+            "cryostat.agent.webclient.connect.timeout-ms";
 
     public static final String CRYOSTAT_AGENT_WEBSERVER_HOST = "cryostat.agent.webserver.host";
     public static final String CRYOSTAT_AGENT_WEBSERVER_PORT = "cryostat.agent.webserver.port";
@@ -135,6 +137,13 @@ public abstract class ConfigModule {
     @Named(CRYOSTAT_AGENT_SSL_VERIFY_HOSTNAME)
     public static boolean provideCryostatAgentVerifyHostname(SmallRyeConfig config) {
         return config.getValue(CRYOSTAT_AGENT_SSL_VERIFY_HOSTNAME, boolean.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBCLIENT_CONNECT_TIMEOUT_MS)
+    public static long provideCryostatAgentWebclientConnectTimeoutMs(SmallRyeConfig config) {
+        return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_CONNECT_TIMEOUT_MS, long.class);
     }
 
     @Provides

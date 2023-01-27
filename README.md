@@ -39,6 +39,7 @@ and how it advertises itself to a Cryostat server instance. Required properties 
 - [ ] `cryostat.agent.authorization` [`String`]: Authorization header value to include with API requests to the Cryostat server, ex. `Bearer abcd1234`. Default `None`.
 - [ ] `cryostat.agent.webclient.ssl.trust-all` [`boolean`]: Control whether the agent trusts all certificates presented by the Cryostat server. Default `true`.
 - [ ] `cryostat.agent.webclient.ssl.verify-hostname` [`boolean`]: Control whether the agent verifies hostnames on certificates presented by the Cryostat server. Default `false`.
+- [ ] `cryostat.agent.webclient.connect.timeout-ms` [`long`]: the duration to wait for HTTP requests to the Cryostat server to connect. Default `1000`.
 - [ ] `cryostat.agent.webserver.host` [`String`]: the internal hostname or IP address for the embedded webserver to bind to. Default `0.0.0.0`.
 - [ ] `cryostat.agent.webserver.port` [`int`]: the internal port number for the embedded webserver to bind to. Default `9977`.
 - [ ] `cryostat.agent.app.name` [`String`]: a human-friendly name for this application. Default `cryostat-agent`.

@@ -147,14 +147,16 @@ public abstract class MainModule {
     public static HttpClient provideHttpClient(
             ScheduledExecutorService executor,
             SSLContext sslContext,
-            @Named(ConfigModule.CRYOSTAT_AGENT_SSL_VERIFY_HOSTNAME) boolean verifyHostname) {
+            @Named(ConfigModule.CRYOSTAT_AGENT_SSL_VERIFY_HOSTNAME) boolean verifyHostname,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_CONNECT_TIMEOUT_MS)
+                    long connectTimeoutMs) {
         System.getProperties()
                 .setProperty(
                         "jdk.internal.httpclient.disableHostnameVerification",
                         Boolean.toString(!verifyHostname));
         return HttpClient.newBuilder()
                 .executor(executor)
-                .connectTimeout(Duration.ofSeconds(1))
+                .connectTimeout(Duration.ofMillis(connectTimeoutMs))
                 .sslContext(sslContext)
                 .build();
     }
