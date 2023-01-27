@@ -45,6 +45,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.inject.Named;
 import javax.inject.Singleton;
@@ -58,6 +59,7 @@ import sun.misc.SignalHandler;
 public class Agent {
 
     private static Logger log = LoggerFactory.getLogger(Agent.class);
+    private static final AtomicBoolean needsCleanup = new AtomicBoolean(true);
 
     public static void main(String[] args) {
         AgentExitHandler agentExitHandler = null;
@@ -76,6 +78,17 @@ public class Agent {
                             webServer,
                             executor,
                             exitDeregistrationTimeout);
+            final AgentExitHandler fHandler = agentExitHandler;
+            Thread t =
+                    new Thread(
+                            () -> {
+                                if (needsCleanup.getAndSet(false)) {
+                                    fHandler.performCleanup(null);
+                                }
+                            });
+            t.setName("cryostat-agent-shutdown");
+            t.setDaemon(false);
+            Runtime.getRuntime().addShutdownHook(t);
 
             registration.addRegistrationListener(
                     evt -> {
@@ -192,6 +205,13 @@ public class Agent {
         @Override
         public void handle(Signal sig) {
             log.info("Caught SIG{}({})", sig.getName(), sig.getNumber());
+            if (needsCleanup.getAndSet(false)) {
+                performCleanup(sig);
+            }
+        }
+
+        void performCleanup(Signal sig) {
+            log.info("Performing cleanup...");
             try {
                 harvester.exitUpload().get();
             } catch (InterruptedException | ExecutionException e) {
@@ -209,10 +229,13 @@ public class Agent {
                                         safeCall(executor::shutdown);
                                     } finally {
                                         log.info("Shutdown complete");
-                                        // pass signal on to whatever would have handled it had this
-                                        // Agent not been installed, so host application has a
-                                        // chance to perform a graceful shutdown
-                                        oldHandlers.get(sig).handle(sig);
+                                        if (sig != null) {
+                                            // pass signal on to whatever would have handled it had
+                                            // this
+                                            // Agent not been installed, so host application has a
+                                            // chance to perform a graceful shutdown
+                                            oldHandlers.get(sig).handle(sig);
+                                        }
                                     }
                                     return null;
                                 },
