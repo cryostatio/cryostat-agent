@@ -39,17 +39,18 @@ and how it advertises itself to a Cryostat server instance. Required properties 
 - [ ] `cryostat.agent.authorization` [`String`]: Authorization header value to include with API requests to the Cryostat server, ex. `Bearer abcd1234`. Default `None`.
 - [ ] `cryostat.agent.webclient.ssl.trust-all` [`boolean`]: Control whether the agent trusts all certificates presented by the Cryostat server. Default `true`.
 - [ ] `cryostat.agent.webclient.ssl.verify-hostname` [`boolean`]: Control whether the agent verifies hostnames on certificates presented by the Cryostat server. Default `false`.
-- [ ] `cryostat.agent.webclient.connect.timeout-ms` [`long`]: the duration to wait for HTTP requests to the Cryostat server to connect. Default `1000`.
-- [ ] `cryostat.agent.webclient.response.timeout-ms` [`long`]: the duration to wait for HTTP requests to the Cryostat server to respond. Default `1000`.
+- [ ] `cryostat.agent.webclient.connect.timeout-ms` [`long`]: the duration in milliseconds to wait for HTTP requests to the Cryostat server to connect. Default `1000`.
+- [ ] `cryostat.agent.webclient.response.timeout-ms` [`long`]: the duration in milliseconds to wait for HTTP requests to the Cryostat server to respond. Default `1000`.
 - [ ] `cryostat.agent.webserver.host` [`String`]: the internal hostname or IP address for the embedded webserver to bind to. Default `0.0.0.0`.
 - [ ] `cryostat.agent.webserver.port` [`int`]: the internal port number for the embedded webserver to bind to. Default `9977`.
 - [ ] `cryostat.agent.app.name` [`String`]: a human-friendly name for this application. Default `cryostat-agent`.
 - [ ] `cryostat.agent.app.jmx.port` [`int`]: the JMX RMI port that the application is listening on. The default is to attempt to determine this from the `com.sun.management.jmxremote.port` system property.
 - [ ] `cryostat.agent.registration.retry-ms` [`long`]: the duration in milliseconds between attempts to register with the Cryostat server. Default `5000`.
-- [ ] `cryostat.agent.exit.deregistration.timeout` [`Duration`]: the duration to wait for a response from the Cryostat server when attempting to deregister at shutdown time . Default `3s`.
+- [ ] `cryostat.agent.exit.deregistration.timeout-ms` [`long`]: the duration in milliseconds to wait for a response from the Cryostat server when attempting to deregister at shutdown time . Default `3s`.
 - [ ] `cryostat.agent.harvester.period-ms` [`long`]: the length of time between JFR collections and pushes by the harvester. This also controls the maximum age of data stored in the buffer for the harvester's managed Flight Recording. Every `period-ms` the harvester will upload a JFR binary file to the `cryostat.agent.baseuri` archives. Default `-1`, which indicates no harvesting will be performed.
 - [ ] `cryostat.agent.harvester.template` [`String`]: the name of the `.jfc` event template configuration to use for the harvester's managed Flight Recording. Default `default`, the continuous monitoring event template.
 - [ ] `cryostat.agent.harvester.max-files` [`String`]: the maximum number of pushed files that Cryostat will keep over the network from the agent. This is supplied to the harvester's push requests which instructs Cryostat to prune, in a FIFO manner, the oldest JFR files within the attached JVM target's storage, while the number of stored recordings is greater than this configuration's maximum file limit. Default `10`.
+- [ ] `cryostat.agent.harvester.upload.timeout-ms` [`long`]: the duration in milliseconds to wait for HTTP upload requests to the Cryostat server to complete and respond. Default `30000`.
 - [ ] `cryostat.agent.harvester.exit.max-age-ms` [`long`]: the JFR `maxage` setting, specified in milliseconds, to apply to recording data uploaded to the Cryostat server when the JVM this Agent instance is attached to exits. This ensures that tail-end data is captured between the last periodic push and the application exit. Exit uploads only occur when the application receives `SIGINT`/`SIGTERM` from the operating system or container platform.
 - [ ] `cryostat.agent.harvester.exit.max-size-b` [`long`]: the JFR `maxsize` setting, specified in bytes, to apply to exit uploads as described above.
 

@@ -172,10 +172,19 @@ public abstract class MainModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_CALLBACK) URI callback,
             @Named(ConfigModule.CRYOSTAT_AGENT_REALM) String realm,
             @Named(ConfigModule.CRYOSTAT_AGENT_AUTHORIZATION) String authorization,
+            @Named(ConfigModule.CRYOSTAT_AGENT_HARVESTER_UPLOAD_TIMEOUT_MS) long responseTimeoutMs,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_TIMEOUT_MS)
-                    long responseTimeoutMs) {
+                    long uploadTimeoutMs) {
         return new CryostatClient(
-                http, jvmId, appName, baseUri, callback, realm, authorization, responseTimeoutMs);
+                http,
+                jvmId,
+                appName,
+                baseUri,
+                callback,
+                realm,
+                authorization,
+                responseTimeoutMs,
+                uploadTimeoutMs);
     }
 
     @Provides

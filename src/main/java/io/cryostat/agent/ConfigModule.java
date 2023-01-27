@@ -87,6 +87,8 @@ public abstract class ConfigModule {
             "cryostat.agent.harvester.template";
     public static final String CRYOSTAT_AGENT_HARVESTER_MAX_FILES =
             "cryostat.agent.harvester.max-files";
+    public static final String CRYOSTAT_AGENT_HARVESTER_UPLOAD_TIMEOUT_MS =
+            "cryostat.agent.harvester.upload.timeout-ms";
     public static final String CRYOSTAT_AGENT_HARVESTER_EXIT_MAX_AGE_MS =
             "cryostat.agent.harvester.exit.max-age-ms";
     public static final String CRYOSTAT_AGENT_HARVESTER_EXIT_MAX_SIZE_B =
@@ -228,6 +230,13 @@ public abstract class ConfigModule {
     @Named(CRYOSTAT_AGENT_HARVESTER_MAX_FILES)
     public static int provideCryostatAgentHarvesterMaxFiles(SmallRyeConfig config) {
         return config.getValue(CRYOSTAT_AGENT_HARVESTER_MAX_FILES, int.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_HARVESTER_UPLOAD_TIMEOUT_MS)
+    public static long provideCryostatAgentHarvesterUploadTimeoutMs(SmallRyeConfig config) {
+        return config.getValue(CRYOSTAT_AGENT_HARVESTER_UPLOAD_TIMEOUT_MS, long.class);
     }
 
     @Provides

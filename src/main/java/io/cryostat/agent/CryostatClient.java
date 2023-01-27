@@ -91,6 +91,7 @@ public class CryostatClient {
     private final String realm;
     private final String authorization;
     private final long responseTimeoutMs;
+    private final long uploadTimeoutMs;
 
     CryostatClient(
             HttpClient http,
@@ -100,7 +101,8 @@ public class CryostatClient {
             URI callback,
             String realm,
             String authorization,
-            long responseTimeoutMs) {
+            long responseTimeoutMs,
+            long uploadTimeoutMs) {
         this.http = http;
         this.jvmId = jvmId;
         this.appName = appName;
@@ -109,6 +111,7 @@ public class CryostatClient {
         this.realm = realm;
         this.authorization = authorization;
         this.responseTimeoutMs = responseTimeoutMs;
+        this.uploadTimeoutMs = uploadTimeoutMs;
         this.mapper = new ObjectMapper();
 
         log.info("Using Cryostat baseuri {}", baseUri);
@@ -251,7 +254,7 @@ public class CryostatClient {
                         .setHeader(
                                 "Content-Type",
                                 String.format("multipart/form-data; boundary=%s", boundary))
-                        .timeout(Duration.ofSeconds(30))
+                        .timeout(Duration.ofMillis(uploadTimeoutMs))
                         .build();
         log.trace("{}", req);
         return http.sendAsync(req, BodyHandlers.discarding())
