@@ -69,10 +69,12 @@ public class Agent {
             Harvester harvester = client.harvester();
             WebServer webServer = client.webServer();
             ExecutorService executor = client.executor();
+            List<String> exitSignals = client.exitSignals();
             long exitDeregistrationTimeout = client.exitDeregistrationTimeout();
 
             agentExitHandler =
                     installSignalHandlers(
+                            exitSignals,
                             registration,
                             harvester,
                             webServer,
@@ -118,6 +120,7 @@ public class Agent {
     }
 
     private static AgentExitHandler installSignalHandlers(
+            List<String> exitSignals,
             Registration registration,
             Harvester harvester,
             WebServer webServer,
@@ -126,7 +129,7 @@ public class Agent {
         AgentExitHandler agentExitHandler =
                 new AgentExitHandler(
                         registration, harvester, webServer, executor, exitDeregistrationTimeout);
-        for (String s : List.of("INT", "TERM", "QUIT")) {
+        for (String s : exitSignals) {
             Signal signal = new Signal(s);
             try {
                 SignalHandler oldHandler = Signal.handle(signal, agentExitHandler);
@@ -164,6 +167,9 @@ public class Agent {
         Harvester harvester();
 
         ScheduledExecutorService executor();
+
+        @Named(ConfigModule.CRYOSTAT_AGENT_EXIT_SIGNALS)
+        List<String> exitSignals();
 
         @Named(ConfigModule.CRYOSTAT_AGENT_EXIT_DEREGISTRATION_TIMEOUT_MS)
         long exitDeregistrationTimeout();

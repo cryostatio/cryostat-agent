@@ -40,6 +40,8 @@ package io.cryostat.agent;
 import java.net.InetAddress;
 import java.net.URI;
 import java.net.UnknownHostException;
+import java.util.Arrays;
+import java.util.List;
 
 import javax.inject.Named;
 import javax.inject.Singleton;
@@ -78,6 +80,7 @@ public abstract class ConfigModule {
     public static final String CRYOSTAT_AGENT_APP_JMX_PORT = "cryostat.agent.app.jmx.port";
     public static final String CRYOSTAT_AGENT_REGISTRATION_RETRY_MS =
             "cryostat.agent.registration.retry-ms";
+    public static final String CRYOSTAT_AGENT_EXIT_SIGNALS = "cryostat.agent.exit.signals";
     public static final String CRYOSTAT_AGENT_EXIT_DEREGISTRATION_TIMEOUT_MS =
             "cryostat.agent.exit.deregistration.timeout-ms";
 
@@ -251,6 +254,13 @@ public abstract class ConfigModule {
     @Named(CRYOSTAT_AGENT_HARVESTER_EXIT_MAX_SIZE_B)
     public static long provideCryostatAgentHarvesterMaxSize(SmallRyeConfig config) {
         return config.getValue(CRYOSTAT_AGENT_HARVESTER_EXIT_MAX_SIZE_B, long.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_EXIT_SIGNALS)
+    public static List<String> provideCryostatAgentExitSignals(SmallRyeConfig config) {
+        return Arrays.asList(config.getValue(CRYOSTAT_AGENT_EXIT_SIGNALS, String.class).split(","));
     }
 
     @Provides
