@@ -97,7 +97,9 @@ class WebServer {
     }
 
     void stop() {
-        this.http.stop(0);
-        this.http = null;
+        if (this.http != null) {
+            this.http.stop(0);
+            this.http = null;
+        }
     }
 }

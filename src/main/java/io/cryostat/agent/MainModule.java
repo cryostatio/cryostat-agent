@@ -62,6 +62,7 @@ import io.cryostat.core.sys.Environment;
 import io.cryostat.core.sys.FileSystem;
 import io.cryostat.core.tui.ClientWriter;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import dagger.Lazy;
 import dagger.Module;
 import dagger.Provides;
@@ -110,7 +111,7 @@ public abstract class MainModule {
     @Provides
     @Singleton
     public static SSLContext provideSslContext(
-            @Named(ConfigModule.CRYOSTAT_AGENT_SSL_TRUST_ALL) boolean trustAll) {
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_SSL_TRUST_ALL) boolean trustAll) {
         try {
             if (!trustAll) {
                 return SSLContext.getDefault();
@@ -147,29 +148,52 @@ public abstract class MainModule {
     public static HttpClient provideHttpClient(
             ScheduledExecutorService executor,
             SSLContext sslContext,
-            @Named(ConfigModule.CRYOSTAT_AGENT_SSL_VERIFY_HOSTNAME) boolean verifyHostname) {
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_SSL_VERIFY_HOSTNAME)
+                    boolean verifyHostname,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_CONNECT_TIMEOUT_MS)
+                    long connectTimeoutMs) {
         System.getProperties()
                 .setProperty(
                         "jdk.internal.httpclient.disableHostnameVerification",
                         Boolean.toString(!verifyHostname));
         return HttpClient.newBuilder()
                 .executor(executor)
-                .connectTimeout(Duration.ofSeconds(1))
+                .connectTimeout(Duration.ofMillis(connectTimeoutMs))
                 .sslContext(sslContext)
                 .build();
     }
 
     @Provides
     @Singleton
+    public static ObjectMapper provideObjectMapper() {
+        return new ObjectMapper();
+    }
+
+    @Provides
+    @Singleton
     public static CryostatClient provideCryostatClient(
             HttpClient http,
+            ObjectMapper objectMapper,
             @Named(JVM_ID) String jvmId,
             @Named(ConfigModule.CRYOSTAT_AGENT_APP_NAME) String appName,
             @Named(ConfigModule.CRYOSTAT_AGENT_BASEURI) URI baseUri,
             @Named(ConfigModule.CRYOSTAT_AGENT_CALLBACK) URI callback,
             @Named(ConfigModule.CRYOSTAT_AGENT_REALM) String realm,
-            @Named(ConfigModule.CRYOSTAT_AGENT_AUTHORIZATION) String authorization) {
-        return new CryostatClient(http, jvmId, appName, baseUri, callback, realm, authorization);
+            @Named(ConfigModule.CRYOSTAT_AGENT_AUTHORIZATION) String authorization,
+            @Named(ConfigModule.CRYOSTAT_AGENT_HARVESTER_UPLOAD_TIMEOUT_MS) long responseTimeoutMs,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_TIMEOUT_MS)
+                    long uploadTimeoutMs) {
+        return new CryostatClient(
+                http,
+                objectMapper,
+                jvmId,
+                appName,
+                baseUri,
+                callback,
+                realm,
+                authorization,
+                responseTimeoutMs,
+                uploadTimeoutMs);
     }
 
     @Provides

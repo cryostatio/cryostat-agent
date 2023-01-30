@@ -80,8 +80,8 @@ public class CryostatClient {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
-    private final ObjectMapper mapper;
     private final HttpClient http;
+    private final ObjectMapper mapper;
 
     private final String appName;
     private final String jvmId;
@@ -89,23 +89,30 @@ public class CryostatClient {
     private final URI callback;
     private final String realm;
     private final String authorization;
+    private final long responseTimeoutMs;
+    private final long uploadTimeoutMs;
 
     CryostatClient(
             HttpClient http,
+            ObjectMapper mapper,
             String jvmId,
             String appName,
             URI baseUri,
             URI callback,
             String realm,
-            String authorization) {
+            String authorization,
+            long responseTimeoutMs,
+            long uploadTimeoutMs) {
         this.http = http;
+        this.mapper = mapper;
         this.jvmId = jvmId;
         this.appName = appName;
         this.baseUri = baseUri;
         this.callback = callback;
         this.realm = realm;
         this.authorization = authorization;
-        this.mapper = new ObjectMapper();
+        this.responseTimeoutMs = responseTimeoutMs;
+        this.uploadTimeoutMs = uploadTimeoutMs;
 
         log.info("Using Cryostat baseuri {}", baseUri);
     }
@@ -121,7 +128,7 @@ public class CryostatClient {
                                     HttpRequest.BodyPublishers.ofString(
                                             mapper.writeValueAsString(registrationInfo)))
                             .setHeader("Authorization", authorization)
-                            .timeout(Duration.ofSeconds(1))
+                            .timeout(Duration.ofMillis(responseTimeoutMs))
                             .build();
             log.trace("{}", req);
         } catch (JsonProcessingException e) {
@@ -170,7 +177,7 @@ public class CryostatClient {
                                                 + "?token="
                                                 + pluginInfo.getToken()))
                         .DELETE()
-                        .timeout(Duration.ofSeconds(1))
+                        .timeout(Duration.ofMillis(responseTimeoutMs))
                         .build();
         log.trace("{}", req);
         return http.sendAsync(req, BodyHandlers.discarding())
@@ -202,7 +209,7 @@ public class CryostatClient {
                                     HttpRequest.BodyPublishers.ofString(
                                             mapper.writeValueAsString(subtree)))
                             .setHeader("Authorization", authorization)
-                            .timeout(Duration.ofSeconds(1))
+                            .timeout(Duration.ofMillis(responseTimeoutMs))
                             .build();
             log.trace("{}", req);
             return http.sendAsync(req, BodyHandlers.discarding())
@@ -247,7 +254,7 @@ public class CryostatClient {
                         .setHeader(
                                 "Content-Type",
                                 String.format("multipart/form-data; boundary=%s", boundary))
-                        .timeout(Duration.ofSeconds(30))
+                        .timeout(Duration.ofMillis(uploadTimeoutMs))
                         .build();
         log.trace("{}", req);
         return http.sendAsync(req, BodyHandlers.discarding())
