@@ -54,10 +54,13 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
 import java.util.function.Function;
 
+import io.cryostat.agent.model.DiscoveryNode;
+import io.cryostat.agent.model.PluginInfo;
+import io.cryostat.agent.model.RegistrationInfo;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.input.CountingInputStream;
 import org.apache.http.HttpResponse;
@@ -74,10 +77,6 @@ import org.apache.http.entity.mime.content.InputStreamBody;
 import org.apache.http.entity.mime.content.StringBody;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import io.cryostat.agent.model.DiscoveryNode;
-import io.cryostat.agent.model.PluginInfo;
-import io.cryostat.agent.model.RegistrationInfo;
 
 public class CryostatClient {
 

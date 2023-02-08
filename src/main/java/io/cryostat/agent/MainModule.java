@@ -152,7 +152,8 @@ public abstract class MainModule {
     public static HttpClient provideHttpClient(
             SSLContext sslContext,
             @Named(ConfigModule.CRYOSTAT_AGENT_AUTHORIZATION) String authorization,
-            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_SSL_VERIFY_HOSTNAME) boolean verifyHostname) {
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_SSL_VERIFY_HOSTNAME)
+                    boolean verifyHostname) {
         HttpClientBuilder builder =
                 HttpClients.custom()
                         .setDefaultHeaders(Set.of(new BasicHeader("Authorization", authorization)))
