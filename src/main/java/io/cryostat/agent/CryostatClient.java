@@ -104,14 +104,13 @@ public class CryostatClient {
             URI callback,
             String realm) {
         this.executor = executor;
-        this.http = http;
         this.mapper = mapper;
+        this.http = http;
         this.jvmId = jvmId;
         this.appName = appName;
         this.baseUri = baseUri;
         this.callback = callback;
         this.realm = realm;
-        this.mapper = new ObjectMapper();
 
         log.info("Using Cryostat baseuri {}", baseUri);
     }
