@@ -153,7 +153,9 @@ public abstract class MainModule {
             SSLContext sslContext,
             @Named(ConfigModule.CRYOSTAT_AGENT_AUTHORIZATION) String authorization,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_SSL_VERIFY_HOSTNAME)
-                    boolean verifyHostname) {
+                    boolean verifyHostname,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_CONNECT_TIMEOUT_MS) int connectTimeout,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_TIMEOUT_MS) int responseTimeout) {
         HttpClientBuilder builder =
                 HttpClients.custom()
                         .setDefaultHeaders(Set.of(new BasicHeader("Authorization", authorization)))
@@ -162,9 +164,8 @@ public abstract class MainModule {
                                 RequestConfig.custom()
                                         .setAuthenticationEnabled(true)
                                         .setExpectContinueEnabled(true)
-                                        .setConnectTimeout(5000)
-                                        .setConnectionRequestTimeout(5000)
-                                        .setSocketTimeout(5000)
+                                        .setConnectTimeout(connectTimeout)
+                                        .setSocketTimeout(responseTimeout)
                                         .build());
 
         if (!verifyHostname) {
