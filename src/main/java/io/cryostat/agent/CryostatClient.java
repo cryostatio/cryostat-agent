@@ -38,28 +38,21 @@
 package io.cryostat.agent;
 
 import java.io.BufferedInputStream;
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.SequenceInputStream;
-import java.math.BigInteger;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.net.http.HttpResponse.BodyHandlers;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Map;
-import java.util.Random;
 import java.util.Set;
-import java.util.Vector;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.Executor;
+import java.util.function.Function;
 
 import io.cryostat.agent.model.DiscoveryNode;
 import io.cryostat.agent.model.PluginInfo;
@@ -68,9 +61,20 @@ import io.cryostat.agent.model.RegistrationInfo;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.input.CountingInputStream;
+import org.apache.http.HttpResponse;
+import org.apache.http.client.HttpClient;
+import org.apache.http.client.methods.HttpDelete;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.client.methods.HttpRequestBase;
+import org.apache.http.client.methods.HttpUriRequest;
+import org.apache.http.entity.ContentType;
+import org.apache.http.entity.StringEntity;
+import org.apache.http.entity.mime.FormBodyPartBuilder;
+import org.apache.http.entity.mime.MultipartEntityBuilder;
+import org.apache.http.entity.mime.content.InputStreamBody;
+import org.apache.http.entity.mime.content.StringBody;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -80,39 +84,33 @@ public class CryostatClient {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
-    private final HttpClient http;
+    private final Executor executor;
     private final ObjectMapper mapper;
+    private final HttpClient http;
 
     private final String appName;
     private final String jvmId;
     private final URI baseUri;
     private final URI callback;
     private final String realm;
-    private final String authorization;
-    private final long responseTimeoutMs;
-    private final long uploadTimeoutMs;
 
     CryostatClient(
+            Executor executor,
             HttpClient http,
             ObjectMapper mapper,
             String jvmId,
             String appName,
             URI baseUri,
             URI callback,
-            String realm,
-            String authorization,
-            long responseTimeoutMs,
-            long uploadTimeoutMs) {
-        this.http = http;
+            String realm) {
+        this.executor = executor;
         this.mapper = mapper;
+        this.http = http;
         this.jvmId = jvmId;
         this.appName = appName;
         this.baseUri = baseUri;
         this.callback = callback;
         this.realm = realm;
-        this.authorization = authorization;
-        this.responseTimeoutMs = responseTimeoutMs;
-        this.uploadTimeoutMs = uploadTimeoutMs;
 
         log.info("Using Cryostat baseuri {}", baseUri);
     }
@@ -120,109 +118,72 @@ public class CryostatClient {
     public CompletableFuture<PluginInfo> register(PluginInfo pluginInfo) {
         RegistrationInfo registrationInfo =
                 new RegistrationInfo(pluginInfo.getId(), realm, callback, pluginInfo.getToken());
-        HttpRequest req;
         try {
-            req =
-                    HttpRequest.newBuilder(baseUri.resolve(API_PATH))
-                            .POST(
-                                    HttpRequest.BodyPublishers.ofString(
-                                            mapper.writeValueAsString(registrationInfo)))
-                            .setHeader("Authorization", authorization)
-                            .timeout(Duration.ofMillis(responseTimeoutMs))
-                            .build();
-            log.trace("{}", req);
+            HttpPost req = new HttpPost(baseUri.resolve(API_PATH));
+            req.setEntity(
+                    new StringEntity(
+                            mapper.writeValueAsString(registrationInfo),
+                            ContentType.APPLICATION_JSON));
+            log.info("{}", req);
+            return supply(req, (res) -> logResponse(req, res))
+                    .thenApply(res -> assertOkStatus(req, res))
+                    .thenApply(
+                            res -> {
+                                try (InputStream is = res.getEntity().getContent()) {
+                                    return mapper.readValue(is, ObjectNode.class);
+                                } catch (IOException e) {
+                                    log.error("Unable to parse response as JSON", e);
+                                    throw new RegistrationException(e);
+                                }
+                            })
+                    .thenApply(
+                            node -> {
+                                try {
+                                    return mapper.readValue(
+                                            node.get("data").get("result").toString(),
+                                            PluginInfo.class);
+                                } catch (IOException e) {
+                                    log.error("Unable to parse response as JSON", e);
+                                    throw new RegistrationException(e);
+                                }
+                            });
         } catch (JsonProcessingException e) {
             return CompletableFuture.failedFuture(e);
         }
-        return http.sendAsync(req, BodyHandlers.ofInputStream())
-                .thenApply(
-                        res -> {
-                            log.trace(
-                                    "{} {} : {}",
-                                    res.request().method(),
-                                    res.request().uri(),
-                                    res.statusCode());
-                            return res;
-                        })
-                .thenApply(this::assertOkStatus)
-                .thenApply(
-                        resp -> {
-                            try {
-                                return mapper.readValue(resp.body(), ObjectNode.class);
-                            } catch (IOException e) {
-                                log.error("Unable to parse response as JSON", e);
-                                throw new RegistrationException(e);
-                            }
-                        })
-                .thenApply(
-                        node -> {
-                            try {
-                                return mapper.readValue(
-                                        node.get("data").get("result").toString(),
-                                        PluginInfo.class);
-                            } catch (IOException e) {
-                                log.error("Unable to parse response as JSON", e);
-                                throw new RegistrationException(e);
-                            }
-                        });
     }
 
     public CompletableFuture<Void> deregister(PluginInfo pluginInfo) {
-        HttpRequest req =
-                HttpRequest.newBuilder(
-                                baseUri.resolve(
-                                        API_PATH
-                                                + "/"
-                                                + pluginInfo.getId()
-                                                + "?token="
-                                                + pluginInfo.getToken()))
-                        .DELETE()
-                        .timeout(Duration.ofMillis(responseTimeoutMs))
-                        .build();
-        log.trace("{}", req);
-        return http.sendAsync(req, BodyHandlers.discarding())
-                .thenApply(
-                        res -> {
-                            log.trace(
-                                    "{} {} : {}",
-                                    res.request().method(),
-                                    res.request().uri(),
-                                    res.statusCode());
-                            return res;
-                        })
-                .thenApply(this::assertOkStatus)
+        HttpDelete req =
+                new HttpDelete(
+                        baseUri.resolve(
+                                API_PATH
+                                        + "/"
+                                        + pluginInfo.getId()
+                                        + "?token="
+                                        + pluginInfo.getToken()));
+        log.info("{}", req);
+        return supply(req, (res) -> logResponse(req, res))
+                .thenApply(res -> assertOkStatus(req, res))
                 .thenApply(res -> null);
     }
 
     public CompletableFuture<Void> update(PluginInfo pluginInfo, Set<DiscoveryNode> subtree) {
-        HttpRequest req;
         try {
-            req =
-                    HttpRequest.newBuilder(
-                                    baseUri.resolve(
-                                            API_PATH
-                                                    + "/"
-                                                    + pluginInfo.getId()
-                                                    + "?token="
-                                                    + pluginInfo.getToken()))
-                            .POST(
-                                    HttpRequest.BodyPublishers.ofString(
-                                            mapper.writeValueAsString(subtree)))
-                            .setHeader("Authorization", authorization)
-                            .timeout(Duration.ofMillis(responseTimeoutMs))
-                            .build();
-            log.trace("{}", req);
-            return http.sendAsync(req, BodyHandlers.discarding())
-                    .thenApply(
-                            res -> {
-                                log.trace(
-                                        "{} {} : {}",
-                                        res.request().method(),
-                                        res.request().uri(),
-                                        res.statusCode());
-                                return res;
-                            })
-                    .thenApply(this::assertOkStatus)
+            HttpPost req =
+                    new HttpPost(
+                            baseUri.resolve(
+                                    API_PATH
+                                            + "/"
+                                            + pluginInfo.getId()
+                                            + "?token="
+                                            + pluginInfo.getToken()));
+            req.setEntity(
+                    new StringEntity(
+                            mapper.writeValueAsString(subtree), ContentType.APPLICATION_JSON));
+
+            log.info("{}", req);
+            return supply(req, (res) -> logResponse(req, res))
+                    .thenApply(res -> assertOkStatus(req, res))
                     .thenApply(res -> null);
         } catch (JsonProcessingException e) {
             return CompletableFuture.failedFuture(e);
@@ -245,124 +206,80 @@ public class CryostatClient {
                         "TARGET",
                         "pushType",
                         pushType.name());
-        String boundary = new BigInteger(256, new Random()).toString();
+
+        HttpPost req = new HttpPost(baseUri.resolve("/api/beta/recordings/" + jvmId));
+
         CountingInputStream is = getRecordingInputStream(recording);
-        HttpRequest req =
-                HttpRequest.newBuilder(baseUri.resolve("/api/beta/recordings/" + jvmId))
-                        .POST(ofMultipartData(boundary, is, fileName, labels, maxFiles))
-                        .setHeader("Authorization", authorization)
-                        .setHeader(
-                                "Content-Type",
-                                String.format("multipart/form-data; boundary=%s", boundary))
-                        .timeout(Duration.ofMillis(uploadTimeoutMs))
-                        .build();
-        log.trace("{}", req);
-        return http.sendAsync(req, BodyHandlers.discarding())
-                .thenApply(
-                        res -> {
-                            Instant finish = Instant.now();
-                            log.info(
-                                    "{} {} ({} -> {}): {}/{}",
-                                    res.request().method(),
-                                    res.statusCode(),
-                                    fileName,
-                                    res.request().uri(),
-                                    FileUtils.byteCountToDisplaySize(is.getByteCount()),
-                                    Duration.between(start, finish));
-                            return res;
-                        })
-                .thenApply(this::assertOkStatus)
-                .thenApply(res -> null);
+        MultipartEntityBuilder entityBuilder =
+                MultipartEntityBuilder.create()
+                        .addPart(
+                                FormBodyPartBuilder.create(
+                                                "recording",
+                                                new InputStreamBody(
+                                                        is,
+                                                        ContentType.APPLICATION_OCTET_STREAM,
+                                                        fileName))
+                                        .build())
+                        .addPart(
+                                FormBodyPartBuilder.create(
+                                                "labels",
+                                                new StringBody(
+                                                        mapper.writeValueAsString(labels),
+                                                        ContentType.APPLICATION_JSON))
+                                        .build())
+                        .addPart(
+                                FormBodyPartBuilder.create(
+                                                "maxFiles",
+                                                new StringBody(
+                                                        Integer.toString(maxFiles),
+                                                        ContentType.TEXT_PLAIN))
+                                        .build());
+        req.setEntity(entityBuilder.build());
+        return supply(
+                req,
+                (res) -> {
+                    Instant finish = Instant.now();
+                    log.info(
+                            "{} {} ({} -> {}): {}/{}",
+                            req.getMethod(),
+                            res.getStatusLine().getStatusCode(),
+                            fileName,
+                            req.getURI(),
+                            FileUtils.byteCountToDisplaySize(is.getByteCount()),
+                            Duration.between(start, finish));
+                    assertOkStatus(req, res);
+                    return (Void) null;
+                });
+    }
+
+    private HttpResponse logResponse(HttpRequestBase req, HttpResponse res) {
+        log.info("{} {} : {}", req.getMethod(), req.getURI(), res.getStatusLine().getStatusCode());
+        return res;
+    }
+
+    private <T> CompletableFuture<T> supply(HttpRequestBase req, Function<HttpResponse, T> fn) {
+        return CompletableFuture.supplyAsync(() -> fn.apply(executeQuiet(req)), executor)
+                .whenComplete((v, t) -> req.reset());
+    }
+
+    private HttpResponse executeQuiet(HttpUriRequest req) {
+        try {
+            return http.execute(req);
+        } catch (IOException ioe) {
+            throw new CompletionException(ioe);
+        }
     }
 
     private CountingInputStream getRecordingInputStream(Path filePath) throws IOException {
         return new CountingInputStream(new BufferedInputStream(Files.newInputStream(filePath)));
     }
 
-    @SuppressFBWarnings("VA_FORMAT_STRING_USES_NEWLINE")
-    private HttpRequest.BodyPublisher ofMultipartData(
-            String boundary,
-            InputStream stream,
-            String uploadName,
-            Map<String, String> labels,
-            int maxFiles)
-            throws IOException {
-        byte[] newline = new byte[] {'\r', '\n'};
-        String separator = "--" + boundary;
-
-        Vector<InputStream> parts = new Vector<>();
-
-        // recording file
-        {
-            parts.add(asStream(separator));
-            parts.add(asStream(newline));
-
-            parts.add(
-                    asStream(
-                            String.format(
-                                    "Content-Disposition: form-data; name=\"recording\";"
-                                            + " filename=\"%s\"",
-                                    uploadName)));
-            parts.add(asStream(newline));
-            parts.add(asStream("Content-Type: application/octet-stream"));
-
-            parts.add(asStream(newline));
-            parts.add(asStream(newline));
-            parts.add(stream);
-            parts.add(asStream(newline));
-        }
-
-        // recording labels
-        {
-            parts.add(asStream(separator));
-            parts.add(asStream(newline));
-
-            parts.add(asStream(("Content-Disposition: form-data; name=\"labels\"")));
-
-            parts.add(asStream(newline));
-            parts.add(asStream(newline));
-            parts.add(asStream(mapper.writeValueAsBytes(labels)));
-            parts.add(asStream(newline));
-        }
-
-        // maxFiles
-        {
-            parts.add(asStream(separator));
-            parts.add(asStream(newline));
-
-            parts.add(asStream(("Content-Disposition: form-data; name=\"maxFiles\"")));
-
-            parts.add(asStream(newline));
-            parts.add(asStream(newline));
-            parts.add(asStream(maxFiles));
-            parts.add(asStream(newline));
-        }
-
-        String endBoundary = ("--" + boundary + "--");
-        parts.add(asStream(endBoundary));
-
-        return HttpRequest.BodyPublishers.ofInputStream(
-                () -> new SequenceInputStream(parts.elements()));
-    }
-
-    private static InputStream asStream(byte[] arr) {
-        return new ByteArrayInputStream(arr);
-    }
-
-    private static InputStream asStream(String s) {
-        return new ByteArrayInputStream(s.getBytes(StandardCharsets.UTF_8));
-    }
-
-    private static InputStream asStream(int i) {
-        return new ByteArrayInputStream(Integer.toString(i).getBytes(StandardCharsets.UTF_8));
-    }
-
-    private <T> HttpResponse<T> assertOkStatus(HttpResponse<T> res) {
-        int sc = res.statusCode();
+    private HttpResponse assertOkStatus(HttpRequestBase req, HttpResponse res) {
+        int sc = res.getStatusLine().getStatusCode();
         boolean isOk = 200 <= sc && sc < 300;
         if (!isOk) {
-            log.error("Non-OK response ({}) on HTTP API {}", sc, res.request().uri());
-            URI uri = res.request().uri();
+            URI uri = req.getURI();
+            log.error("Non-OK response ({}) on HTTP API {}", sc, uri);
             try {
                 throw new HttpException(
                         sc,

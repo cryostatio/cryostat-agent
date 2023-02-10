@@ -38,13 +38,12 @@
 package io.cryostat.agent;
 
 import java.net.URI;
-import java.net.http.HttpClient;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
-import java.time.Duration;
+import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -66,6 +65,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import dagger.Lazy;
 import dagger.Module;
 import dagger.Provides;
+import org.apache.http.client.HttpClient;
+import org.apache.http.client.config.RequestConfig;
+import org.apache.http.impl.client.HttpClientBuilder;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.message.BasicHeader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -146,21 +150,29 @@ public abstract class MainModule {
     @Provides
     @Singleton
     public static HttpClient provideHttpClient(
-            ScheduledExecutorService executor,
             SSLContext sslContext,
+            @Named(ConfigModule.CRYOSTAT_AGENT_AUTHORIZATION) String authorization,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_SSL_VERIFY_HOSTNAME)
                     boolean verifyHostname,
-            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_CONNECT_TIMEOUT_MS)
-                    long connectTimeoutMs) {
-        System.getProperties()
-                .setProperty(
-                        "jdk.internal.httpclient.disableHostnameVerification",
-                        Boolean.toString(!verifyHostname));
-        return HttpClient.newBuilder()
-                .executor(executor)
-                .connectTimeout(Duration.ofMillis(connectTimeoutMs))
-                .sslContext(sslContext)
-                .build();
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_CONNECT_TIMEOUT_MS) int connectTimeout,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_TIMEOUT_MS) int responseTimeout) {
+        HttpClientBuilder builder =
+                HttpClients.custom()
+                        .setDefaultHeaders(Set.of(new BasicHeader("Authorization", authorization)))
+                        .setSSLContext(sslContext)
+                        .setDefaultRequestConfig(
+                                RequestConfig.custom()
+                                        .setAuthenticationEnabled(true)
+                                        .setExpectContinueEnabled(true)
+                                        .setConnectTimeout(connectTimeout)
+                                        .setSocketTimeout(responseTimeout)
+                                        .build());
+
+        if (!verifyHostname) {
+            builder = builder.setSSLHostnameVerifier((hostname, session) -> true);
+        }
+
+        return builder.build();
     }
 
     @Provides
@@ -172,6 +184,7 @@ public abstract class MainModule {
     @Provides
     @Singleton
     public static CryostatClient provideCryostatClient(
+            ScheduledExecutorService executor,
             HttpClient http,
             ObjectMapper objectMapper,
             @Named(JVM_ID) String jvmId,
@@ -179,21 +192,9 @@ public abstract class MainModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_BASEURI) URI baseUri,
             @Named(ConfigModule.CRYOSTAT_AGENT_CALLBACK) URI callback,
             @Named(ConfigModule.CRYOSTAT_AGENT_REALM) String realm,
-            @Named(ConfigModule.CRYOSTAT_AGENT_AUTHORIZATION) String authorization,
-            @Named(ConfigModule.CRYOSTAT_AGENT_HARVESTER_UPLOAD_TIMEOUT_MS) long responseTimeoutMs,
-            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_TIMEOUT_MS)
-                    long uploadTimeoutMs) {
+            @Named(ConfigModule.CRYOSTAT_AGENT_AUTHORIZATION) String authorization) {
         return new CryostatClient(
-                http,
-                objectMapper,
-                jvmId,
-                appName,
-                baseUri,
-                callback,
-                realm,
-                authorization,
-                responseTimeoutMs,
-                uploadTimeoutMs);
+                executor, http, objectMapper, jvmId, appName, baseUri, callback, realm);
     }
 
     @Provides

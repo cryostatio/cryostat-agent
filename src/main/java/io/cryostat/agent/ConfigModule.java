@@ -149,15 +149,15 @@ public abstract class ConfigModule {
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_WEBCLIENT_CONNECT_TIMEOUT_MS)
-    public static long provideCryostatAgentWebclientConnectTimeoutMs(SmallRyeConfig config) {
-        return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_CONNECT_TIMEOUT_MS, long.class);
+    public static int provideCryostatAgentWebclientConnectTimeoutMs(SmallRyeConfig config) {
+        return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_CONNECT_TIMEOUT_MS, int.class);
     }
 
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_TIMEOUT_MS)
-    public static long provideCryostatAgentWebclientResponseTimeoutMs(SmallRyeConfig config) {
-        return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_TIMEOUT_MS, long.class);
+    public static int provideCryostatAgentWebclientResponseTimeoutMs(SmallRyeConfig config) {
+        return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_TIMEOUT_MS, int.class);
     }
 
     @Provides
