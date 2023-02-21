@@ -108,8 +108,9 @@ public abstract class MainModule {
             ScheduledExecutorService executor,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_HOST) String host,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_PORT) int port,
+            @Named(ConfigModule.CRYOSTAT_AGENT_CALLBACK) URI callback,
             Lazy<Registration> registration) {
-        return new WebServer(executor, host, port, registration);
+        return new WebServer(executor, host, port, callback, registration);
     }
 
     @Provides
@@ -185,16 +186,16 @@ public abstract class MainModule {
     @Singleton
     public static CryostatClient provideCryostatClient(
             ScheduledExecutorService executor,
-            HttpClient http,
             ObjectMapper objectMapper,
+            HttpClient http,
+            WebServer webServer,
             @Named(JVM_ID) String jvmId,
             @Named(ConfigModule.CRYOSTAT_AGENT_APP_NAME) String appName,
             @Named(ConfigModule.CRYOSTAT_AGENT_BASEURI) URI baseUri,
-            @Named(ConfigModule.CRYOSTAT_AGENT_CALLBACK) URI callback,
             @Named(ConfigModule.CRYOSTAT_AGENT_REALM) String realm,
             @Named(ConfigModule.CRYOSTAT_AGENT_AUTHORIZATION) String authorization) {
         return new CryostatClient(
-                executor, http, objectMapper, jvmId, appName, baseUri, callback, realm);
+                executor, objectMapper, http, webServer, jvmId, appName, baseUri, realm);
     }
 
     @Provides
@@ -202,22 +203,22 @@ public abstract class MainModule {
     public static Registration provideRegistration(
             ScheduledExecutorService executor,
             CryostatClient cryostat,
+            WebServer webServer,
             @Named(JVM_ID) String jvmId,
             @Named(ConfigModule.CRYOSTAT_AGENT_APP_NAME) String appName,
             @Named(ConfigModule.CRYOSTAT_AGENT_REALM) String realm,
             @Named(ConfigModule.CRYOSTAT_AGENT_HOSTNAME) String hostname,
-            @Named(ConfigModule.CRYOSTAT_AGENT_CALLBACK) URI callback,
             @Named(ConfigModule.CRYOSTAT_AGENT_REGISTRATION_PREFER_JMX) boolean preferJmx,
             @Named(ConfigModule.CRYOSTAT_AGENT_APP_JMX_PORT) int jmxPort,
             @Named(ConfigModule.CRYOSTAT_AGENT_REGISTRATION_RETRY_MS) int registrationRetryMs) {
         return new Registration(
                 executor,
                 cryostat,
+                webServer,
                 jvmId,
                 appName,
                 realm,
                 hostname,
-                callback,
                 preferJmx,
                 jmxPort,
                 registrationRetryMs);

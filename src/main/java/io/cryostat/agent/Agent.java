@@ -103,13 +103,15 @@ public class Agent {
                                 break;
                             case REFRESHED:
                                 break;
+                            case PUBLISHED:
+                                break;
                             default:
                                 log.error("Unknown registration state: {}", evt.state);
                                 break;
                         }
                     });
-            registration.start();
             webServer.start();
+            registration.start();
             log.info("Startup complete");
         } catch (Exception e) {
             log.error(Agent.class.getSimpleName() + " startup failure", e);

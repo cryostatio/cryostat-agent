@@ -38,6 +38,7 @@
 package io.cryostat.agent;
 
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.UnknownHostException;
 import java.time.Duration;
 import java.time.Instant;
@@ -64,11 +65,11 @@ class Registration {
 
     private final ScheduledExecutorService executor;
     private final CryostatClient cryostat;
+    private final WebServer webServer;
     private final String jvmId;
     private final String appName;
     private final String realm;
     private final String hostname;
-    private final URI callback;
     private final boolean preferJmx;
     private final int jmxPort;
     private final int registrationRetryMs;
@@ -79,21 +80,21 @@ class Registration {
     Registration(
             ScheduledExecutorService executor,
             CryostatClient cryostat,
+            WebServer webServer,
             String jvmId,
             String appName,
             String realm,
             String hostname,
-            URI callback,
             boolean preferJmx,
             int jmxPort,
             int registrationRetryMs) {
         this.executor = executor;
         this.cryostat = cryostat;
+        this.webServer = webServer;
         this.jvmId = jvmId;
         this.appName = appName;
         this.realm = realm;
         this.hostname = hostname;
-        this.callback = callback;
         this.preferJmx = preferJmx;
         this.jmxPort = jmxPort;
         this.registrationRetryMs = registrationRetryMs;
@@ -149,8 +150,8 @@ class Registration {
         DiscoveryNode selfNode;
         try {
             selfNode = defineSelf();
-        } catch (UnknownHostException uhe) {
-            log.error("Unable to define self", uhe);
+        } catch (UnknownHostException | URISyntaxException e) {
+            log.error("Unable to define self", e);
             return;
         }
         log.info("publishing self as {}", selfNode.getTarget().getConnectUrl());
@@ -171,6 +172,7 @@ class Registration {
                                                         executor);
                                     } else {
                                         log.info("Publish success");
+                                        notify(RegistrationEvent.State.PUBLISHED);
                                     }
                                     return (Void) null;
                                 },
@@ -182,7 +184,7 @@ class Registration {
         }
     }
 
-    private DiscoveryNode defineSelf() throws UnknownHostException {
+    private DiscoveryNode defineSelf() throws UnknownHostException, URISyntaxException {
         long pid = ProcessHandle.current().pid();
         String javaMain = System.getProperty("sun.java.command", System.getenv("JAVA_MAIN_CLASS"));
         if (StringUtils.isBlank(javaMain)) {
@@ -195,7 +197,7 @@ class Registration {
                         .startInstant()
                         .orElse(Instant.EPOCH)
                         .getEpochSecond();
-        URI uri = callback;
+        URI uri = webServer.getCallback();
         if (preferJmx && jmxPort > 0) {
             uri =
                     URI.create(
@@ -255,6 +257,7 @@ class Registration {
 
         enum State {
             REGISTERED,
+            PUBLISHED,
             UNREGISTERED,
             REFRESHED,
         }

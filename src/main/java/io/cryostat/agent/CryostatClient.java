@@ -87,38 +87,42 @@ public class CryostatClient {
     private final Executor executor;
     private final ObjectMapper mapper;
     private final HttpClient http;
+    private final WebServer webServer;
 
     private final String appName;
     private final String jvmId;
     private final URI baseUri;
-    private final URI callback;
     private final String realm;
 
     CryostatClient(
             Executor executor,
-            HttpClient http,
             ObjectMapper mapper,
+            HttpClient http,
+            WebServer webServer,
             String jvmId,
             String appName,
             URI baseUri,
-            URI callback,
             String realm) {
         this.executor = executor;
         this.mapper = mapper;
         this.http = http;
+        this.webServer = webServer;
         this.jvmId = jvmId;
         this.appName = appName;
         this.baseUri = baseUri;
-        this.callback = callback;
         this.realm = realm;
 
         log.info("Using Cryostat baseuri {}", baseUri);
     }
 
     public CompletableFuture<PluginInfo> register(PluginInfo pluginInfo) {
-        RegistrationInfo registrationInfo =
-                new RegistrationInfo(pluginInfo.getId(), realm, callback, pluginInfo.getToken());
         try {
+            RegistrationInfo registrationInfo =
+                    new RegistrationInfo(
+                            pluginInfo.getId(),
+                            realm,
+                            webServer.getCallback(),
+                            pluginInfo.getToken());
             HttpPost req = new HttpPost(baseUri.resolve(API_PATH));
             req.setEntity(
                     new StringEntity(
@@ -147,7 +151,7 @@ public class CryostatClient {
                                     throw new RegistrationException(e);
                                 }
                             });
-        } catch (JsonProcessingException e) {
+        } catch (JsonProcessingException | URISyntaxException e) {
             return CompletableFuture.failedFuture(e);
         }
     }
