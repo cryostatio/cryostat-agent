@@ -69,6 +69,7 @@ class Registration {
     private final String realm;
     private final String hostname;
     private final URI callback;
+    private final boolean preferJmx;
     private final int jmxPort;
     private final int registrationRetryMs;
 
@@ -83,6 +84,7 @@ class Registration {
             String realm,
             String hostname,
             URI callback,
+            boolean preferJmx,
             int jmxPort,
             int registrationRetryMs) {
         this.executor = executor;
@@ -92,6 +94,7 @@ class Registration {
         this.realm = realm;
         this.hostname = hostname;
         this.callback = callback;
+        this.preferJmx = preferJmx;
         this.jmxPort = jmxPort;
         this.registrationRetryMs = registrationRetryMs;
     }
@@ -192,19 +195,25 @@ class Registration {
                         .startInstant()
                         .orElse(Instant.EPOCH)
                         .getEpochSecond();
-        URI uri;
-        if (jmxPort > 0) {
+        URI uri = callback;
+        if (preferJmx && jmxPort > 0) {
             uri =
                     URI.create(
                             String.format(
                                     "service:jmx:rmi:///jndi/rmi://%s:%d/jmxrmi",
                                     hostname, jmxPort));
-        } else {
-            uri = callback;
         }
         DiscoveryNode.Target target =
                 new DiscoveryNode.Target(
-                        realm, uri, appName, jvmId, pid, hostname, jmxPort, javaMain, startTime);
+                        realm,
+                        uri,
+                        appName,
+                        jvmId,
+                        pid,
+                        hostname,
+                        uri.getPort(),
+                        javaMain,
+                        startTime);
 
         DiscoveryNode selfNode =
                 new DiscoveryNode(appName + "-" + pluginInfo.getId(), NODE_TYPE, target);
