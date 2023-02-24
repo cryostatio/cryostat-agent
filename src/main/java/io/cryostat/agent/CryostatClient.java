@@ -128,7 +128,7 @@ public class CryostatClient {
                     new StringEntity(
                             mapper.writeValueAsString(registrationInfo),
                             ContentType.APPLICATION_JSON));
-            log.info("{}", req);
+            log.info("{} {}", req, mapper.writeValueAsString(registrationInfo));
             return supply(req, (res) -> logResponse(req, res))
                     .thenApply(res -> assertOkStatus(req, res))
                     .thenApply(

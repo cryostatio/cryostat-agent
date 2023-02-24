@@ -110,7 +110,11 @@ public abstract class MainModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_PORT) int port,
             @Named(ConfigModule.CRYOSTAT_AGENT_CALLBACK) URI callback,
             Lazy<Registration> registration) {
-        return new WebServer(executor, host, port, callback, registration);
+        try {
+            return new WebServer(executor, host, port, callback, registration);
+        } catch (NoSuchAlgorithmException nsae) {
+            throw new RuntimeException(nsae);
+        }
     }
 
     @Provides

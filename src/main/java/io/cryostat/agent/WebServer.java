@@ -72,7 +72,7 @@ class WebServer implements Consumer<RegistrationEvent> {
     private final ScheduledExecutorService executor;
     private final String host;
     private final int port;
-    private Credentials credentials;
+    private final Credentials credentials;
     private final URI callback;
     private final Lazy<Registration> registration;
     private HttpServer http;
@@ -82,18 +82,24 @@ class WebServer implements Consumer<RegistrationEvent> {
             String host,
             int port,
             URI callback,
-            Lazy<Registration> registration) {
+            Lazy<Registration> registration)
+            throws NoSuchAlgorithmException {
         this.executor = executor;
         this.host = host;
         this.port = port;
+        this.credentials = new Credentials();
         this.callback = callback;
         this.registration = registration;
     }
 
     URI getCallback() throws URISyntaxException {
-        return new URIBuilder(callback)
-                .setUserInfo(credentials.user, new String(credentials.pass))
-                .build();
+        synchronized (credentials) {
+            URIBuilder builder = new URIBuilder(callback);
+            if (credentials.pass != null) {
+                builder = builder.setUserInfo(credentials.user, new String(credentials.pass));
+            }
+            return builder.build();
+        }
     }
 
     void start() throws IOException, NoSuchAlgorithmException {
@@ -103,7 +109,6 @@ class WebServer implements Consumer<RegistrationEvent> {
         this.http = HttpServer.create(new InetSocketAddress(host, port), 0);
 
         this.http.setExecutor(executor);
-        this.credentials = Authenticators.INSTANCE.authenticator.regenerate();
 
         HttpContext pingCtx =
                 this.http.createContext(
@@ -114,9 +119,17 @@ class WebServer implements Consumer<RegistrationEvent> {
                                 String mtd = exchange.getRequestMethod();
                                 switch (mtd) {
                                     case "POST":
-                                        executor.execute(registration.get()::tryRegister);
-                                        exchange.sendResponseHeaders(HttpStatus.SC_NO_CONTENT, -1);
-                                        exchange.close();
+                                        try {
+                                            synchronized (WebServer.this.credentials) {
+                                                WebServer.this.credentials.regenerate();
+                                                executor.execute(registration.get()::tryRegister);
+                                                exchange.sendResponseHeaders(
+                                                        HttpStatus.SC_NO_CONTENT, -1);
+                                                exchange.close();
+                                            }
+                                        } catch (NoSuchAlgorithmException e) {
+                                            throw new IOException(e);
+                                        }
                                         break;
                                     case "GET":
                                         exchange.sendResponseHeaders(HttpStatus.SC_NO_CONTENT, -1);
@@ -129,7 +142,7 @@ class WebServer implements Consumer<RegistrationEvent> {
                                 }
                             }
                         });
-        pingCtx.setAuthenticator(Authenticators.INSTANCE.authenticator);
+        pingCtx.setAuthenticator(new AgentAuthenticator());
         pingCtx.getFilters()
                 .add(
                         Filter.beforeHandler(
@@ -173,9 +186,9 @@ class WebServer implements Consumer<RegistrationEvent> {
                 // dropped.
                 this.credentials.clear();
                 break;
-            case UNREGISTERED:
-                break;
             case REFRESHED:
+                break;
+            case UNREGISTERED:
                 break;
             case REGISTERED:
                 break;
@@ -184,62 +197,56 @@ class WebServer implements Consumer<RegistrationEvent> {
         }
     }
 
-    private enum Authenticators {
-        INSTANCE(new AgentAuthenticator());
-
-        private final AgentAuthenticator authenticator;
-
-        Authenticators(AgentAuthenticator authenticator) {
-            this.authenticator = authenticator;
-        }
-    }
-
-    private static class AgentAuthenticator extends BasicAuthenticator {
+    private class AgentAuthenticator extends BasicAuthenticator {
 
         private final Logger log = LoggerFactory.getLogger(getClass());
-        private final MessageDigest md;
-        private String user;
-        private byte[] passHash;
 
         public AgentAuthenticator() {
             super("cryostat-agent");
-            try {
-                this.md = MessageDigest.getInstance("SHA-256");
-            } catch (NoSuchAlgorithmException nsae) {
-                log.error("No such algorithm", nsae);
-                throw new RuntimeException(nsae);
-            }
         }
 
         @Override
         public synchronized boolean checkCredentials(String username, String password) {
-            byte[] passHash = md.digest(password.getBytes(StandardCharsets.UTF_8));
-            return Objects.equals(username, this.user) && Arrays.equals(passHash, this.passHash);
-        }
-
-        private synchronized Credentials regenerate() {
-            String user = "agent";
-            String set = "abcdefghijklmnopqrstuvwxyz-_=[].0123456789";
-            String pass =
-                    RandomStringUtils.random(
-                            16, 0, set.length(), true, true, set.toCharArray(), new SecureRandom());
-            Credentials c = new Credentials(user, pass.toCharArray());
-            this.user = user;
-            this.passHash = md.digest(pass.getBytes(StandardCharsets.UTF_8));
-            return c;
+            try {
+                return WebServer.this.credentials.checkUserInfo(username, password);
+            } catch (NoSuchAlgorithmException e) {
+                log.error("Could not check credentials", e);
+                return false;
+            }
         }
     }
 
     static class Credentials {
-        String user;
+
+        static final String user = "agent";
+        byte[] passHash;
         char[] pass;
 
-        Credentials(String user, char[] pass) {
-            this.user = user;
-            this.pass = pass;
+        Credentials() throws NoSuchAlgorithmException {
+            regenerate();
         }
 
-        void clear() {
+        synchronized boolean checkUserInfo(String username, String password)
+                throws NoSuchAlgorithmException {
+            byte[] passHash =
+                    MessageDigest.getInstance("SHA-256")
+                            .digest(password.getBytes(StandardCharsets.UTF_8));
+            return Objects.equals(username, Credentials.user)
+                    && Arrays.equals(passHash, this.passHash);
+        }
+
+        synchronized void regenerate() throws NoSuchAlgorithmException {
+            String set = "abcdefghijklmnopqrstuvwxyz-_=[].0123456789";
+            String pass =
+                    RandomStringUtils.random(
+                            16, 0, set.length(), true, true, set.toCharArray(), new SecureRandom());
+            this.pass = pass.toCharArray();
+            this.passHash =
+                    MessageDigest.getInstance("SHA-256")
+                            .digest(pass.getBytes(StandardCharsets.UTF_8));
+        }
+
+        synchronized void clear() {
             if (pass != null) {
                 for (int i = 0; i < pass.length; i++) {
                     pass[i] = '\0';
