@@ -222,20 +222,20 @@ class WebServer implements Consumer<RegistrationEvent> {
 
         synchronized boolean checkUserInfo(String username, String password)
                 throws NoSuchAlgorithmException {
-            byte[] passHash =
-                    MessageDigest.getInstance("SHA-256")
-                            .digest(password.getBytes(StandardCharsets.UTF_8));
             return Objects.equals(username, Credentials.user)
-                    && Arrays.equals(passHash, this.passHash);
+                    && Arrays.equals(hash(password), this.passHash);
         }
 
         synchronized void regenerate() throws NoSuchAlgorithmException {
             String pass =
                     RandomStringUtils.random(32, 33, 126, false, false, null, new SecureRandom());
             this.pass = pass.toCharArray();
-            this.passHash =
-                    MessageDigest.getInstance("SHA-256")
-                            .digest(pass.getBytes(StandardCharsets.UTF_8));
+            this.passHash = hash(pass);
+        }
+
+        private byte[] hash(String pass) throws NoSuchAlgorithmException {
+            return MessageDigest.getInstance("SHA-256")
+                    .digest(pass.getBytes(StandardCharsets.UTF_8));
         }
 
         synchronized void clear() {
