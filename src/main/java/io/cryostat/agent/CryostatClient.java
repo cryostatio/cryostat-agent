@@ -54,6 +54,7 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
 import java.util.function.Function;
 
+import io.cryostat.agent.WebServer.Credentials;
 import io.cryostat.agent.model.DiscoveryNode;
 import io.cryostat.agent.model.PluginInfo;
 import io.cryostat.agent.model.RegistrationInfo;
@@ -63,6 +64,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.input.CountingInputStream;
+import org.apache.http.HttpHeaders;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpDelete;
@@ -80,14 +82,14 @@ import org.slf4j.LoggerFactory;
 
 public class CryostatClient {
 
-    private static final String API_PATH = "/api/v2.2/discovery";
+    private static final String DISCOVERY_API_PATH = "/api/v2.2/discovery";
+    private static final String CREDENTIALS_API_PATH = "/api/v2.2/credentials";
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
     private final Executor executor;
     private final ObjectMapper mapper;
     private final HttpClient http;
-    private final WebServer webServer;
 
     private final String appName;
     private final String jvmId;
@@ -98,7 +100,6 @@ public class CryostatClient {
             Executor executor,
             ObjectMapper mapper,
             HttpClient http,
-            WebServer webServer,
             String jvmId,
             String appName,
             URI baseUri,
@@ -106,7 +107,6 @@ public class CryostatClient {
         this.executor = executor;
         this.mapper = mapper;
         this.http = http;
-        this.webServer = webServer;
         this.jvmId = jvmId;
         this.appName = appName;
         this.baseUri = baseUri;
@@ -115,20 +115,16 @@ public class CryostatClient {
         log.info("Using Cryostat baseuri {}", baseUri);
     }
 
-    public CompletableFuture<PluginInfo> register(PluginInfo pluginInfo) {
+    public CompletableFuture<PluginInfo> register(PluginInfo pluginInfo, URI callback) {
         try {
             RegistrationInfo registrationInfo =
                     new RegistrationInfo(
-                            pluginInfo.getId(),
-                            realm,
-                            webServer.getCallback(),
-                            pluginInfo.getToken());
-            HttpPost req = new HttpPost(baseUri.resolve(API_PATH));
+                            pluginInfo.getId(), realm, callback, pluginInfo.getToken());
+            HttpPost req = new HttpPost(baseUri.resolve(DISCOVERY_API_PATH));
             req.setEntity(
                     new StringEntity(
                             mapper.writeValueAsString(registrationInfo),
                             ContentType.APPLICATION_JSON));
-            log.info("{} {}", req, mapper.writeValueAsString(registrationInfo));
             return supply(req, (res) -> logResponse(req, res))
                     .thenApply(res -> assertOkStatus(req, res))
                     .thenApply(
@@ -151,16 +147,60 @@ public class CryostatClient {
                                     throw new RegistrationException(e);
                                 }
                             });
-        } catch (JsonProcessingException | URISyntaxException e) {
+        } catch (JsonProcessingException e) {
             return CompletableFuture.failedFuture(e);
         }
+    }
+
+    public CompletableFuture<Integer> submitCredentials(Credentials credentials) {
+        synchronized (credentials) {
+            HttpPost req = new HttpPost(baseUri.resolve(CREDENTIALS_API_PATH));
+            MultipartEntityBuilder entityBuilder =
+                    MultipartEntityBuilder.create()
+                            .addPart(
+                                    FormBodyPartBuilder.create(
+                                                    "username",
+                                                    new StringBody(
+                                                            Credentials.user,
+                                                            ContentType.TEXT_PLAIN))
+                                            .build())
+                            .addPart(
+                                    FormBodyPartBuilder.create(
+                                                    "password",
+                                                    new StringBody(
+                                                            new String(credentials.pass),
+                                                            ContentType.TEXT_PLAIN))
+                                            .build())
+                            .addPart(
+                                    FormBodyPartBuilder.create(
+                                                    "matchExpression",
+                                                    new StringBody(
+                                                            String.format(
+                                                                    "target.jvmId == \"%s\"",
+                                                                    this.jvmId),
+                                                            ContentType.TEXT_PLAIN))
+                                            .build());
+            req.setEntity(entityBuilder.build());
+            return supply(req, (res) -> logResponse(req, res))
+                    .thenApply(res -> assertOkStatus(req, res))
+                    .thenApply(res -> res.getFirstHeader(HttpHeaders.LOCATION).getValue())
+                    .thenApply(res -> res.substring(res.lastIndexOf('/') + 1, res.length()))
+                    .thenApply(Integer::valueOf);
+        }
+    }
+
+    public CompletableFuture<Void> deleteCredentials(int id) {
+        HttpDelete req = new HttpDelete(baseUri.resolve(CREDENTIALS_API_PATH + "/" + id));
+        return supply(req, (res) -> logResponse(req, res))
+                .thenApply(res -> assertOkStatus(req, res))
+                .thenApply(res -> null);
     }
 
     public CompletableFuture<Void> deregister(PluginInfo pluginInfo) {
         HttpDelete req =
                 new HttpDelete(
                         baseUri.resolve(
-                                API_PATH
+                                DISCOVERY_API_PATH
                                         + "/"
                                         + pluginInfo.getId()
                                         + "?token="
@@ -176,7 +216,7 @@ public class CryostatClient {
             HttpPost req =
                     new HttpPost(
                             baseUri.resolve(
-                                    API_PATH
+                                    DISCOVERY_API_PATH
                                             + "/"
                                             + pluginInfo.getId()
                                             + "?token="

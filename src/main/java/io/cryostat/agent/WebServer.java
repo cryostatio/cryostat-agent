@@ -39,8 +39,6 @@ package io.cryostat.agent;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.net.URI;
-import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -61,7 +59,6 @@ import com.sun.net.httpserver.HttpServer;
 import dagger.Lazy;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.http.HttpStatus;
-import org.apache.http.client.utils.URIBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -69,43 +66,35 @@ class WebServer implements Consumer<RegistrationEvent> {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
+    private final Lazy<CryostatClient> cryostat;
     private final ScheduledExecutorService executor;
     private final String host;
     private final int port;
     private final Credentials credentials;
-    private final URI callback;
     private final Lazy<Registration> registration;
     private HttpServer http;
 
     WebServer(
+            Lazy<CryostatClient> cryostat,
             ScheduledExecutorService executor,
             String host,
             int port,
-            URI callback,
-            Lazy<Registration> registration)
-            throws NoSuchAlgorithmException {
+            Lazy<Registration> registration) {
+        this.cryostat = cryostat;
         this.executor = executor;
         this.host = host;
         this.port = port;
         this.credentials = new Credentials();
-        this.callback = callback;
         this.registration = registration;
-    }
-
-    URI getCallback() throws URISyntaxException {
-        synchronized (credentials) {
-            URIBuilder builder = new URIBuilder(callback);
-            if (credentials.pass != null) {
-                builder = builder.setUserInfo(credentials.user, new String(credentials.pass));
-            }
-            return builder.build();
-        }
     }
 
     void start() throws IOException, NoSuchAlgorithmException {
         if (this.http != null) {
             stop();
         }
+
+        this.generateCredentials();
+
         this.http = HttpServer.create(new InetSocketAddress(host, port), 0);
 
         this.http.setExecutor(executor);
@@ -119,16 +108,11 @@ class WebServer implements Consumer<RegistrationEvent> {
                                 String mtd = exchange.getRequestMethod();
                                 switch (mtd) {
                                     case "POST":
-                                        try {
-                                            synchronized (WebServer.this.credentials) {
-                                                WebServer.this.credentials.regenerate();
-                                                executor.execute(registration.get()::tryRegister);
-                                                exchange.sendResponseHeaders(
-                                                        HttpStatus.SC_NO_CONTENT, -1);
-                                                exchange.close();
-                                            }
-                                        } catch (NoSuchAlgorithmException e) {
-                                            throw new IOException(e);
+                                        synchronized (WebServer.this.credentials) {
+                                            executor.execute(registration.get()::tryRegister);
+                                            exchange.sendResponseHeaders(
+                                                    HttpStatus.SC_NO_CONTENT, -1);
+                                            exchange.close();
                                         }
                                         break;
                                     case "GET":
@@ -172,6 +156,20 @@ class WebServer implements Consumer<RegistrationEvent> {
         if (this.http != null) {
             this.http.stop(0);
             this.http = null;
+        }
+    }
+
+    Credentials getCredentials() {
+        return credentials;
+    }
+
+    void generateCredentials() throws NoSuchAlgorithmException {
+        synchronized (this.credentials) {
+            this.credentials.regenerate();
+            this.cryostat
+                    .get()
+                    .submitCredentials(this.credentials)
+                    .thenAccept(i -> log.info("Defined credentials with id {}", i));
         }
     }
 
@@ -221,10 +219,6 @@ class WebServer implements Consumer<RegistrationEvent> {
         static final String user = "agent";
         byte[] passHash;
         char[] pass;
-
-        Credentials() throws NoSuchAlgorithmException {
-            regenerate();
-        }
 
         synchronized boolean checkUserInfo(String username, String password)
                 throws NoSuchAlgorithmException {

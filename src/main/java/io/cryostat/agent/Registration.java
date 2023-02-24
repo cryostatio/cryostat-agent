@@ -54,6 +54,7 @@ import java.util.function.Consumer;
 import io.cryostat.agent.model.DiscoveryNode;
 import io.cryostat.agent.model.PluginInfo;
 
+import org.apache.http.client.utils.URIBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -65,6 +66,7 @@ class Registration {
 
     private final ScheduledExecutorService executor;
     private final CryostatClient cryostat;
+    private final URI callback;
     private final WebServer webServer;
     private final String jvmId;
     private final String appName;
@@ -77,9 +79,12 @@ class Registration {
     private final PluginInfo pluginInfo = new PluginInfo();
     private final Set<Consumer<RegistrationEvent>> listeners = new HashSet<>();
 
+    private int credentialId = -1;
+
     Registration(
             ScheduledExecutorService executor,
             CryostatClient cryostat,
+            URI callback,
             WebServer webServer,
             String jvmId,
             String appName,
@@ -90,6 +95,7 @@ class Registration {
             int registrationRetryMs) {
         this.executor = executor;
         this.cryostat = cryostat;
+        this.callback = callback;
         this.webServer = webServer;
         this.jvmId = jvmId;
         this.appName = appName;
@@ -110,29 +116,65 @@ class Registration {
     }
 
     void tryRegister() {
-        Future<Void> f =
-                cryostat.register(pluginInfo)
-                        .handleAsync(
-                                (plugin, t) -> {
-                                    if (plugin != null) {
-                                        boolean previouslyRegistered =
-                                                this.pluginInfo.isInitialized();
-                                        this.pluginInfo.copyFrom(plugin);
-                                        log.info("Registered as {}", this.pluginInfo.getId());
-                                        notify(
-                                                previouslyRegistered
-                                                        ? RegistrationEvent.State.REFRESHED
-                                                        : RegistrationEvent.State.REGISTERED);
-                                        tryUpdate();
-                                    } else if (t != null) {
-                                        this.pluginInfo.clear();
-                                        notify(RegistrationEvent.State.UNREGISTERED);
-                                        throw new RegistrationException(t);
-                                    }
+        CompletableFuture<Integer> creds;
+        if (this.credentialId > -1) {
+            creds = CompletableFuture.completedFuture(this.credentialId);
+        } else {
+            creds =
+                    cryostat.submitCredentials(webServer.getCredentials())
+                            .handle(
+                                    (id, t) -> {
+                                        if (t != null) {
+                                            log.error("Failed to submit credentials", t);
+                                        }
+                                        this.credentialId = id;
+                                        return id;
+                                    });
+        }
+        CompletableFuture<Void> f =
+                creds.thenComposeAsync(
+                        credentialId -> {
+                            this.credentialId = credentialId;
+                            try {
+                                URI credentialedCallback =
+                                        new URIBuilder(callback)
+                                                .setUserInfo(
+                                                        "storedcredentials",
+                                                        String.valueOf(credentialId))
+                                                .build();
+                                return cryostat.register(pluginInfo, credentialedCallback)
+                                        .handleAsync(
+                                                (plugin, t) -> {
+                                                    if (plugin != null) {
+                                                        boolean previouslyRegistered =
+                                                                this.pluginInfo.isInitialized();
+                                                        this.pluginInfo.copyFrom(plugin);
+                                                        log.info(
+                                                                "Registered as {}",
+                                                                this.pluginInfo.getId());
+                                                        notify(
+                                                                previouslyRegistered
+                                                                        ? RegistrationEvent.State
+                                                                                .REFRESHED
+                                                                        : RegistrationEvent.State
+                                                                                .REGISTERED);
+                                                        tryUpdate();
+                                                    } else if (t != null) {
+                                                        this.pluginInfo.clear();
+                                                        notify(
+                                                                RegistrationEvent.State
+                                                                        .UNREGISTERED);
+                                                        throw new RegistrationException(t);
+                                                    }
 
-                                    return (Void) null;
-                                },
-                                executor);
+                                                    return (Void) null;
+                                                },
+                                                executor);
+                            } catch (URISyntaxException use) {
+                                return CompletableFuture.failedFuture(use);
+                            }
+                        },
+                        executor);
         try {
             f.get();
         } catch (ExecutionException | InterruptedException e) {
@@ -197,7 +239,7 @@ class Registration {
                         .startInstant()
                         .orElse(Instant.EPOCH)
                         .getEpochSecond();
-        URI uri = webServer.getCallback();
+        URI uri = callback;
         if (preferJmx && jmxPort > 0) {
             uri =
                     URI.create(
@@ -208,7 +250,7 @@ class Registration {
         DiscoveryNode.Target target =
                 new DiscoveryNode.Target(
                         realm,
-                        uri,
+                        callback,
                         appName,
                         jvmId,
                         pid,
@@ -229,22 +271,28 @@ class Registration {
             log.info("Deregistration requested before registration complete!");
             return CompletableFuture.completedFuture(null);
         }
-        return cryostat.deregister(pluginInfo)
-                .handleAsync(
-                        (n, t) -> {
-                            if (t != null) {
-                                log.warn(
-                                        "Failed to deregister as Cryostat discovery plugin [{}]",
-                                        this.pluginInfo.getId());
-                            } else {
-                                log.info(
-                                        "Deregistered from Cryostat discovery plugin [{}]",
-                                        this.pluginInfo.getId());
-                            }
-                            this.pluginInfo.clear();
-                            notify(RegistrationEvent.State.UNREGISTERED);
-                            return null;
-                        },
+        return cryostat.deleteCredentials(this.credentialId)
+                .thenComposeAsync(
+                        v ->
+                                cryostat.deregister(pluginInfo)
+                                        .handleAsync(
+                                                (n, t) -> {
+                                                    if (t != null) {
+                                                        log.warn(
+                                                                "Failed to deregister as Cryostat"
+                                                                        + " discovery plugin [{}]",
+                                                                this.pluginInfo.getId());
+                                                    } else {
+                                                        log.info(
+                                                                "Deregistered from Cryostat"
+                                                                        + " discovery plugin [{}]",
+                                                                this.pluginInfo.getId());
+                                                    }
+                                                    this.pluginInfo.clear();
+                                                    notify(RegistrationEvent.State.UNREGISTERED);
+                                                    return null;
+                                                },
+                                                executor),
                         executor);
     }
 

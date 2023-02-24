@@ -105,16 +105,12 @@ public abstract class MainModule {
     @Provides
     @Singleton
     public static WebServer provideWebServer(
+            Lazy<CryostatClient> cryostat,
             ScheduledExecutorService executor,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_HOST) String host,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_PORT) int port,
-            @Named(ConfigModule.CRYOSTAT_AGENT_CALLBACK) URI callback,
             Lazy<Registration> registration) {
-        try {
-            return new WebServer(executor, host, port, callback, registration);
-        } catch (NoSuchAlgorithmException nsae) {
-            throw new RuntimeException(nsae);
-        }
+        return new WebServer(cryostat, executor, host, port, registration);
     }
 
     @Provides
@@ -192,14 +188,12 @@ public abstract class MainModule {
             ScheduledExecutorService executor,
             ObjectMapper objectMapper,
             HttpClient http,
-            WebServer webServer,
             @Named(JVM_ID) String jvmId,
             @Named(ConfigModule.CRYOSTAT_AGENT_APP_NAME) String appName,
             @Named(ConfigModule.CRYOSTAT_AGENT_BASEURI) URI baseUri,
             @Named(ConfigModule.CRYOSTAT_AGENT_REALM) String realm,
             @Named(ConfigModule.CRYOSTAT_AGENT_AUTHORIZATION) String authorization) {
-        return new CryostatClient(
-                executor, objectMapper, http, webServer, jvmId, appName, baseUri, realm);
+        return new CryostatClient(executor, objectMapper, http, jvmId, appName, baseUri, realm);
     }
 
     @Provides
@@ -207,6 +201,7 @@ public abstract class MainModule {
     public static Registration provideRegistration(
             ScheduledExecutorService executor,
             CryostatClient cryostat,
+            @Named(ConfigModule.CRYOSTAT_AGENT_CALLBACK) URI callback,
             WebServer webServer,
             @Named(JVM_ID) String jvmId,
             @Named(ConfigModule.CRYOSTAT_AGENT_APP_NAME) String appName,
@@ -218,6 +213,7 @@ public abstract class MainModule {
         return new Registration(
                 executor,
                 cryostat,
+                callback,
                 webServer,
                 jvmId,
                 appName,
