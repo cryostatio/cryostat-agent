@@ -204,7 +204,7 @@ class WebServer implements Consumer<RegistrationEvent> {
         }
 
         @Override
-        public synchronized boolean checkCredentials(String username, String password) {
+        public boolean checkCredentials(String username, String password) {
             try {
                 return WebServer.this.credentials.checkUserInfo(username, password);
             } catch (NoSuchAlgorithmException e) {
