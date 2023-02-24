@@ -134,7 +134,6 @@ class Registration {
         CompletableFuture<Void> f =
                 creds.thenComposeAsync(
                         credentialId -> {
-                            this.credentialId = credentialId;
                             try {
                                 URI credentialedCallback =
                                         new URIBuilder(callback)
