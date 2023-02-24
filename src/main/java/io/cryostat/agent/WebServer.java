@@ -230,10 +230,8 @@ class WebServer implements Consumer<RegistrationEvent> {
         }
 
         synchronized void regenerate() throws NoSuchAlgorithmException {
-            String set = "abcdefghijklmnopqrstuvwxyz-_=[].0123456789";
             String pass =
-                    RandomStringUtils.random(
-                            16, 0, set.length(), true, true, set.toCharArray(), new SecureRandom());
+                    RandomStringUtils.random(32, 33, 126, false, false, null, new SecureRandom());
             this.pass = pass.toCharArray();
             this.passHash =
                     MessageDigest.getInstance("SHA-256")
