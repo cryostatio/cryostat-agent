@@ -262,6 +262,7 @@ class Registration {
             return CompletableFuture.completedFuture(null);
         }
         return cryostat.deleteCredentials(this.credentialId)
+                .thenRun(() -> this.credentialId = -1)
                 .thenCompose(v -> cryostat.deregister(pluginInfo))
                 .handle(
                         (n, t) -> {
