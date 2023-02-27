@@ -170,7 +170,7 @@ public class CryostatClient {
                                                     "password",
                                                     new InputStreamBody(
                                                             new ByteArrayInputStream(
-                                                                    credentials.passBytes()),
+                                                                    credentials.pass()),
                                                             ContentType.TEXT_PLAIN))
                                             .build())
                             .addPart(
