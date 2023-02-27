@@ -267,12 +267,11 @@ class Registration {
                         (n, t) -> {
                             if (t != null) {
                                 log.warn(
-                                        "Failed to deregister as Cryostat"
-                                                + " discovery plugin [{}]",
+                                        "Failed to deregister as Cryostat discovery plugin [{}]",
                                         this.pluginInfo.getId());
                             } else {
                                 log.info(
-                                        "Deregistered from Cryostat" + " discovery plugin [{}]",
+                                        "Deregistered from Cryostat discovery plugin [{}]",
                                         this.pluginInfo.getId());
                             }
                             this.pluginInfo.clear();
