@@ -243,32 +243,32 @@ class WebServer {
             return pass;
         }
 
-        private byte randomAlphabetical(boolean upperCase) throws NoSuchAlgorithmException {
+        synchronized void clear() {
+            Arrays.fill(this.pass, (byte) 0);
+        }
+
+        private static byte randomAlphabetical(boolean upperCase) throws NoSuchAlgorithmException {
             return randomChar(upperCase ? 'A' : 'a', 26);
         }
 
-        private byte randomNumeric() throws NoSuchAlgorithmException {
+        private static byte randomNumeric() throws NoSuchAlgorithmException {
             return randomChar('0', 10);
         }
 
-        private byte randomSymbol() throws NoSuchAlgorithmException {
+        private static byte randomSymbol() throws NoSuchAlgorithmException {
             return randomChar(33, 14);
         }
 
-        private byte randomChar(int offset, int range) throws NoSuchAlgorithmException {
+        private static byte randomChar(int offset, int range) throws NoSuchAlgorithmException {
             return (byte) (SecureRandom.getInstanceStrong().nextInt(range) + offset);
         }
 
-        private byte[] hash(String pass) throws NoSuchAlgorithmException {
+        private static byte[] hash(String pass) throws NoSuchAlgorithmException {
             return hash(pass.getBytes(StandardCharsets.UTF_8));
         }
 
-        private byte[] hash(byte[] bytes) throws NoSuchAlgorithmException {
+        private static byte[] hash(byte[] bytes) throws NoSuchAlgorithmException {
             return MessageDigest.getInstance("SHA-256").digest(bytes);
-        }
-
-        synchronized void clear() {
-            Arrays.fill(this.pass, (byte) 0);
         }
     }
 }
