@@ -230,6 +230,9 @@ public class Agent {
                         .orTimeout(exitDeregistrationTimeout, TimeUnit.MILLISECONDS)
                         .handle(
                                 (v, t) -> {
+                                    if (t != null) {
+                                        log.warn("Exception during deregistration", t);
+                                    }
                                     try {
                                         log.info("Shutting down...");
                                         safeCall(webServer::stop);
