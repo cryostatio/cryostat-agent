@@ -203,18 +203,33 @@ class WebServer {
 
         synchronized void regenerate() throws NoSuchAlgorithmException {
             this.clear();
+            final SecureRandom r = SecureRandom.getInstanceStrong();
             final int len = 24;
+
             this.pass = new char[len];
-            this.pass[0] = randomSymbol();
-            this.pass[1] = randomSymbol();
-            this.pass[2] = randomNumeric();
-            this.pass[3] = randomNumeric();
-            for (int i = 4; i < len; i++) {
-                pass[i] = randomAlphabetical(SecureRandom.getInstanceStrong().nextDouble() > 0.5);
+            int idx = 0;
+
+            // 2-5 special characters
+            for (int i = 0; i < r.nextInt(3) + 2; i++) {
+                this.pass[i] = randomSymbol();
+                idx++;
             }
+
+            // 2-5 numeric characters
+            for (int i = idx; i < r.nextInt(3) + 2; i++) {
+                this.pass[i] = randomNumeric();
+                idx++;
+            }
+
+            // remaining slots alphabetical characters of roughly even upper and lower case
+            for (int i = idx; i < len; i++) {
+                pass[i] = randomAlphabetical(r.nextDouble() > 0.5);
+            }
+
+            // randomly shuffle the characters
             // https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle
             for (int i = this.pass.length - 1; i > 1; i--) {
-                int j = SecureRandom.getInstanceStrong().nextInt(i);
+                int j = r.nextInt(i);
                 char c = this.pass[i];
                 this.pass[i] = this.pass[j];
                 this.pass[j] = c;
