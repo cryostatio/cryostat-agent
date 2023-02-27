@@ -228,7 +228,7 @@ public class Agent {
                 registration
                         .deregister()
                         .orTimeout(exitDeregistrationTimeout, TimeUnit.MILLISECONDS)
-                        .handleAsync(
+                        .handle(
                                 (v, t) -> {
                                     try {
                                         log.info("Shutting down...");
@@ -245,8 +245,7 @@ public class Agent {
                                         }
                                     }
                                     return null;
-                                },
-                                executor);
+                                });
             }
         }
 
