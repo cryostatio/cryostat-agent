@@ -207,23 +207,22 @@ class WebServer {
             final int len = 24;
 
             this.pass = new char[len];
-            int idx = 0;
 
-            // 2-5 special characters
-            for (int i = 0; i < r.nextInt(3) + 2; i++) {
-                this.pass[i] = randomSymbol();
-                idx++;
-            }
+            // guarantee at least one character from each class
+            this.pass[0] = randomSymbol();
+            this.pass[1] = randomNumeric();
+            this.pass[2] = randomAlphabetical(r.nextBoolean());
 
-            // 2-5 numeric characters
-            for (int i = idx; i < r.nextInt(3) + 2; i++) {
-                this.pass[i] = randomNumeric();
-                idx++;
-            }
-
-            // remaining slots alphabetical characters of roughly even upper and lower case
-            for (int i = idx; i < len; i++) {
-                pass[i] = randomAlphabetical(r.nextDouble() > 0.5);
+            // fill remaining slots with randomly assigned characters across classes
+            for (int i = 3; i < len; i++) {
+                int s = r.nextInt(3);
+                if (s == 0) {
+                    this.pass[i] = randomSymbol();
+                } else if (s == 1) {
+                    this.pass[i] = randomNumeric();
+                } else {
+                    this.pass[i] = randomAlphabetical(r.nextBoolean());
+                }
             }
 
             // randomly shuffle the characters
