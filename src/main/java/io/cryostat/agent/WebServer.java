@@ -41,7 +41,6 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
-import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -193,9 +192,9 @@ class WebServer {
 
     static class Credentials {
 
-        static final String user = "agent";
-        byte[] passHash;
-        char[] pass;
+        private static final String user = "agent";
+        private byte[] passHash = new byte[0];
+        private char[] pass = new char[0];
 
         synchronized boolean checkUserInfo(String username, String password)
                 throws NoSuchAlgorithmException {
@@ -219,6 +218,21 @@ class WebServer {
             this.passHash = hash(pass);
         }
 
+        String user() {
+            return user;
+        }
+
+        synchronized byte[] passBytes() {
+            return bytes(pass);
+        }
+
+        private byte[] bytes(char[] chars) {
+            CharBuffer charBuffer = CharBuffer.wrap(chars);
+            ByteBuffer byteBuffer = StandardCharsets.UTF_8.encode(charBuffer);
+            return Arrays.copyOfRange(
+                    byteBuffer.array(), byteBuffer.position(), byteBuffer.limit());
+        }
+
         private char randomAlphabetical(boolean upperCase) throws NoSuchAlgorithmException {
             return randomChar(upperCase ? 'A' : 'a', 26);
         }
@@ -236,22 +250,15 @@ class WebServer {
         }
 
         private byte[] hash(String pass) throws NoSuchAlgorithmException {
-            return MessageDigest.getInstance("SHA-256")
-                    .digest(pass.getBytes(StandardCharsets.UTF_8));
+            return hash(pass.toCharArray());
         }
 
         private byte[] hash(char[] pass) throws NoSuchAlgorithmException {
-            CharBuffer cb = CharBuffer.wrap(pass);
-            ByteBuffer bb = Charset.forName(StandardCharsets.UTF_8.name()).encode(cb);
-            byte[] bytes = Arrays.copyOfRange(bb.array(), bb.position(), bb.limit());
-            return MessageDigest.getInstance("SHA-256").digest(bytes);
+            return MessageDigest.getInstance("SHA-256").digest(bytes(pass));
         }
 
         synchronized void clear() {
-            if (pass != null) {
-                Arrays.fill(this.pass, '\u0000');
-                this.pass = null;
-            }
+            Arrays.fill(this.pass, '\u0000');
         }
     }
 }
