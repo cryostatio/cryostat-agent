@@ -126,7 +126,9 @@ class Registration {
                                     (id, t) -> {
                                         if (t != null) {
                                             log.error("Failed to submit credentials", t);
+                                            throw new RegistrationException(t);
                                         }
+                                        log.info("Submitted credentials with id {}", id);
                                         this.credentialId = id;
                                         return id;
                                     });
