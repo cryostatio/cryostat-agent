@@ -46,9 +46,6 @@ import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.Objects;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.function.Consumer;
-
-import io.cryostat.agent.Registration.RegistrationEvent;
 
 import com.sun.net.httpserver.BasicAuthenticator;
 import com.sun.net.httpserver.Filter;
@@ -62,7 +59,7 @@ import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-class WebServer implements Consumer<RegistrationEvent> {
+class WebServer {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
@@ -147,8 +144,6 @@ class WebServer implements Consumer<RegistrationEvent> {
                                                 exchange.getRequestURI().getPath(),
                                                 exchange.getResponseCode())));
 
-        this.registration.get().addRegistrationListener(this);
-
         this.http.start();
     }
 
@@ -169,29 +164,8 @@ class WebServer implements Consumer<RegistrationEvent> {
             this.cryostat
                     .get()
                     .submitCredentials(this.credentials)
-                    .thenAccept(i -> log.info("Defined credentials with id {}", i));
-        }
-    }
-
-    @Override
-    public void accept(RegistrationEvent t) {
-        switch (t.state) {
-            case PUBLISHED:
-                // once we have successfully registered and published, the Cryostat server has been
-                // fully informed of our presence and the credentials we expect to be presented on
-                // HTTP API communications back to us. So, we clear these credentials out of memory
-                // - the username and a hash of the password are held, but the password itself is
-                // dropped.
-                this.credentials.clear();
-                break;
-            case REFRESHED:
-                break;
-            case UNREGISTERED:
-                break;
-            case REGISTERED:
-                break;
-            default:
-                break;
+                    .thenAccept(i -> log.info("Defined credentials with id {}", i))
+                    .thenRun(this.credentials::clear);
         }
     }
 
