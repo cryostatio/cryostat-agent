@@ -39,8 +39,6 @@ package io.cryostat.agent;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.nio.ByteBuffer;
-import java.nio.CharBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -193,7 +191,7 @@ class WebServer {
 
         private static final String user = "agent";
         private byte[] passHash = new byte[0];
-        private char[] pass = new char[0];
+        private byte[] pass = new byte[0];
 
         synchronized boolean checkUserInfo(String username, String password)
                 throws NoSuchAlgorithmException {
@@ -206,7 +204,7 @@ class WebServer {
             final SecureRandom r = SecureRandom.getInstanceStrong();
             final int len = 24;
 
-            this.pass = new char[len];
+            this.pass = new byte[len];
 
             // guarantee at least one character from each class
             this.pass[0] = randomSymbol();
@@ -229,55 +227,48 @@ class WebServer {
             // https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle
             for (int i = this.pass.length - 1; i > 1; i--) {
                 int j = r.nextInt(i);
-                char c = this.pass[i];
+                byte b = this.pass[i];
                 this.pass[i] = this.pass[j];
-                this.pass[j] = c;
+                this.pass[j] = b;
             }
 
-            this.passHash = hash(pass);
+            this.passHash = hash(this.pass);
         }
 
         String user() {
             return user;
         }
 
-        synchronized byte[] passBytes() {
-            return bytes(pass);
+        byte[] passBytes() {
+            return pass;
         }
 
-        private byte[] bytes(char[] chars) {
-            CharBuffer charBuffer = CharBuffer.wrap(chars);
-            ByteBuffer byteBuffer = StandardCharsets.UTF_8.encode(charBuffer);
-            return Arrays.copyOfRange(
-                    byteBuffer.array(), byteBuffer.position(), byteBuffer.limit());
-        }
-
-        private char randomAlphabetical(boolean upperCase) throws NoSuchAlgorithmException {
+        private byte randomAlphabetical(boolean upperCase) throws NoSuchAlgorithmException {
             return randomChar(upperCase ? 'A' : 'a', 26);
         }
 
-        private char randomNumeric() throws NoSuchAlgorithmException {
+        private byte randomNumeric() throws NoSuchAlgorithmException {
             return randomChar('0', 10);
         }
 
-        private char randomSymbol() throws NoSuchAlgorithmException {
+        private byte randomSymbol() throws NoSuchAlgorithmException {
             return randomChar(33, 14);
         }
 
-        private char randomChar(int offset, int range) throws NoSuchAlgorithmException {
-            return (char) (SecureRandom.getInstanceStrong().nextInt(range) + offset);
+        private byte randomChar(int offset, int range) throws NoSuchAlgorithmException {
+            return (byte) (SecureRandom.getInstanceStrong().nextInt(range) + offset);
         }
 
         private byte[] hash(String pass) throws NoSuchAlgorithmException {
-            return hash(pass.toCharArray());
+            return hash(pass.getBytes(StandardCharsets.UTF_8));
         }
 
-        private byte[] hash(char[] pass) throws NoSuchAlgorithmException {
-            return MessageDigest.getInstance("SHA-256").digest(bytes(pass));
+        private byte[] hash(byte[] bytes) throws NoSuchAlgorithmException {
+            return MessageDigest.getInstance("SHA-256").digest(bytes);
         }
 
         synchronized void clear() {
-            Arrays.fill(this.pass, '\u0000');
+            Arrays.fill(this.pass, (byte) 0);
         }
     }
 }
