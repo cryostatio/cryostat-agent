@@ -50,7 +50,6 @@
   <com.google.dagger.compiler.version>2.45</com.google.dagger.compiler.version>
   <io.cryostat.core.version>2.19.1</io.cryostat.core.version>
 
-  <org.apache.commons.lang3.version>3.12.0</org.apache.commons.lang3.version>
   <org.apache.commons.io.version>2.11.0</org.apache.commons.io.version>
   <org.apache.httpcomponents.httpclient.version>4.5.13</org.apache.httpcomponents.httpclient.version>
   <org.apache.httpcomponents.httpmime.version>${org.apache.httpcomponents.httpclient.version}</org.apache.httpcomponents.httpmime.version>
@@ -80,11 +79,6 @@
     <groupId>com.google.dagger</groupId>
     <artifactId>dagger</artifactId>
     <version>${com.google.dagger.version}</version>
-  </dependency>
-  <dependency>
-    <groupId>org.apache.commons</groupId>
-    <artifactId>commons-lang3</artifactId>
-    <version>${org.apache.commons.lang3.version}</version>
   </dependency>
   <dependency>
     <groupId>commons-io</groupId>

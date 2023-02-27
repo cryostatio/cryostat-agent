@@ -56,7 +56,6 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 import dagger.Lazy;
-import org.apache.commons.lang3.ArrayUtils;
 import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -213,7 +212,13 @@ class WebServer {
             for (int i = 4; i < len; i++) {
                 pass[i] = randomAlphabetical(SecureRandom.getInstanceStrong().nextDouble() > 0.5);
             }
-            ArrayUtils.shuffle(this.pass);
+            // https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle
+            for (int i = this.pass.length - 1; i > 1; i--) {
+                int j = SecureRandom.getInstanceStrong().nextInt(i);
+                char c = this.pass[i];
+                this.pass[i] = this.pass[j];
+                this.pass[j] = c;
+            }
 
             this.passHash = hash(pass);
         }
