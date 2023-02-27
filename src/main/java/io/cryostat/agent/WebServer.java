@@ -39,6 +39,9 @@ package io.cryostat.agent;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -54,7 +57,7 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 import dagger.Lazy;
-import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.ArrayUtils;
 import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -201,10 +204,35 @@ class WebServer {
         }
 
         synchronized void regenerate() throws NoSuchAlgorithmException {
-            String pass =
-                    RandomStringUtils.random(32, 33, 126, false, false, null, new SecureRandom());
-            this.pass = pass.toCharArray();
+            this.clear();
+            final int len = 24;
+            this.pass = new char[len];
+            this.pass[0] = randomSymbol();
+            this.pass[1] = randomSymbol();
+            this.pass[2] = randomNumeric();
+            this.pass[3] = randomNumeric();
+            for (int i = 4; i < len; i++) {
+                pass[i] = randomAlphabetical(SecureRandom.getInstanceStrong().nextDouble() > 0.5);
+            }
+            ArrayUtils.shuffle(this.pass);
+
             this.passHash = hash(pass);
+        }
+
+        private char randomAlphabetical(boolean upperCase) throws NoSuchAlgorithmException {
+            return randomChar(upperCase ? 'A' : 'a', 26);
+        }
+
+        private char randomNumeric() throws NoSuchAlgorithmException {
+            return randomChar('0', 10);
+        }
+
+        private char randomSymbol() throws NoSuchAlgorithmException {
+            return randomChar(33, 14);
+        }
+
+        private char randomChar(int offset, int range) throws NoSuchAlgorithmException {
+            return (char) (SecureRandom.getInstanceStrong().nextInt(range) + offset);
         }
 
         private byte[] hash(String pass) throws NoSuchAlgorithmException {
@@ -212,12 +240,17 @@ class WebServer {
                     .digest(pass.getBytes(StandardCharsets.UTF_8));
         }
 
+        private byte[] hash(char[] pass) throws NoSuchAlgorithmException {
+            CharBuffer cb = CharBuffer.wrap(pass);
+            ByteBuffer bb = Charset.forName(StandardCharsets.UTF_8.name()).encode(cb);
+            byte[] bytes = Arrays.copyOfRange(bb.array(), bb.position(), bb.limit());
+            return MessageDigest.getInstance("SHA-256").digest(bytes);
+        }
+
         synchronized void clear() {
             if (pass != null) {
-                for (int i = 0; i < pass.length; i++) {
-                    pass[i] = '\0';
-                }
-                pass = null;
+                Arrays.fill(this.pass, '\u0000');
+                this.pass = null;
             }
         }
     }
