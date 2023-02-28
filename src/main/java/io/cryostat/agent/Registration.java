@@ -79,7 +79,7 @@ class Registration {
     private final PluginInfo pluginInfo = new PluginInfo();
     private final Set<Consumer<RegistrationEvent>> listeners = new HashSet<>();
 
-    private int credentialId = -1;
+    private volatile int credentialId = -1;
 
     Registration(
             ScheduledExecutorService executor,

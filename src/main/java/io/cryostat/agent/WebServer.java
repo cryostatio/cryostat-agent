@@ -239,7 +239,7 @@ class WebServer {
             return user;
         }
 
-        byte[] pass() {
+        synchronized byte[] pass() {
             return pass;
         }
 
