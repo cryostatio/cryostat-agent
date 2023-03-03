@@ -43,6 +43,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.Objects;
 import java.util.concurrent.ScheduledExecutorService;
@@ -125,23 +126,29 @@ class WebServer {
         pingCtx.setAuthenticator(new AgentAuthenticator());
         pingCtx.getFilters()
                 .add(
-                        Filter.beforeHandler(
-                                "beforeLog",
-                                exchange ->
-                                        log.info(
-                                                "{} {}",
-                                                exchange.getRequestMethod(),
-                                                exchange.getRequestURI().getPath())));
-        pingCtx.getFilters()
-                .add(
-                        Filter.afterHandler(
-                                "afterLog",
-                                exchange ->
-                                        log.info(
-                                                "{} {} : {}",
-                                                exchange.getRequestMethod(),
-                                                exchange.getRequestURI().getPath(),
-                                                exchange.getResponseCode())));
+                        new Filter() {
+                            @Override
+                            public void doFilter(HttpExchange exchange, Chain chain)
+                                    throws IOException {
+                                long start = System.nanoTime();
+                                String requestMethod = exchange.getRequestMethod();
+                                String path = exchange.getRequestURI().getPath();
+                                log.info("{} {}", requestMethod, path);
+                                chain.doFilter(exchange);
+                                long elapsed = System.nanoTime() - start;
+                                log.info(
+                                        "{} {} : {} {}ms",
+                                        requestMethod,
+                                        path,
+                                        exchange.getResponseCode(),
+                                        Duration.ofNanos(elapsed).toMillis());
+                            }
+
+                            @Override
+                            public String description() {
+                                return "requestLog";
+                            }
+                        });
 
         this.http.start();
     }
