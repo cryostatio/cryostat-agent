@@ -79,7 +79,7 @@ public abstract class ConfigModule {
     public static final String CRYOSTAT_AGENT_HOSTNAME = "cryostat.agent.hostname";
     public static final String CRYOSTAT_AGENT_APP_JMX_PORT = "cryostat.agent.app.jmx.port";
     public static final String CRYOSTAT_AGENT_REGISTRATION_PREFER_JMX =
-            "cryostat.agent.app.registration.prefer-jmx";
+            "cryostat.agent.registration.prefer-jmx";
     public static final String CRYOSTAT_AGENT_REGISTRATION_RETRY_MS =
             "cryostat.agent.registration.retry-ms";
     public static final String CRYOSTAT_AGENT_EXIT_SIGNALS = "cryostat.agent.exit.signals";
