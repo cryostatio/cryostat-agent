@@ -240,7 +240,7 @@ class Registration {
         DiscoveryNode.Target target =
                 new DiscoveryNode.Target(
                         realm,
-                        callback,
+                        uri,
                         appName,
                         jvmId,
                         pid,
