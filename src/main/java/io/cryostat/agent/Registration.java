@@ -38,6 +38,7 @@
 package io.cryostat.agent;
 
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.UnknownHostException;
 import java.time.Duration;
 import java.time.Instant;
@@ -53,6 +54,7 @@ import java.util.function.Consumer;
 import io.cryostat.agent.model.DiscoveryNode;
 import io.cryostat.agent.model.PluginInfo;
 
+import org.apache.http.client.utils.URIBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -64,34 +66,42 @@ class Registration {
 
     private final ScheduledExecutorService executor;
     private final CryostatClient cryostat;
+    private final URI callback;
+    private final WebServer webServer;
     private final String jvmId;
     private final String appName;
     private final String realm;
     private final String hostname;
-    private final URI callback;
+    private final boolean preferJmx;
     private final int jmxPort;
     private final int registrationRetryMs;
 
     private final PluginInfo pluginInfo = new PluginInfo();
     private final Set<Consumer<RegistrationEvent>> listeners = new HashSet<>();
 
+    private volatile int credentialId = -1;
+
     Registration(
             ScheduledExecutorService executor,
             CryostatClient cryostat,
+            URI callback,
+            WebServer webServer,
             String jvmId,
             String appName,
             String realm,
             String hostname,
-            URI callback,
+            boolean preferJmx,
             int jmxPort,
             int registrationRetryMs) {
         this.executor = executor;
         this.cryostat = cryostat;
+        this.callback = callback;
+        this.webServer = webServer;
         this.jvmId = jvmId;
         this.appName = appName;
         this.realm = realm;
         this.hostname = hostname;
-        this.callback = callback;
+        this.preferJmx = preferJmx;
         this.jmxPort = jmxPort;
         this.registrationRetryMs = registrationRetryMs;
     }
@@ -106,9 +116,38 @@ class Registration {
     }
 
     void tryRegister() {
-        Future<Void> f =
-                cryostat.register(pluginInfo)
-                        .handleAsync(
+        CompletableFuture<Integer> creds;
+        if (this.credentialId > -1) {
+            creds = CompletableFuture.completedFuture(this.credentialId);
+        } else {
+            creds =
+                    cryostat.submitCredentials(webServer.getCredentials())
+                            .handle(
+                                    (id, t) -> {
+                                        if (t != null) {
+                                            log.error("Failed to submit credentials", t);
+                                            throw new RegistrationException(t);
+                                        }
+                                        log.info("Submitted credentials with id {}", id);
+                                        this.credentialId = id;
+                                        return id;
+                                    });
+        }
+        CompletableFuture<Void> f =
+                creds.thenApply(
+                                id -> {
+                                    try {
+                                        return new URIBuilder(callback)
+                                                .setUserInfo(
+                                                        "storedcredentials",
+                                                        String.valueOf(credentialId))
+                                                .build();
+                                    } catch (URISyntaxException use) {
+                                        throw new RegistrationException(use);
+                                    }
+                                })
+                        .thenCompose(callback -> cryostat.register(pluginInfo, callback))
+                        .handle(
                                 (plugin, t) -> {
                                     if (plugin != null) {
                                         boolean previouslyRegistered =
@@ -127,8 +166,7 @@ class Registration {
                                     }
 
                                     return (Void) null;
-                                },
-                                executor);
+                                });
         try {
             f.get();
         } catch (ExecutionException | InterruptedException e) {
@@ -146,32 +184,31 @@ class Registration {
         DiscoveryNode selfNode;
         try {
             selfNode = defineSelf();
-        } catch (UnknownHostException uhe) {
-            log.error("Unable to define self", uhe);
+        } catch (UnknownHostException | URISyntaxException e) {
+            log.error("Unable to define self", e);
             return;
         }
         log.info("publishing self as {}", selfNode.getTarget().getConnectUrl());
         Future<Void> f =
                 cryostat.update(pluginInfo, Set.of(selfNode))
-                        .handleAsync(
+                        .handle(
                                 (n, t) -> {
                                     if (t != null) {
                                         log.error("Update failure", t);
                                         deregister()
-                                                .thenRunAsync(
+                                                .thenRun(
                                                         () -> {
                                                             executor.schedule(
                                                                     this::tryRegister,
                                                                     registrationRetryMs,
                                                                     TimeUnit.MILLISECONDS);
-                                                        },
-                                                        executor);
+                                                        });
                                     } else {
                                         log.info("Publish success");
+                                        notify(RegistrationEvent.State.PUBLISHED);
                                     }
                                     return (Void) null;
-                                },
-                                executor);
+                                });
         try {
             f.get();
         } catch (ExecutionException | InterruptedException e) {
@@ -179,7 +216,7 @@ class Registration {
         }
     }
 
-    private DiscoveryNode defineSelf() throws UnknownHostException {
+    private DiscoveryNode defineSelf() throws UnknownHostException, URISyntaxException {
         long pid = ProcessHandle.current().pid();
         String javaMain = System.getProperty("sun.java.command", System.getenv("JAVA_MAIN_CLASS"));
         if (StringUtils.isBlank(javaMain)) {
@@ -192,19 +229,25 @@ class Registration {
                         .startInstant()
                         .orElse(Instant.EPOCH)
                         .getEpochSecond();
-        URI uri;
-        if (jmxPort > 0) {
+        URI uri = callback;
+        if (preferJmx && jmxPort > 0) {
             uri =
                     URI.create(
                             String.format(
                                     "service:jmx:rmi:///jndi/rmi://%s:%d/jmxrmi",
                                     hostname, jmxPort));
-        } else {
-            uri = callback;
         }
         DiscoveryNode.Target target =
                 new DiscoveryNode.Target(
-                        realm, uri, appName, jvmId, pid, hostname, jmxPort, javaMain, startTime);
+                        realm,
+                        uri,
+                        appName,
+                        jvmId,
+                        pid,
+                        hostname,
+                        uri.getPort(),
+                        javaMain,
+                        startTime);
 
         DiscoveryNode selfNode =
                 new DiscoveryNode(appName + "-" + pluginInfo.getId(), NODE_TYPE, target);
@@ -218,8 +261,10 @@ class Registration {
             log.info("Deregistration requested before registration complete!");
             return CompletableFuture.completedFuture(null);
         }
-        return cryostat.deregister(pluginInfo)
-                .handleAsync(
+        return cryostat.deleteCredentials(this.credentialId)
+                .thenRun(() -> this.credentialId = -1)
+                .thenCompose(v -> cryostat.deregister(pluginInfo))
+                .handle(
                         (n, t) -> {
                             if (t != null) {
                                 log.warn(
@@ -233,8 +278,7 @@ class Registration {
                             this.pluginInfo.clear();
                             notify(RegistrationEvent.State.UNREGISTERED);
                             return null;
-                        },
-                        executor);
+                        });
     }
 
     private void notify(RegistrationEvent.State state) {
@@ -246,6 +290,7 @@ class Registration {
 
         enum State {
             REGISTERED,
+            PUBLISHED,
             UNREGISTERED,
             REFRESHED,
         }

@@ -38,6 +38,7 @@
 package io.cryostat.agent;
 
 import java.io.BufferedInputStream;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -54,6 +55,7 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
 import java.util.function.Function;
 
+import io.cryostat.agent.WebServer.Credentials;
 import io.cryostat.agent.model.DiscoveryNode;
 import io.cryostat.agent.model.PluginInfo;
 import io.cryostat.agent.model.RegistrationInfo;
@@ -63,6 +65,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.input.CountingInputStream;
+import org.apache.http.HttpHeaders;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpDelete;
@@ -80,7 +83,8 @@ import org.slf4j.LoggerFactory;
 
 public class CryostatClient {
 
-    private static final String API_PATH = "/api/v2.2/discovery";
+    private static final String DISCOVERY_API_PATH = "/api/v2.2/discovery";
+    private static final String CREDENTIALS_API_PATH = "/api/v2.2/credentials";
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
@@ -91,17 +95,15 @@ public class CryostatClient {
     private final String appName;
     private final String jvmId;
     private final URI baseUri;
-    private final URI callback;
     private final String realm;
 
     CryostatClient(
             Executor executor,
-            HttpClient http,
             ObjectMapper mapper,
+            HttpClient http,
             String jvmId,
             String appName,
             URI baseUri,
-            URI callback,
             String realm) {
         this.executor = executor;
         this.mapper = mapper;
@@ -109,22 +111,21 @@ public class CryostatClient {
         this.jvmId = jvmId;
         this.appName = appName;
         this.baseUri = baseUri;
-        this.callback = callback;
         this.realm = realm;
 
         log.info("Using Cryostat baseuri {}", baseUri);
     }
 
-    public CompletableFuture<PluginInfo> register(PluginInfo pluginInfo) {
-        RegistrationInfo registrationInfo =
-                new RegistrationInfo(pluginInfo.getId(), realm, callback, pluginInfo.getToken());
+    public CompletableFuture<PluginInfo> register(PluginInfo pluginInfo, URI callback) {
         try {
-            HttpPost req = new HttpPost(baseUri.resolve(API_PATH));
+            RegistrationInfo registrationInfo =
+                    new RegistrationInfo(
+                            pluginInfo.getId(), realm, callback, pluginInfo.getToken());
+            HttpPost req = new HttpPost(baseUri.resolve(DISCOVERY_API_PATH));
             req.setEntity(
                     new StringEntity(
                             mapper.writeValueAsString(registrationInfo),
                             ContentType.APPLICATION_JSON));
-            log.info("{}", req);
             return supply(req, (res) -> logResponse(req, res))
                     .thenApply(res -> assertOkStatus(req, res))
                     .thenApply(
@@ -152,11 +153,56 @@ public class CryostatClient {
         }
     }
 
+    public CompletableFuture<Integer> submitCredentials(Credentials credentials) {
+        synchronized (credentials) {
+            HttpPost req = new HttpPost(baseUri.resolve(CREDENTIALS_API_PATH));
+            MultipartEntityBuilder entityBuilder =
+                    MultipartEntityBuilder.create()
+                            .addPart(
+                                    FormBodyPartBuilder.create(
+                                                    "username",
+                                                    new StringBody(
+                                                            credentials.user(),
+                                                            ContentType.TEXT_PLAIN))
+                                            .build())
+                            .addPart(
+                                    FormBodyPartBuilder.create(
+                                                    "password",
+                                                    new InputStreamBody(
+                                                            new ByteArrayInputStream(
+                                                                    credentials.pass()),
+                                                            ContentType.TEXT_PLAIN))
+                                            .build())
+                            .addPart(
+                                    FormBodyPartBuilder.create(
+                                                    "matchExpression",
+                                                    new StringBody(
+                                                            String.format(
+                                                                    "target.jvmId == \"%s\"",
+                                                                    this.jvmId),
+                                                            ContentType.TEXT_PLAIN))
+                                            .build());
+            req.setEntity(entityBuilder.build());
+            return supply(req, (res) -> logResponse(req, res))
+                    .thenApply(res -> assertOkStatus(req, res))
+                    .thenApply(res -> res.getFirstHeader(HttpHeaders.LOCATION).getValue())
+                    .thenApply(res -> res.substring(res.lastIndexOf('/') + 1, res.length()))
+                    .thenApply(Integer::valueOf);
+        }
+    }
+
+    public CompletableFuture<Void> deleteCredentials(int id) {
+        HttpDelete req = new HttpDelete(baseUri.resolve(CREDENTIALS_API_PATH + "/" + id));
+        return supply(req, (res) -> logResponse(req, res))
+                .thenApply(res -> assertOkStatus(req, res))
+                .thenApply(res -> null);
+    }
+
     public CompletableFuture<Void> deregister(PluginInfo pluginInfo) {
         HttpDelete req =
                 new HttpDelete(
                         baseUri.resolve(
-                                API_PATH
+                                DISCOVERY_API_PATH
                                         + "/"
                                         + pluginInfo.getId()
                                         + "?token="
@@ -172,7 +218,7 @@ public class CryostatClient {
             HttpPost req =
                     new HttpPost(
                             baseUri.resolve(
-                                    API_PATH
+                                    DISCOVERY_API_PATH
                                             + "/"
                                             + pluginInfo.getId()
                                             + "?token="

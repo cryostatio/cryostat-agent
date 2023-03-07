@@ -103,13 +103,15 @@ public class Agent {
                                 break;
                             case REFRESHED:
                                 break;
+                            case PUBLISHED:
+                                break;
                             default:
                                 log.error("Unknown registration state: {}", evt.state);
                                 break;
                         }
                     });
-            registration.start();
             webServer.start();
+            registration.start();
             log.info("Startup complete");
         } catch (Exception e) {
             log.error(Agent.class.getSimpleName() + " startup failure", e);
@@ -226,8 +228,11 @@ public class Agent {
                 registration
                         .deregister()
                         .orTimeout(exitDeregistrationTimeout, TimeUnit.MILLISECONDS)
-                        .handleAsync(
+                        .handle(
                                 (v, t) -> {
+                                    if (t != null) {
+                                        log.warn("Exception during deregistration", t);
+                                    }
                                     try {
                                         log.info("Shutting down...");
                                         safeCall(webServer::stop);
@@ -243,8 +248,7 @@ public class Agent {
                                         }
                                     }
                                     return null;
-                                },
-                                executor);
+                                });
             }
         }
 
