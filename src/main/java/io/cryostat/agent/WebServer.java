@@ -347,12 +347,12 @@ class WebServer {
         if (osBean instanceof UnixOperatingSystemMXBean) {
             UnixOperatingSystemMXBean unix = (UnixOperatingSystemMXBean) osBean;
             safeStore("CommittedVirtualMemorySize", osAttrs, unix::getCommittedVirtualMemorySize);
-            safeStore("FreePhysicalMemorySize", osAttrs, unix::getFreeMemorySize);
+            safeStore("FreePhysicalMemorySize", osAttrs, unix::getFreePhysicalMemorySize);
             safeStore("FreeSwapSpaceSize", osAttrs, unix::getFreeSwapSpaceSize);
             safeStore("ProcessCpuLoad", osAttrs, unix::getProcessCpuLoad);
             safeStore("ProcessCpuTime", osAttrs, unix::getProcessCpuTime);
-            safeStore("SystemCpuLoad", osAttrs, unix::getCpuLoad);
-            safeStore("TotalPhysicalMemorySize", osAttrs, unix::getTotalMemorySize);
+            safeStore("SystemCpuLoad", osAttrs, unix::getSystemCpuLoad);
+            safeStore("TotalPhysicalMemorySize", osAttrs, unix::getTotalPhysicalMemorySize);
             safeStore("TotalSwapSpaceSize", osAttrs, unix::getTotalSwapSpaceSize);
         }
         OperatingSystemMetrics os = new OperatingSystemMetrics(osAttrs);
