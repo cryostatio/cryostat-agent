@@ -55,6 +55,8 @@ import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 
 import io.cryostat.agent.Harvester.RecordingSettings;
+import io.cryostat.agent.remote.RemoteContext;
+import io.cryostat.agent.remote.RemoteModule;
 import io.cryostat.core.net.JFRConnection;
 import io.cryostat.core.net.JFRConnectionToolkit;
 import io.cryostat.core.sys.Environment;
@@ -76,6 +78,7 @@ import org.slf4j.LoggerFactory;
 @Module(
         includes = {
             ConfigModule.class,
+            RemoteModule.class,
         })
 public abstract class MainModule {
 
@@ -105,13 +108,14 @@ public abstract class MainModule {
     @Provides
     @Singleton
     public static WebServer provideWebServer(
+            Lazy<Set<RemoteContext>> remoteContexts,
             ObjectMapper mapper,
             Lazy<CryostatClient> cryostat,
             ScheduledExecutorService executor,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_HOST) String host,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_PORT) int port,
             Lazy<Registration> registration) {
-        return new WebServer(mapper, cryostat, executor, host, port, registration);
+        return new WebServer(remoteContexts, mapper, cryostat, executor, host, port, registration);
     }
 
     @Provides
