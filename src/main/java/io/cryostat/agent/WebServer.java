@@ -68,7 +68,6 @@ import io.cryostat.core.net.OperatingSystemMetrics;
 import io.cryostat.core.net.RuntimeMetrics;
 import io.cryostat.core.net.ThreadMetrics;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.management.UnixOperatingSystemMXBean;
 import com.sun.net.httpserver.BasicAuthenticator;
