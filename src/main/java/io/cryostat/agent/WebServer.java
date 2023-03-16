@@ -41,7 +41,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.io.PrintWriter;
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
 import java.lang.management.OperatingSystemMXBean;
@@ -165,13 +164,10 @@ class WebServer {
                                     case "GET":
                                         try {
                                             MBeanMetrics metrics = getMbeanMetrics();
-                                            String json = mapper.writeValueAsString(metrics);
-                                            log.info(json);
                                             exchange.sendResponseHeaders(HttpStatus.SC_OK, 0);
                                             try (OutputStream response =
-                                                            exchange.getResponseBody();
-                                                    PrintWriter pw = new PrintWriter(response)) {
-                                                pw.write(json);
+                                                    exchange.getResponseBody()) {
+                                                mapper.writeValue(response, metrics);
                                             }
                                         } catch (Exception e) {
                                             log.error("mbean serialization failure", e);
