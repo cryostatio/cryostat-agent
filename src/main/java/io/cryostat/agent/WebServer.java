@@ -369,16 +369,6 @@ class WebServer {
             log.error("Could not compute own jvmId!", e);
         }
 
-        try {
-            log.info(mapper.writeValueAsString(runtimeAttrs));
-            log.info(mapper.writeValueAsString(memory));
-            log.info(mapper.writeValueAsString(threads));
-            log.info(mapper.writeValueAsString(os));
-            log.info(jvmId);
-        } catch (JsonProcessingException jpe) {
-            log.error("couldn't serialize", jpe);
-        }
-
         return new MBeanMetrics(runtime, memory, threads, os, jvmId);
     }
 
