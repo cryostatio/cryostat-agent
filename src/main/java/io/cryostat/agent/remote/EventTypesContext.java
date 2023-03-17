@@ -41,6 +41,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import javax.inject.Inject;
 
@@ -101,10 +102,10 @@ class EventTypesContext implements RemoteContext {
                             evtInfo.settings.addAll(
                                     evt.getSettingDescriptors().stream()
                                             .map(SettingInfo::new)
-                                            .toList());
+                                            .collect(Collectors.toList()));
                             return evtInfo;
                         })
-                .toList();
+                .collect(Collectors.toList());
     }
 
     @SuppressFBWarnings(value = "URF_UNREAD_FIELD")

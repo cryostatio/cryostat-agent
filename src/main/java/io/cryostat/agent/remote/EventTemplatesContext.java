@@ -41,6 +41,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.lang.management.ManagementFactory;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import javax.inject.Inject;
 
@@ -79,7 +80,7 @@ class EventTemplatesContext implements RemoteContext {
                         List<String> xmlTexts =
                                 bean.getConfigurations().stream()
                                         .map(c -> c.getContents())
-                                        .toList();
+                                        .collect(Collectors.toList());
                         mapper.writeValue(response, xmlTexts);
                     }
                 } catch (Exception e) {
