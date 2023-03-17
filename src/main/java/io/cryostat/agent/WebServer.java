@@ -77,6 +77,7 @@ class WebServer {
     private final Lazy<Registration> registration;
     private HttpServer http;
 
+    private final AgentAuthenticator agentAuthenticator;
     private final RequestLoggingFilter requestLoggingFilter;
 
     WebServer(
@@ -96,6 +97,7 @@ class WebServer {
         this.credentials = new Credentials();
         this.registration = registration;
 
+        this.agentAuthenticator = new AgentAuthenticator();
         this.requestLoggingFilter = new RequestLoggingFilter();
     }
 
@@ -114,7 +116,7 @@ class WebServer {
         mergedContexts.forEach(
                 rc -> {
                     HttpContext ctx = this.http.createContext(rc.path(), rc::handle);
-                    ctx.setAuthenticator(new AgentAuthenticator());
+                    ctx.setAuthenticator(agentAuthenticator);
                     ctx.getFilters().add(requestLoggingFilter);
                 });
 
