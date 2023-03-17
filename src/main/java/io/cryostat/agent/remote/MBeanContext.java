@@ -90,7 +90,7 @@ class MBeanContext implements RemoteContext {
         switch (mtd) {
             case "GET":
                 try {
-                    MBeanMetrics metrics = getMbeanMetrics();
+                    MBeanMetrics metrics = getMBeanMetrics();
                     exchange.sendResponseHeaders(HttpStatus.SC_OK, 0);
                     try (OutputStream response = exchange.getResponseBody()) {
                         mapper.writeValue(response, metrics);
@@ -108,7 +108,7 @@ class MBeanContext implements RemoteContext {
         }
     }
 
-    private MBeanMetrics getMbeanMetrics() {
+    private MBeanMetrics getMBeanMetrics() {
         // TODO refactor, extract into -core library?
         RuntimeMXBean runtimeBean = ManagementFactory.getRuntimeMXBean();
         Map<String, Object> runtimeAttrs = new HashMap<>();
