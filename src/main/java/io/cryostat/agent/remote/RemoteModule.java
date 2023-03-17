@@ -46,5 +46,5 @@ public abstract class RemoteModule {
 
     @Binds
     @IntoSet
-    abstract RemoteContext bindMbeanContext(MBeanContext ctx);
+    abstract RemoteContext bindMBeanContext(MBeanContext ctx);
 }
