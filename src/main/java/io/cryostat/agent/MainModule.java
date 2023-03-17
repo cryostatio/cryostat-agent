@@ -109,13 +109,12 @@ public abstract class MainModule {
     @Singleton
     public static WebServer provideWebServer(
             Lazy<Set<RemoteContext>> remoteContexts,
-            ObjectMapper mapper,
             Lazy<CryostatClient> cryostat,
             ScheduledExecutorService executor,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_HOST) String host,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_PORT) int port,
             Lazy<Registration> registration) {
-        return new WebServer(remoteContexts, mapper, cryostat, executor, host, port, registration);
+        return new WebServer(remoteContexts, cryostat, executor, host, port, registration);
     }
 
     @Provides

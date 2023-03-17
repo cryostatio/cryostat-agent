@@ -52,7 +52,6 @@ import java.util.concurrent.ScheduledExecutorService;
 
 import io.cryostat.agent.remote.RemoteContext;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.BasicAuthenticator;
 import com.sun.net.httpserver.Filter;
 import com.sun.net.httpserver.HttpContext;
@@ -68,7 +67,6 @@ class WebServer {
     private final Logger log = LoggerFactory.getLogger(getClass());
 
     private final Lazy<Set<RemoteContext>> remoteContexts;
-    private final ObjectMapper mapper;
     private final Lazy<CryostatClient> cryostat;
     private final ScheduledExecutorService executor;
     private final String host;
@@ -82,14 +80,12 @@ class WebServer {
 
     WebServer(
             Lazy<Set<RemoteContext>> remoteContexts,
-            ObjectMapper mapper,
             Lazy<CryostatClient> cryostat,
             ScheduledExecutorService executor,
             String host,
             int port,
             Lazy<Registration> registration) {
         this.remoteContexts = remoteContexts;
-        this.mapper = mapper;
         this.cryostat = cryostat;
         this.executor = executor;
         this.host = host;
