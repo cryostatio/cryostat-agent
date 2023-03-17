@@ -45,14 +45,17 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
+
+import io.cryostat.agent.remote.RemoteContext;
 
 import com.sun.net.httpserver.BasicAuthenticator;
 import com.sun.net.httpserver.Filter;
 import com.sun.net.httpserver.HttpContext;
 import com.sun.net.httpserver.HttpExchange;
-import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 import dagger.Lazy;
 import org.apache.http.HttpStatus;
@@ -63,6 +66,7 @@ class WebServer {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
+    private final Lazy<Set<RemoteContext>> remoteContexts;
     private final Lazy<CryostatClient> cryostat;
     private final ScheduledExecutorService executor;
     private final String host;
@@ -71,18 +75,26 @@ class WebServer {
     private final Lazy<Registration> registration;
     private HttpServer http;
 
+    private final AgentAuthenticator agentAuthenticator;
+    private final RequestLoggingFilter requestLoggingFilter;
+
     WebServer(
+            Lazy<Set<RemoteContext>> remoteContexts,
             Lazy<CryostatClient> cryostat,
             ScheduledExecutorService executor,
             String host,
             int port,
             Lazy<Registration> registration) {
+        this.remoteContexts = remoteContexts;
         this.cryostat = cryostat;
         this.executor = executor;
         this.host = host;
         this.port = port;
         this.credentials = new Credentials();
         this.registration = registration;
+
+        this.agentAuthenticator = new AgentAuthenticator();
+        this.requestLoggingFilter = new RequestLoggingFilter();
     }
 
     void start() throws IOException, NoSuchAlgorithmException {
@@ -93,62 +105,16 @@ class WebServer {
         this.generateCredentials();
 
         this.http = HttpServer.create(new InetSocketAddress(host, port), 0);
-
         this.http.setExecutor(executor);
 
-        HttpContext pingCtx =
-                this.http.createContext(
-                        "/",
-                        new HttpHandler() {
-                            @Override
-                            public void handle(HttpExchange exchange) throws IOException {
-                                String mtd = exchange.getRequestMethod();
-                                switch (mtd) {
-                                    case "POST":
-                                        synchronized (WebServer.this.credentials) {
-                                            executor.execute(registration.get()::tryRegister);
-                                            exchange.sendResponseHeaders(
-                                                    HttpStatus.SC_NO_CONTENT, -1);
-                                            exchange.close();
-                                        }
-                                        break;
-                                    case "GET":
-                                        exchange.sendResponseHeaders(HttpStatus.SC_NO_CONTENT, -1);
-                                        exchange.close();
-                                        break;
-                                    default:
-                                        exchange.sendResponseHeaders(HttpStatus.SC_NOT_FOUND, -1);
-                                        exchange.close();
-                                        break;
-                                }
-                            }
-                        });
-        pingCtx.setAuthenticator(new AgentAuthenticator());
-        pingCtx.getFilters()
-                .add(
-                        new Filter() {
-                            @Override
-                            public void doFilter(HttpExchange exchange, Chain chain)
-                                    throws IOException {
-                                long start = System.nanoTime();
-                                String requestMethod = exchange.getRequestMethod();
-                                String path = exchange.getRequestURI().getPath();
-                                log.info("{} {}", requestMethod, path);
-                                chain.doFilter(exchange);
-                                long elapsed = System.nanoTime() - start;
-                                log.info(
-                                        "{} {} : {} {}ms",
-                                        requestMethod,
-                                        path,
-                                        exchange.getResponseCode(),
-                                        Duration.ofNanos(elapsed).toMillis());
-                            }
-
-                            @Override
-                            public String description() {
-                                return "requestLog";
-                            }
-                        });
+        Set<RemoteContext> mergedContexts = new HashSet<>(remoteContexts.get());
+        mergedContexts.add(new PingContext());
+        mergedContexts.forEach(
+                rc -> {
+                    HttpContext ctx = this.http.createContext(rc.path(), rc::handle);
+                    ctx.setAuthenticator(agentAuthenticator);
+                    ctx.getFilters().add(requestLoggingFilter);
+                });
 
         this.http.start();
     }
@@ -172,6 +138,59 @@ class WebServer {
                     .submitCredentials(this.credentials)
                     .thenAccept(i -> log.info("Defined credentials with id {}", i))
                     .thenRun(this.credentials::clear);
+        }
+    }
+
+    private class RequestLoggingFilter extends Filter {
+        @Override
+        public void doFilter(HttpExchange exchange, Chain chain) throws IOException {
+            long start = System.nanoTime();
+            String requestMethod = exchange.getRequestMethod();
+            String path = exchange.getRequestURI().getPath();
+            log.info("{} {}", requestMethod, path);
+            chain.doFilter(exchange);
+            long elapsed = System.nanoTime() - start;
+            log.info(
+                    "{} {} : {} {}ms",
+                    requestMethod,
+                    path,
+                    exchange.getResponseCode(),
+                    Duration.ofNanos(elapsed).toMillis());
+        }
+
+        @Override
+        public String description() {
+            return "requestLog";
+        }
+    }
+
+    private class PingContext implements RemoteContext {
+
+        @Override
+        public String path() {
+            return "/";
+        }
+
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            String mtd = exchange.getRequestMethod();
+            switch (mtd) {
+                case "POST":
+                    synchronized (WebServer.this.credentials) {
+                        executor.execute(registration.get()::tryRegister);
+                        exchange.sendResponseHeaders(HttpStatus.SC_NO_CONTENT, -1);
+                        exchange.close();
+                    }
+                    break;
+                case "GET":
+                    exchange.sendResponseHeaders(HttpStatus.SC_NO_CONTENT, -1);
+                    exchange.close();
+                    break;
+                default:
+                    exchange.sendResponseHeaders(HttpStatus.SC_NOT_FOUND, -1);
+                    exchange.close();
+                    break;
+            }
         }
     }
 
