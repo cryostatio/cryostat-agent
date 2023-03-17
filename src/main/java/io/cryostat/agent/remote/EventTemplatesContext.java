@@ -37,22 +37,61 @@
  */
 package io.cryostat.agent.remote;
 
-import dagger.Binds;
-import dagger.Module;
-import dagger.multibindings.IntoSet;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.lang.management.ManagementFactory;
+import java.util.List;
 
-@Module
-public abstract class RemoteModule {
+import javax.inject.Inject;
 
-    @Binds
-    @IntoSet
-    abstract RemoteContext bindMBeanContext(MBeanContext ctx);
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sun.net.httpserver.HttpExchange;
+import jdk.management.jfr.FlightRecorderMXBean;
+import org.apache.http.HttpStatus;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-    @Binds
-    @IntoSet
-    abstract RemoteContext bindEventTypesContext(EventTypesContext ctx);
+class EventTemplatesContext implements RemoteContext {
 
-    @Binds
-    @IntoSet
-    abstract RemoteContext bindEventTemplatesContext(EventTemplatesContext ctx);
+    private final Logger log = LoggerFactory.getLogger(getClass());
+    private final ObjectMapper mapper;
+
+    @Inject
+    EventTemplatesContext(ObjectMapper mapper) {
+        this.mapper = mapper;
+    }
+
+    @Override
+    public String path() {
+        return "/event-templates";
+    }
+
+    @Override
+    public void handle(HttpExchange exchange) throws IOException {
+        String mtd = exchange.getRequestMethod();
+        switch (mtd) {
+            case "GET":
+                try {
+                    exchange.sendResponseHeaders(HttpStatus.SC_OK, 0);
+                    try (OutputStream response = exchange.getResponseBody()) {
+                        FlightRecorderMXBean bean =
+                                ManagementFactory.getPlatformMXBean(FlightRecorderMXBean.class);
+                        List<String> xmlTexts =
+                                bean.getConfigurations().stream()
+                                        .map(c -> c.getContents())
+                                        .toList();
+                        mapper.writeValue(response, xmlTexts);
+                    }
+                } catch (Exception e) {
+                    log.error("events serialization failure", e);
+                } finally {
+                    exchange.close();
+                }
+                break;
+            default:
+                exchange.sendResponseHeaders(HttpStatus.SC_NOT_FOUND, -1);
+                exchange.close();
+                break;
+        }
+    }
 }
