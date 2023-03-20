@@ -47,4 +47,12 @@ public abstract class RemoteModule {
     @Binds
     @IntoSet
     abstract RemoteContext bindMBeanContext(MBeanContext ctx);
+
+    @Binds
+    @IntoSet
+    abstract RemoteContext bindEventTypesContext(EventTypesContext ctx);
+
+    @Binds
+    @IntoSet
+    abstract RemoteContext bindEventTemplatesContext(EventTemplatesContext ctx);
 }

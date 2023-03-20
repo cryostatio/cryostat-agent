@@ -181,7 +181,6 @@ public abstract class MainModule {
     }
 
     @Provides
-    @Singleton
     public static ObjectMapper provideObjectMapper() {
         return new ObjectMapper();
     }
