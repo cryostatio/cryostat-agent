@@ -44,12 +44,10 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.zip.DeflaterOutputStream;
@@ -175,23 +173,19 @@ class WebServer {
 
         @Override
         public void doFilter(HttpExchange exchange, Chain chain) throws IOException {
-            List<String> encodings = new ArrayList<>();
-            List<String> rawEncodings =
-                    exchange.getRequestHeaders().getOrDefault("Accept-Encoding", List.of());
-            rawEncodings.forEach(
-                    raw -> {
-                        if (raw.contains(",")) {
-                            encodings.addAll(Arrays.asList(raw.replaceAll("\\s", "").split(",")));
-                        } else {
-                            encodings.add(raw);
-                        }
-                    });
-            String actualEncoding = null;
+            List<String> requestedEncodings =
+                    exchange.getRequestHeaders().getOrDefault("Accept-Encoding", List.of()).stream()
+                            .map(raw -> raw.replaceAll("\\s", ""))
+                            .map(raw -> raw.split(","))
+                            .map(Arrays::asList)
+                            .flatMap(List::stream)
+                            .toList();
+            String negotiatedEncoding = null;
             priority:
-            for (String requestedEncoding : encodings) {
-                switch (requestedEncoding) {
+            for (String encoding : requestedEncodings) {
+                switch (encoding) {
                     case "deflate":
-                        actualEncoding = requestedEncoding;
+                        negotiatedEncoding = encoding;
                         exchange.setStreams(
                                 exchange.getRequestBody(),
                                 new DeflaterOutputStream(exchange.getResponseBody()));
@@ -208,13 +202,12 @@ class WebServer {
                         break;
                 }
             }
-            Optional.ofNullable(actualEncoding)
-                    .ifPresentOrElse(
-                            e -> {
-                                log.info("Using '{}' encoding", e);
-                                exchange.getResponseHeaders().put("Content-Encoding", List.of(e));
-                            },
-                            () -> log.info("Using no encoding"));
+            if (negotiatedEncoding == null) {
+                log.info("Using no encoding");
+            } else {
+                log.info("Using '{}' encoding", negotiatedEncoding);
+                exchange.getResponseHeaders().put("Content-Encoding", List.of(negotiatedEncoding));
+            }
             chain.doFilter(exchange);
         }
 

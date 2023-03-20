@@ -47,6 +47,7 @@ import javax.inject.Inject;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
+import jdk.management.jfr.ConfigurationInfo;
 import jdk.management.jfr.FlightRecorderMXBean;
 import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
@@ -79,7 +80,7 @@ class EventTemplatesContext implements RemoteContext {
                                 ManagementFactory.getPlatformMXBean(FlightRecorderMXBean.class);
                         List<String> xmlTexts =
                                 bean.getConfigurations().stream()
-                                        .map(c -> c.getContents())
+                                        .map(ConfigurationInfo::getContents)
                                         .collect(Collectors.toList());
                         mapper.writeValue(response, xmlTexts);
                     }
