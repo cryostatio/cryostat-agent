@@ -50,6 +50,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.stream.Collectors;
 import java.util.zip.DeflaterOutputStream;
 
 import io.cryostat.agent.remote.RemoteContext;
@@ -179,7 +180,7 @@ class WebServer {
                             .map(raw -> raw.split(","))
                             .map(Arrays::asList)
                             .flatMap(List::stream)
-                            .toList();
+                            .collect(Collectors.toList());
             String negotiatedEncoding = null;
             priority:
             for (String encoding : requestedEncodings) {
