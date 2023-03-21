@@ -55,4 +55,8 @@ public abstract class RemoteModule {
     @Binds
     @IntoSet
     abstract RemoteContext bindEventTemplatesContext(EventTemplatesContext ctx);
+
+    @Binds
+    @IntoSet
+    abstract RemoteContext bindRecordingsContext(RecordingsContext ctx);
 }
