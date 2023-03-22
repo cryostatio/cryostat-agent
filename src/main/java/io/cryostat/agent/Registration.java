@@ -79,8 +79,6 @@ class Registration {
     private final PluginInfo pluginInfo = new PluginInfo();
     private final Set<Consumer<RegistrationEvent>> listeners = new HashSet<>();
 
-    private volatile int credentialId = -1;
-
     Registration(
             ScheduledExecutorService executor,
             CryostatClient cryostat,
@@ -116,60 +114,37 @@ class Registration {
     }
 
     void tryRegister() {
-        CompletableFuture<Integer> creds;
-        if (this.credentialId > -1) {
-            creds = CompletableFuture.completedFuture(this.credentialId);
-        } else {
-            creds =
-                    cryostat.submitCredentials(webServer.getCredentials())
+        try {
+            URI credentialedCallback =
+                    new URIBuilder(callback)
+                            .setUserInfo(
+                                    "storedcredentials",
+                                    String.valueOf(webServer.getCredentialId()))
+                            .build();
+            CompletableFuture<Void> f =
+                    cryostat.register(pluginInfo, credentialedCallback)
                             .handle(
-                                    (id, t) -> {
-                                        if (t != null) {
-                                            log.error("Failed to submit credentials", t);
+                                    (plugin, t) -> {
+                                        if (plugin != null) {
+                                            boolean previouslyRegistered =
+                                                    this.pluginInfo.isInitialized();
+                                            this.pluginInfo.copyFrom(plugin);
+                                            log.info("Registered as {}", this.pluginInfo.getId());
+                                            notify(
+                                                    previouslyRegistered
+                                                            ? RegistrationEvent.State.REFRESHED
+                                                            : RegistrationEvent.State.REGISTERED);
+                                            tryUpdate();
+                                        } else if (t != null) {
+                                            this.pluginInfo.clear();
+                                            notify(RegistrationEvent.State.UNREGISTERED);
                                             throw new RegistrationException(t);
                                         }
-                                        log.info("Submitted credentials with id {}", id);
-                                        this.credentialId = id;
-                                        return id;
-                                    });
-        }
-        CompletableFuture<Void> f =
-                creds.thenApply(
-                                id -> {
-                                    try {
-                                        return new URIBuilder(callback)
-                                                .setUserInfo(
-                                                        "storedcredentials",
-                                                        String.valueOf(credentialId))
-                                                .build();
-                                    } catch (URISyntaxException use) {
-                                        throw new RegistrationException(use);
-                                    }
-                                })
-                        .thenCompose(callback -> cryostat.register(pluginInfo, callback))
-                        .handle(
-                                (plugin, t) -> {
-                                    if (plugin != null) {
-                                        boolean previouslyRegistered =
-                                                this.pluginInfo.isInitialized();
-                                        this.pluginInfo.copyFrom(plugin);
-                                        log.info("Registered as {}", this.pluginInfo.getId());
-                                        notify(
-                                                previouslyRegistered
-                                                        ? RegistrationEvent.State.REFRESHED
-                                                        : RegistrationEvent.State.REGISTERED);
-                                        tryUpdate();
-                                    } else if (t != null) {
-                                        this.pluginInfo.clear();
-                                        notify(RegistrationEvent.State.UNREGISTERED);
-                                        throw new RegistrationException(t);
-                                    }
 
-                                    return (Void) null;
-                                });
-        try {
+                                        return (Void) null;
+                                    });
             f.get();
-        } catch (ExecutionException | InterruptedException e) {
+        } catch (URISyntaxException | ExecutionException | InterruptedException e) {
             log.error("Registration failure", e);
             log.info("Registration retry period: {}", Duration.ofMillis(registrationRetryMs));
             executor.schedule(this::tryRegister, registrationRetryMs, TimeUnit.MILLISECONDS);
@@ -261,8 +236,7 @@ class Registration {
             log.info("Deregistration requested before registration complete!");
             return CompletableFuture.completedFuture(null);
         }
-        return cryostat.deleteCredentials(this.credentialId)
-                .thenRun(() -> this.credentialId = -1)
+        return cryostat.deleteCredentials(webServer.getCredentialId())
                 .thenCompose(v -> cryostat.deregister(pluginInfo))
                 .handle(
                         (n, t) -> {

@@ -69,6 +69,7 @@ import org.apache.http.HttpHeaders;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpDelete;
+import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpRequestBase;
 import org.apache.http.client.methods.HttpUriRequest;
@@ -153,42 +154,54 @@ public class CryostatClient {
         }
     }
 
-    public CompletableFuture<Integer> submitCredentials(Credentials credentials) {
-        synchronized (credentials) {
-            HttpPost req = new HttpPost(baseUri.resolve(CREDENTIALS_API_PATH));
-            MultipartEntityBuilder entityBuilder =
-                    MultipartEntityBuilder.create()
-                            .addPart(
-                                    FormBodyPartBuilder.create(
-                                                    "username",
-                                                    new StringBody(
-                                                            credentials.user(),
-                                                            ContentType.TEXT_PLAIN))
-                                            .build())
-                            .addPart(
-                                    FormBodyPartBuilder.create(
-                                                    "password",
-                                                    new InputStreamBody(
-                                                            new ByteArrayInputStream(
-                                                                    credentials.pass()),
-                                                            ContentType.TEXT_PLAIN))
-                                            .build())
-                            .addPart(
-                                    FormBodyPartBuilder.create(
-                                                    "matchExpression",
-                                                    new StringBody(
-                                                            String.format(
-                                                                    "target.jvmId == \"%s\"",
-                                                                    this.jvmId),
-                                                            ContentType.TEXT_PLAIN))
-                                            .build());
-            req.setEntity(entityBuilder.build());
-            return supply(req, (res) -> logResponse(req, res))
-                    .thenApply(res -> assertOkStatus(req, res))
-                    .thenApply(res -> res.getFirstHeader(HttpHeaders.LOCATION).getValue())
-                    .thenApply(res -> res.substring(res.lastIndexOf('/') + 1, res.length()))
-                    .thenApply(Integer::valueOf);
+    public CompletableFuture<Integer> submitCredentialsIfRequired(
+            int prevId, Credentials credentials) {
+        if (prevId < 0) {
+            return submitCredentials(credentials);
         }
+        HttpGet req = new HttpGet(baseUri.resolve(CREDENTIALS_API_PATH + "/" + prevId));
+        return supply(req, (res) -> logResponse(req, res))
+                .thenApply(this::isOkStatus)
+                .thenCompose(
+                        exists -> {
+                            if (exists) {
+                                return CompletableFuture.completedFuture(prevId);
+                            }
+                            return submitCredentials(credentials);
+                        });
+    }
+
+    private CompletableFuture<Integer> submitCredentials(Credentials credentials) {
+        HttpPost req = new HttpPost(baseUri.resolve(CREDENTIALS_API_PATH));
+        MultipartEntityBuilder entityBuilder =
+                MultipartEntityBuilder.create()
+                        .addPart(
+                                FormBodyPartBuilder.create(
+                                                "username",
+                                                new StringBody(
+                                                        credentials.user(), ContentType.TEXT_PLAIN))
+                                        .build())
+                        .addPart(
+                                FormBodyPartBuilder.create(
+                                                "password",
+                                                new InputStreamBody(
+                                                        new ByteArrayInputStream(
+                                                                credentials.pass()),
+                                                        ContentType.TEXT_PLAIN))
+                                        .build())
+                        .addPart(
+                                FormBodyPartBuilder.create(
+                                                "matchExpression",
+                                                new StringBody(
+                                                        selfMatchExpression(),
+                                                        ContentType.TEXT_PLAIN))
+                                        .build());
+        req.setEntity(entityBuilder.build());
+        return supply(req, (res) -> logResponse(req, res))
+                .thenApply(res -> assertOkStatus(req, res))
+                .thenApply(res -> res.getFirstHeader(HttpHeaders.LOCATION).getValue())
+                .thenApply(res -> res.substring(res.lastIndexOf('/') + 1, res.length()))
+                .thenApply(Integer::valueOf);
     }
 
     public CompletableFuture<Void> deleteCredentials(int id) {
@@ -320,10 +333,18 @@ public class CryostatClient {
         return new CountingInputStream(new BufferedInputStream(Files.newInputStream(filePath)));
     }
 
+    private String selfMatchExpression() {
+        return String.format("target.jvmId == \"%s\"", this.jvmId);
+    }
+
+    private boolean isOkStatus(HttpResponse res) {
+        int sc = res.getStatusLine().getStatusCode();
+        return 200 <= sc && sc < 300;
+    }
+
     private HttpResponse assertOkStatus(HttpRequestBase req, HttpResponse res) {
         int sc = res.getStatusLine().getStatusCode();
-        boolean isOk = 200 <= sc && sc < 300;
-        if (!isOk) {
+        if (!isOkStatus(res)) {
             URI uri = req.getURI();
             log.error("Non-OK response ({}) on HTTP API {}", sc, uri);
             try {

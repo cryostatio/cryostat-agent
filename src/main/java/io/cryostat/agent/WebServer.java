@@ -44,12 +44,15 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.zip.DeflaterOutputStream;
 
@@ -77,6 +80,7 @@ class WebServer {
     private final Credentials credentials;
     private final Lazy<Registration> registration;
     private HttpServer http;
+    private volatile int credentialId = -1;
 
     private final AgentAuthenticator agentAuthenticator;
     private final RequestLoggingFilter requestLoggingFilter;
@@ -102,12 +106,15 @@ class WebServer {
         this.compressionFilter = new CompressionFilter();
     }
 
-    void start() throws IOException, NoSuchAlgorithmException {
+    CompletableFuture<Void> start() throws IOException, NoSuchAlgorithmException {
+        List<CompletableFuture<Void>> cfs = new ArrayList<>();
         if (this.http != null) {
             stop();
         }
 
-        this.generateCredentials();
+        CompletableFuture<Void> credentialSubmission = new CompletableFuture<>();
+        cfs.add(credentialSubmission);
+        this.generateCredentials(credentialSubmission);
 
         this.http = HttpServer.create(new InetSocketAddress(host, port), 0);
         this.http.setExecutor(executor);
@@ -123,6 +130,8 @@ class WebServer {
                 });
 
         this.http.start();
+
+        return CompletableFuture.allOf(cfs.toArray(new CompletableFuture[0]));
     }
 
     void stop() {
@@ -132,18 +141,71 @@ class WebServer {
         }
     }
 
-    Credentials getCredentials() {
-        return credentials;
+    int getCredentialId() {
+        return credentialId;
     }
 
-    void generateCredentials() throws NoSuchAlgorithmException {
+    void generateCredentials(CompletableFuture<Void> future) throws NoSuchAlgorithmException {
         synchronized (this.credentials) {
             this.credentials.regenerate();
             this.cryostat
                     .get()
-                    .submitCredentials(this.credentials)
-                    .thenAccept(i -> log.info("Defined credentials with id {}", i))
+                    .submitCredentialsIfRequired(this.credentialId, this.credentials)
+                    .handle(
+                            (v, t) -> {
+                                if (t != null) {
+                                    log.error("Could not submit credentials", t);
+                                    executor.schedule(
+                                            () -> {
+                                                try {
+                                                    this.generateCredentials(future);
+                                                } catch (NoSuchAlgorithmException e) {
+                                                    log.error("Cannot submit credentials", e);
+                                                }
+                                            },
+                                            5000, // TODO reuse registrationRetryMs
+                                            TimeUnit.MILLISECONDS);
+                                } else {
+                                    future.complete(null);
+                                }
+                                return v;
+                            })
+                    .thenAccept(
+                            i -> {
+                                this.credentialId = i;
+                                log.info("Defined credentials with id {}", i);
+                            })
                     .thenRun(this.credentials::clear);
+        }
+    }
+
+    private class PingContext implements RemoteContext {
+
+        @Override
+        public String path() {
+            return "/";
+        }
+
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            String mtd = exchange.getRequestMethod();
+            switch (mtd) {
+                case "POST":
+                    synchronized (WebServer.this.credentials) {
+                        executor.execute(registration.get()::tryRegister);
+                        exchange.sendResponseHeaders(HttpStatus.SC_NO_CONTENT, -1);
+                        exchange.close();
+                    }
+                    break;
+                case "GET":
+                    exchange.sendResponseHeaders(HttpStatus.SC_NO_CONTENT, -1);
+                    exchange.close();
+                    break;
+                default:
+                    exchange.sendResponseHeaders(HttpStatus.SC_NOT_FOUND, -1);
+                    exchange.close();
+                    break;
+            }
         }
     }
 
@@ -215,36 +277,6 @@ class WebServer {
         @Override
         public String description() {
             return "responseCompression";
-        }
-    }
-
-    private class PingContext implements RemoteContext {
-
-        @Override
-        public String path() {
-            return "/";
-        }
-
-        @Override
-        public void handle(HttpExchange exchange) throws IOException {
-            String mtd = exchange.getRequestMethod();
-            switch (mtd) {
-                case "POST":
-                    synchronized (WebServer.this.credentials) {
-                        executor.execute(registration.get()::tryRegister);
-                        exchange.sendResponseHeaders(HttpStatus.SC_NO_CONTENT, -1);
-                        exchange.close();
-                    }
-                    break;
-                case "GET":
-                    exchange.sendResponseHeaders(HttpStatus.SC_NO_CONTENT, -1);
-                    exchange.close();
-                    break;
-                default:
-                    exchange.sendResponseHeaders(HttpStatus.SC_NOT_FOUND, -1);
-                    exchange.close();
-                    break;
-            }
         }
     }
 
