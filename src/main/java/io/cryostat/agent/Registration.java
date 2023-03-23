@@ -105,7 +105,45 @@ class Registration {
     }
 
     void start() {
-        executor.submit(this::tryRegister);
+        this.addRegistrationListener(
+                evt -> {
+                    switch (evt.state) {
+                        case REGISTERED:
+                            break;
+                        case UNREGISTERED:
+                            executor.submit(this::tryRegister);
+                            break;
+                        case REFRESHED:
+                            break;
+                        case PUBLISHED:
+                            break;
+                        default:
+                            break;
+                    }
+                });
+        executor.scheduleAtFixedRate(
+                () -> {
+                    try {
+                        cryostat.checkRegistration(pluginInfo)
+                                .handle(
+                                        (v, t) -> {
+                                            log.info("checked registration...");
+                                            if (t != null || !Boolean.TRUE.equals(v)) {
+                                                log.info("not registered!");
+                                                notify(RegistrationEvent.State.UNREGISTERED);
+                                            } else {
+                                                log.info("registered :-)");
+                                            }
+                                            return null;
+                                        })
+                                .get();
+                    } catch (ExecutionException | InterruptedException e) {
+                        log.warn("Could not check registration status", e);
+                    }
+                },
+                0,
+                1, // TODO extract a separate configuration
+                TimeUnit.MINUTES);
         log.info("{} started", getClass().getName());
     }
 
@@ -170,14 +208,7 @@ class Registration {
                                 (n, t) -> {
                                     if (t != null) {
                                         log.error("Update failure", t);
-                                        deregister()
-                                                .thenRun(
-                                                        () -> {
-                                                            executor.schedule(
-                                                                    this::tryRegister,
-                                                                    registrationRetryMs,
-                                                                    TimeUnit.MILLISECONDS);
-                                                        });
+                                        deregister();
                                     } else {
                                         log.info("Publish success");
                                         notify(RegistrationEvent.State.PUBLISHED);

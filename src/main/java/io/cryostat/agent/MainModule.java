@@ -236,11 +236,12 @@ public abstract class MainModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_HARVESTER_MAX_FILES) int maxFiles,
             @Named(ConfigModule.CRYOSTAT_AGENT_HARVESTER_EXIT_MAX_AGE_MS) long maxAge,
             @Named(ConfigModule.CRYOSTAT_AGENT_HARVESTER_EXIT_MAX_SIZE_B) long maxSize,
-            CryostatClient client) {
+            CryostatClient client,
+            Lazy<Registration> registration) {
         RecordingSettings settings = new RecordingSettings();
         settings.maxAge = maxAge;
         settings.maxSize = maxSize;
-        return new Harvester(executor, period, template, maxFiles, settings, client);
+        return new Harvester(executor, period, template, maxFiles, settings, client, registration);
     }
 
     @Provides

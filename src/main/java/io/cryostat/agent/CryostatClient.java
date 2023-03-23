@@ -85,6 +85,7 @@ import org.slf4j.LoggerFactory;
 public class CryostatClient {
 
     private static final String DISCOVERY_API_PATH = "/api/v2.2/discovery";
+    private static final String DISCOVERY_CHECK_API_PATH = "/api/v2.3/discovery";
     private static final String CREDENTIALS_API_PATH = "/api/v2.2/credentials";
 
     private final Logger log = LoggerFactory.getLogger(getClass());
@@ -117,12 +118,29 @@ public class CryostatClient {
         log.info("Using Cryostat baseuri {}", baseUri);
     }
 
+    public CompletableFuture<Boolean> checkRegistration(PluginInfo pluginInfo) {
+        if (!pluginInfo.isInitialized()) {
+            return CompletableFuture.completedFuture(false);
+        }
+        HttpGet req =
+                new HttpGet(
+                        baseUri.resolve(
+                                DISCOVERY_CHECK_API_PATH
+                                        + "/"
+                                        + pluginInfo.getId()
+                                        + "?token="
+                                        + pluginInfo.getToken()));
+        log.info("{}", req);
+        return supply(req, (res) -> logResponse(req, res)).thenApply(this::isOkStatus);
+    }
+
     public CompletableFuture<PluginInfo> register(PluginInfo pluginInfo, URI callback) {
         try {
             RegistrationInfo registrationInfo =
                     new RegistrationInfo(
                             pluginInfo.getId(), realm, callback, pluginInfo.getToken());
             HttpPost req = new HttpPost(baseUri.resolve(DISCOVERY_API_PATH));
+            log.info("{}", req);
             req.setEntity(
                     new StringEntity(
                             mapper.writeValueAsString(registrationInfo),
@@ -160,6 +178,7 @@ public class CryostatClient {
             return submitCredentials(credentials);
         }
         HttpGet req = new HttpGet(baseUri.resolve(CREDENTIALS_API_PATH + "/" + prevId));
+        log.info("{}", req);
         return supply(req, (res) -> logResponse(req, res))
                 .thenApply(this::isOkStatus)
                 .thenCompose(
@@ -196,6 +215,7 @@ public class CryostatClient {
                                                         selfMatchExpression(),
                                                         ContentType.TEXT_PLAIN))
                                         .build());
+        log.info("{}", req);
         req.setEntity(entityBuilder.build());
         return supply(req, (res) -> logResponse(req, res))
                 .thenApply(res -> assertOkStatus(req, res))
@@ -206,6 +226,7 @@ public class CryostatClient {
 
     public CompletableFuture<Void> deleteCredentials(int id) {
         HttpDelete req = new HttpDelete(baseUri.resolve(CREDENTIALS_API_PATH + "/" + id));
+        log.info("{}", req);
         return supply(req, (res) -> logResponse(req, res))
                 .thenApply(res -> assertOkStatus(req, res))
                 .thenApply(res -> null);

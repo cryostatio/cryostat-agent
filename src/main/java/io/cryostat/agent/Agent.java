@@ -96,10 +96,8 @@ public class Agent {
                     evt -> {
                         switch (evt.state) {
                             case REGISTERED:
-                                harvester.start();
                                 break;
                             case UNREGISTERED:
-                                harvester.stop();
                                 break;
                             case REFRESHED:
                                 break;

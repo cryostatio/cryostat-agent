@@ -51,6 +51,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
+import dagger.Lazy;
 import jdk.jfr.Configuration;
 import jdk.jfr.FlightRecorder;
 import jdk.jfr.FlightRecorderListener;
@@ -69,6 +70,7 @@ class Harvester implements FlightRecorderListener {
     private final int maxFiles;
     private final RecordingSettings exitSettings;
     private final CryostatClient client;
+    private final Lazy<Registration> registration;
     private final AtomicLong recordingId = new AtomicLong(-1L);
     private volatile Path exitPath;
     private FlightRecorder flightRecorder;
@@ -81,13 +83,15 @@ class Harvester implements FlightRecorderListener {
             String template,
             int maxFiles,
             RecordingSettings exitSettings,
-            CryostatClient client) {
+            CryostatClient client,
+            Lazy<Registration> registration) {
         this.executor = executor;
         this.period = period;
         this.template = template;
         this.maxFiles = maxFiles;
         this.exitSettings = exitSettings;
         this.client = client;
+        this.registration = registration;
     }
 
     public void start() {
@@ -109,6 +113,25 @@ class Harvester implements FlightRecorderListener {
             return;
         }
         log.info("JFR Harvester starting");
+        registration
+                .get()
+                .addRegistrationListener(
+                        evt -> {
+                            switch (evt.state) {
+                                case REGISTERED:
+                                    start();
+                                    break;
+                                case UNREGISTERED:
+                                    stop();
+                                    break;
+                                case REFRESHED:
+                                    break;
+                                case PUBLISHED:
+                                    break;
+                                default:
+                                    break;
+                            }
+                        });
         try {
             FlightRecorder.addListener(this);
             this.flightRecorder = FlightRecorder.getFlightRecorder();
