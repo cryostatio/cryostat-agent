@@ -79,6 +79,7 @@ class WebServer {
     private final int port;
     private final Credentials credentials;
     private final Lazy<Registration> registration;
+    private final int registrationRetryMs;
     private HttpServer http;
     private volatile int credentialId = -1;
 
@@ -92,7 +93,8 @@ class WebServer {
             ScheduledExecutorService executor,
             String host,
             int port,
-            Lazy<Registration> registration) {
+            Lazy<Registration> registration,
+            int registrationRetryMs) {
         this.remoteContexts = remoteContexts;
         this.cryostat = cryostat;
         this.executor = executor;
@@ -100,6 +102,7 @@ class WebServer {
         this.port = port;
         this.credentials = new Credentials();
         this.registration = registration;
+        this.registrationRetryMs = registrationRetryMs;
 
         this.agentAuthenticator = new AgentAuthenticator();
         this.requestLoggingFilter = new RequestLoggingFilter();
@@ -163,7 +166,7 @@ class WebServer {
                                                     log.error("Cannot submit credentials", e);
                                                 }
                                             },
-                                            5000, // TODO reuse registrationRetryMs
+                                            registrationRetryMs,
                                             TimeUnit.MILLISECONDS);
                                 } else {
                                     future.complete(null);

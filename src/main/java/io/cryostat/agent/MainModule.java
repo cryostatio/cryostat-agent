@@ -113,8 +113,10 @@ public abstract class MainModule {
             ScheduledExecutorService executor,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_HOST) String host,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_PORT) int port,
-            Lazy<Registration> registration) {
-        return new WebServer(remoteContexts, cryostat, executor, host, port, registration);
+            Lazy<Registration> registration,
+            @Named(ConfigModule.CRYOSTAT_AGENT_REGISTRATION_RETRY_MS) int registrationRetryMs) {
+        return new WebServer(
+                remoteContexts, cryostat, executor, host, port, registration, registrationRetryMs);
     }
 
     @Provides
