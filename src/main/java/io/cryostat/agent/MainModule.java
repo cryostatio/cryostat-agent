@@ -212,7 +212,8 @@ public abstract class MainModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_HOSTNAME) String hostname,
             @Named(ConfigModule.CRYOSTAT_AGENT_REGISTRATION_PREFER_JMX) boolean preferJmx,
             @Named(ConfigModule.CRYOSTAT_AGENT_APP_JMX_PORT) int jmxPort,
-            @Named(ConfigModule.CRYOSTAT_AGENT_REGISTRATION_RETRY_MS) int registrationRetryMs) {
+            @Named(ConfigModule.CRYOSTAT_AGENT_REGISTRATION_RETRY_MS) int registrationRetryMs,
+            @Named(ConfigModule.CRYOSTAT_AGENT_REGISTRATION_CHECK_MS) int registrationCheckMs) {
         return new Registration(
                 executor,
                 cryostat,
@@ -224,7 +225,8 @@ public abstract class MainModule {
                 hostname,
                 preferJmx,
                 jmxPort,
-                registrationRetryMs);
+                registrationRetryMs,
+                registrationCheckMs);
     }
 
     @Provides

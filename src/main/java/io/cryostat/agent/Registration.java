@@ -75,6 +75,7 @@ class Registration {
     private final boolean preferJmx;
     private final int jmxPort;
     private final int registrationRetryMs;
+    private final int registrationCheckMs;
 
     private final PluginInfo pluginInfo = new PluginInfo();
     private final Set<Consumer<RegistrationEvent>> listeners = new HashSet<>();
@@ -90,7 +91,8 @@ class Registration {
             String hostname,
             boolean preferJmx,
             int jmxPort,
-            int registrationRetryMs) {
+            int registrationRetryMs,
+            int registrationCheckMs) {
         this.executor = executor;
         this.cryostat = cryostat;
         this.callback = callback;
@@ -102,6 +104,7 @@ class Registration {
         this.preferJmx = preferJmx;
         this.jmxPort = jmxPort;
         this.registrationRetryMs = registrationRetryMs;
+        this.registrationCheckMs = registrationCheckMs;
     }
 
     void start() {
@@ -142,8 +145,8 @@ class Registration {
                     }
                 },
                 0,
-                1, // TODO extract a separate configuration
-                TimeUnit.MINUTES);
+                registrationCheckMs,
+                TimeUnit.MILLISECONDS);
         log.info("{} started", getClass().getName());
     }
 
