@@ -96,12 +96,10 @@ public class Agent {
                     evt -> {
                         switch (evt.state) {
                             case REGISTERED:
-                                break;
                             case UNREGISTERED:
-                                break;
                             case REFRESHED:
-                                break;
                             case PUBLISHED:
+                                log.info("Registration state: {}", evt.state);
                                 break;
                             default:
                                 log.error("Unknown registration state: {}", evt.state);

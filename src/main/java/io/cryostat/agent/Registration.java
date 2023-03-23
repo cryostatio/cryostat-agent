@@ -130,12 +130,9 @@ class Registration {
                         cryostat.checkRegistration(pluginInfo)
                                 .handle(
                                         (v, t) -> {
-                                            log.info("checked registration...");
                                             if (t != null || !Boolean.TRUE.equals(v)) {
-                                                log.info("not registered!");
+                                                this.pluginInfo.clear();
                                                 notify(RegistrationEvent.State.UNREGISTERED);
-                                            } else {
-                                                log.info("registered :-)");
                                             }
                                             return null;
                                         })

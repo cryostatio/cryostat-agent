@@ -85,7 +85,6 @@ import org.slf4j.LoggerFactory;
 public class CryostatClient {
 
     private static final String DISCOVERY_API_PATH = "/api/v2.2/discovery";
-    private static final String DISCOVERY_CHECK_API_PATH = "/api/v2.3/discovery";
     private static final String CREDENTIALS_API_PATH = "/api/v2.2/credentials";
 
     private final Logger log = LoggerFactory.getLogger(getClass());
@@ -125,7 +124,7 @@ public class CryostatClient {
         HttpGet req =
                 new HttpGet(
                         baseUri.resolve(
-                                DISCOVERY_CHECK_API_PATH
+                                DISCOVERY_API_PATH
                                         + "/"
                                         + pluginInfo.getId()
                                         + "?token="

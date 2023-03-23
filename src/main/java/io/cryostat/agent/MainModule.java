@@ -239,7 +239,7 @@ public abstract class MainModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_HARVESTER_EXIT_MAX_AGE_MS) long maxAge,
             @Named(ConfigModule.CRYOSTAT_AGENT_HARVESTER_EXIT_MAX_SIZE_B) long maxSize,
             CryostatClient client,
-            Lazy<Registration> registration) {
+            Registration registration) {
         RecordingSettings settings = new RecordingSettings();
         settings.maxAge = maxAge;
         settings.maxSize = maxSize;
