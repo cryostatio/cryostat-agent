@@ -40,6 +40,7 @@ package io.cryostat.agent;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.UnknownHostException;
+import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashSet;
@@ -48,6 +49,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
@@ -79,6 +81,8 @@ class Registration {
 
     private final PluginInfo pluginInfo = new PluginInfo();
     private final Set<Consumer<RegistrationEvent>> listeners = new HashSet<>();
+
+    private ScheduledFuture<?> registrationCheckTask;
 
     Registration(
             ScheduledExecutorService executor,
@@ -112,9 +116,75 @@ class Registration {
                 evt -> {
                     switch (evt.state) {
                         case REGISTERED:
+                            if (this.registrationCheckTask != null) {
+                                log.warn("Re-registered without previous de-registration");
+                                this.registrationCheckTask.cancel(true);
+                            }
+                            this.registrationCheckTask =
+                                    executor.scheduleAtFixedRate(
+                                            () -> {
+                                                try {
+                                                    cryostat.checkRegistration(pluginInfo)
+                                                            .handle(
+                                                                    (v, t) -> {
+                                                                        if (t != null
+                                                                                || !Boolean.TRUE
+                                                                                        .equals(
+                                                                                                v)) {
+                                                                            this.pluginInfo.clear();
+                                                                            notify(
+                                                                                    RegistrationEvent
+                                                                                            .State
+                                                                                            .UNREGISTERED);
+                                                                        }
+                                                                        return null;
+                                                                    })
+                                                            .get();
+                                                } catch (ExecutionException
+                                                        | InterruptedException e) {
+                                                    log.warn(
+                                                            "Could not check registration status",
+                                                            e);
+                                                }
+                                            },
+                                            registrationCheckMs,
+                                            registrationCheckMs,
+                                            TimeUnit.MILLISECONDS);
                             break;
                         case UNREGISTERED:
-                            executor.submit(this::tryRegister);
+                            if (this.registrationCheckTask != null) {
+                                this.registrationCheckTask.cancel(true);
+                            }
+                            executor.submit(
+                                    () -> {
+                                        try {
+                                            webServer
+                                                    .generateCredentials()
+                                                    .handle(
+                                                            (t, v) -> {
+                                                                if (t != null) {
+                                                                    log.warn(
+                                                                            "Failed to generate"
+                                                                                + " credentials",
+                                                                            t);
+                                                                    executor.schedule(
+                                                                            () ->
+                                                                                    notify(
+                                                                                            RegistrationEvent
+                                                                                                    .State
+                                                                                                    .UNREGISTERED),
+                                                                            registrationRetryMs,
+                                                                            TimeUnit.MILLISECONDS);
+                                                                } else {
+                                                                    executor.submit(
+                                                                            this::tryRegister);
+                                                                }
+                                                                return null;
+                                                            });
+                                        } catch (NoSuchAlgorithmException nsae) {
+                                            log.error("Could not regenerate credentials", nsae);
+                                        }
+                                    });
                             break;
                         case REFRESHED:
                             break;
@@ -124,26 +194,7 @@ class Registration {
                             break;
                     }
                 });
-        executor.scheduleAtFixedRate(
-                () -> {
-                    try {
-                        cryostat.checkRegistration(pluginInfo)
-                                .handle(
-                                        (v, t) -> {
-                                            if (t != null || !Boolean.TRUE.equals(v)) {
-                                                this.pluginInfo.clear();
-                                                notify(RegistrationEvent.State.UNREGISTERED);
-                                            }
-                                            return null;
-                                        })
-                                .get();
-                    } catch (ExecutionException | InterruptedException e) {
-                        log.warn("Could not check registration status", e);
-                    }
-                },
-                0,
-                registrationCheckMs,
-                TimeUnit.MILLISECONDS);
+        notify(RegistrationEvent.State.UNREGISTERED);
         log.info("{} started", getClass().getName());
     }
 
@@ -175,7 +226,6 @@ class Registration {
                                             tryUpdate();
                                         } else if (t != null) {
                                             this.pluginInfo.clear();
-                                            notify(RegistrationEvent.State.UNREGISTERED);
                                             throw new RegistrationException(t);
                                         }
 

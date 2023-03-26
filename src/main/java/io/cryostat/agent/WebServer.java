@@ -44,7 +44,6 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
@@ -109,15 +108,10 @@ class WebServer {
         this.compressionFilter = new CompressionFilter();
     }
 
-    CompletableFuture<Void> start() throws IOException, NoSuchAlgorithmException {
-        List<CompletableFuture<Void>> cfs = new ArrayList<>();
+    void start() throws IOException, NoSuchAlgorithmException {
         if (this.http != null) {
             stop();
         }
-
-        CompletableFuture<Void> credentialSubmission = new CompletableFuture<>();
-        cfs.add(credentialSubmission);
-        this.generateCredentials(credentialSubmission);
 
         this.http = HttpServer.create(new InetSocketAddress(host, port), 0);
         this.http.setExecutor(executor);
@@ -133,8 +127,6 @@ class WebServer {
                 });
 
         this.http.start();
-
-        return CompletableFuture.allOf(cfs.toArray(new CompletableFuture[0]));
     }
 
     void stop() {
@@ -148,10 +140,10 @@ class WebServer {
         return credentialId;
     }
 
-    void generateCredentials(CompletableFuture<Void> future) throws NoSuchAlgorithmException {
+    CompletableFuture<Void> generateCredentials() throws NoSuchAlgorithmException {
         synchronized (this.credentials) {
             this.credentials.regenerate();
-            this.cryostat
+            return this.cryostat
                     .get()
                     .submitCredentialsIfRequired(this.credentialId, this.credentials)
                     .handle(
@@ -161,15 +153,13 @@ class WebServer {
                                     executor.schedule(
                                             () -> {
                                                 try {
-                                                    this.generateCredentials(future);
+                                                    this.generateCredentials();
                                                 } catch (NoSuchAlgorithmException e) {
                                                     log.error("Cannot submit credentials", e);
                                                 }
                                             },
                                             registrationRetryMs,
                                             TimeUnit.MILLISECONDS);
-                                } else {
-                                    future.complete(null);
                                 }
                                 return v;
                             })
@@ -195,7 +185,7 @@ class WebServer {
             switch (mtd) {
                 case "POST":
                     synchronized (WebServer.this.credentials) {
-                        executor.execute(registration.get()::tryRegister);
+                        executor.execute(registration.get()::deregister);
                         exchange.sendResponseHeaders(HttpStatus.SC_NO_CONTENT, -1);
                         exchange.close();
                     }
@@ -310,7 +300,8 @@ class WebServer {
 
         synchronized boolean checkUserInfo(String username, String password)
                 throws NoSuchAlgorithmException {
-            return Objects.equals(username, Credentials.user)
+            return passHash.length > 0
+                    && Objects.equals(username, Credentials.user)
                     && Arrays.equals(hash(password), this.passHash);
         }
 

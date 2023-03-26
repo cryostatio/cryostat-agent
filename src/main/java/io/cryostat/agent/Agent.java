@@ -106,7 +106,8 @@ public class Agent {
                                 break;
                         }
                     });
-            webServer.start().thenRun(registration::start).get();
+            webServer.start();
+            registration.start();
             log.info("Startup complete");
         } catch (Exception e) {
             log.error(Agent.class.getSimpleName() + " startup failure", e);
