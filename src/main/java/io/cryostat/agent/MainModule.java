@@ -113,8 +113,10 @@ public abstract class MainModule {
             ScheduledExecutorService executor,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_HOST) String host,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_PORT) int port,
-            Lazy<Registration> registration) {
-        return new WebServer(remoteContexts, cryostat, executor, host, port, registration);
+            Lazy<Registration> registration,
+            @Named(ConfigModule.CRYOSTAT_AGENT_REGISTRATION_RETRY_MS) int registrationRetryMs) {
+        return new WebServer(
+                remoteContexts, cryostat, executor, host, port, registration, registrationRetryMs);
     }
 
     @Provides
@@ -212,7 +214,8 @@ public abstract class MainModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_HOSTNAME) String hostname,
             @Named(ConfigModule.CRYOSTAT_AGENT_REGISTRATION_PREFER_JMX) boolean preferJmx,
             @Named(ConfigModule.CRYOSTAT_AGENT_APP_JMX_PORT) int jmxPort,
-            @Named(ConfigModule.CRYOSTAT_AGENT_REGISTRATION_RETRY_MS) int registrationRetryMs) {
+            @Named(ConfigModule.CRYOSTAT_AGENT_REGISTRATION_RETRY_MS) int registrationRetryMs,
+            @Named(ConfigModule.CRYOSTAT_AGENT_REGISTRATION_CHECK_MS) int registrationCheckMs) {
         return new Registration(
                 executor,
                 cryostat,
@@ -224,7 +227,8 @@ public abstract class MainModule {
                 hostname,
                 preferJmx,
                 jmxPort,
-                registrationRetryMs);
+                registrationRetryMs,
+                registrationCheckMs);
     }
 
     @Provides
@@ -236,11 +240,12 @@ public abstract class MainModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_HARVESTER_MAX_FILES) int maxFiles,
             @Named(ConfigModule.CRYOSTAT_AGENT_HARVESTER_EXIT_MAX_AGE_MS) long maxAge,
             @Named(ConfigModule.CRYOSTAT_AGENT_HARVESTER_EXIT_MAX_SIZE_B) long maxSize,
-            CryostatClient client) {
+            CryostatClient client,
+            Registration registration) {
         RecordingSettings settings = new RecordingSettings();
         settings.maxAge = maxAge;
         settings.maxSize = maxSize;
-        return new Harvester(executor, period, template, maxFiles, settings, client);
+        return new Harvester(executor, period, template, maxFiles, settings, client, registration);
     }
 
     @Provides

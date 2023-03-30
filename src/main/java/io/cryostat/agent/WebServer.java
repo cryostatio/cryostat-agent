@@ -49,7 +49,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.zip.DeflaterOutputStream;
 
@@ -76,7 +78,9 @@ class WebServer {
     private final int port;
     private final Credentials credentials;
     private final Lazy<Registration> registration;
+    private final int registrationRetryMs;
     private HttpServer http;
+    private volatile int credentialId = -1;
 
     private final AgentAuthenticator agentAuthenticator;
     private final RequestLoggingFilter requestLoggingFilter;
@@ -88,7 +92,8 @@ class WebServer {
             ScheduledExecutorService executor,
             String host,
             int port,
-            Lazy<Registration> registration) {
+            Lazy<Registration> registration,
+            int registrationRetryMs) {
         this.remoteContexts = remoteContexts;
         this.cryostat = cryostat;
         this.executor = executor;
@@ -96,6 +101,7 @@ class WebServer {
         this.port = port;
         this.credentials = new Credentials();
         this.registration = registration;
+        this.registrationRetryMs = registrationRetryMs;
 
         this.agentAuthenticator = new AgentAuthenticator();
         this.requestLoggingFilter = new RequestLoggingFilter();
@@ -106,8 +112,6 @@ class WebServer {
         if (this.http != null) {
             stop();
         }
-
-        this.generateCredentials();
 
         this.http = HttpServer.create(new InetSocketAddress(host, port), 0);
         this.http.setExecutor(executor);
@@ -132,18 +136,69 @@ class WebServer {
         }
     }
 
-    Credentials getCredentials() {
-        return credentials;
+    int getCredentialId() {
+        return credentialId;
     }
 
-    void generateCredentials() throws NoSuchAlgorithmException {
+    CompletableFuture<Void> generateCredentials() throws NoSuchAlgorithmException {
         synchronized (this.credentials) {
             this.credentials.regenerate();
-            this.cryostat
+            return this.cryostat
                     .get()
-                    .submitCredentials(this.credentials)
-                    .thenAccept(i -> log.info("Defined credentials with id {}", i))
+                    .submitCredentialsIfRequired(this.credentialId, this.credentials)
+                    .handle(
+                            (v, t) -> {
+                                if (t != null) {
+                                    log.error("Could not submit credentials", t);
+                                    executor.schedule(
+                                            () -> {
+                                                try {
+                                                    this.generateCredentials();
+                                                } catch (NoSuchAlgorithmException e) {
+                                                    log.error("Cannot submit credentials", e);
+                                                }
+                                            },
+                                            registrationRetryMs,
+                                            TimeUnit.MILLISECONDS);
+                                }
+                                return v;
+                            })
+                    .thenAccept(
+                            i -> {
+                                this.credentialId = i;
+                                log.info("Defined credentials with id {}", i);
+                            })
                     .thenRun(this.credentials::clear);
+        }
+    }
+
+    private class PingContext implements RemoteContext {
+
+        @Override
+        public String path() {
+            return "/";
+        }
+
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            String mtd = exchange.getRequestMethod();
+            switch (mtd) {
+                case "POST":
+                    synchronized (WebServer.this.credentials) {
+                        executor.execute(registration.get()::deregister);
+                        exchange.sendResponseHeaders(HttpStatus.SC_NO_CONTENT, -1);
+                        exchange.close();
+                    }
+                    break;
+                case "GET":
+                    exchange.sendResponseHeaders(HttpStatus.SC_NO_CONTENT, -1);
+                    exchange.close();
+                    break;
+                default:
+                    exchange.sendResponseHeaders(HttpStatus.SC_NOT_FOUND, -1);
+                    exchange.close();
+                    break;
+            }
         }
     }
 
@@ -218,36 +273,6 @@ class WebServer {
         }
     }
 
-    private class PingContext implements RemoteContext {
-
-        @Override
-        public String path() {
-            return "/";
-        }
-
-        @Override
-        public void handle(HttpExchange exchange) throws IOException {
-            String mtd = exchange.getRequestMethod();
-            switch (mtd) {
-                case "POST":
-                    synchronized (WebServer.this.credentials) {
-                        executor.execute(registration.get()::tryRegister);
-                        exchange.sendResponseHeaders(HttpStatus.SC_NO_CONTENT, -1);
-                        exchange.close();
-                    }
-                    break;
-                case "GET":
-                    exchange.sendResponseHeaders(HttpStatus.SC_NO_CONTENT, -1);
-                    exchange.close();
-                    break;
-                default:
-                    exchange.sendResponseHeaders(HttpStatus.SC_NOT_FOUND, -1);
-                    exchange.close();
-                    break;
-            }
-        }
-    }
-
     private class AgentAuthenticator extends BasicAuthenticator {
 
         private final Logger log = LoggerFactory.getLogger(getClass());
@@ -275,7 +300,8 @@ class WebServer {
 
         synchronized boolean checkUserInfo(String username, String password)
                 throws NoSuchAlgorithmException {
-            return Objects.equals(username, Credentials.user)
+            return passHash.length > 0
+                    && Objects.equals(username, Credentials.user)
                     && Arrays.equals(hash(password), this.passHash);
         }
 

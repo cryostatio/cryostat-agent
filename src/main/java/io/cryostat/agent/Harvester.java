@@ -81,13 +81,32 @@ class Harvester implements FlightRecorderListener {
             String template,
             int maxFiles,
             RecordingSettings exitSettings,
-            CryostatClient client) {
+            CryostatClient client,
+            Registration registration) {
         this.executor = executor;
         this.period = period;
         this.template = template;
         this.maxFiles = maxFiles;
         this.exitSettings = exitSettings;
         this.client = client;
+
+        registration.addRegistrationListener(
+                evt -> {
+                    switch (evt.state) {
+                        case REGISTERED:
+                            break;
+                        case UNREGISTERED:
+                            executor.submit(this::stop);
+                            break;
+                        case REFRESHED:
+                            break;
+                        case PUBLISHED:
+                            executor.submit(this::start);
+                            break;
+                        default:
+                            break;
+                    }
+                });
     }
 
     public void start() {
