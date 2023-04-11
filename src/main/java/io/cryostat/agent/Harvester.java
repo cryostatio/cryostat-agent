@@ -45,6 +45,7 @@ import java.text.ParseException;
 import java.time.Duration;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
@@ -65,6 +66,7 @@ class Harvester implements FlightRecorderListener {
     private final Logger log = LoggerFactory.getLogger(getClass());
 
     private final ScheduledExecutorService executor;
+    private final ScheduledExecutorService workerPool;
     private final long period;
     private final String template;
     private final int maxFiles;
@@ -79,6 +81,7 @@ class Harvester implements FlightRecorderListener {
 
     Harvester(
             ScheduledExecutorService executor,
+            ScheduledExecutorService workerPool,
             long period,
             String template,
             int maxFiles,
@@ -87,6 +90,7 @@ class Harvester implements FlightRecorderListener {
             CryostatClient client,
             Registration registration) {
         this.executor = executor;
+        this.workerPool = workerPool;
         this.period = period;
         this.template = template;
         this.maxFiles = maxFiles;
@@ -114,65 +118,74 @@ class Harvester implements FlightRecorderListener {
     }
 
     public void start() {
-        if (running) {
-            return;
-        }
-        if (period <= 0) {
-            log.info("Harvester disabled, period {} < 0", period);
-            return;
-        }
-        if (StringUtils.isBlank(template)) {
-            log.info("Template not specified");
-        }
-        if (maxFiles <= 0) {
-            log.info("Maximum number of files to keep within target is {} <= 0", maxFiles);
-        }
-        if (!FlightRecorder.isAvailable()) {
-            log.error("FlightRecorder is unavailable");
-            return;
-        }
-        log.info("JFR Harvester starting");
-        try {
-            FlightRecorder.addListener(this);
-            this.flightRecorder = FlightRecorder.getFlightRecorder();
-            log.info(
-                    "JFR Harvester started using template \"{}\" with period {}",
-                    template,
-                    Duration.ofMillis(period));
-            if (exitSettings.maxAge > 0) {
-                log.info(
-                        "On-stop uploads will contain approximately the most recent {}ms ({}) of"
-                                + " data",
-                        exitSettings.maxAge,
-                        Duration.ofMillis(exitSettings.maxAge));
-            }
-            if (exitSettings.maxSize > 0) {
-                log.info(
-                        "On-stop uploads will contain approximately the most recent {} bytes ({})"
-                                + " of data",
-                        exitSettings.maxSize,
-                        FileUtils.byteCountToDisplaySize(exitSettings.maxSize));
-            }
-        } catch (SecurityException | IllegalStateException e) {
-            log.error("Harvester could not start", e);
-            return;
-        }
-        startRecording();
-        running = true;
+        executor.submit(
+                () -> {
+                    if (running) {
+                        return;
+                    }
+                    if (period <= 0) {
+                        log.info("Harvester disabled, period {} < 0", period);
+                        return;
+                    }
+                    if (StringUtils.isBlank(template)) {
+                        log.info("Template not specified");
+                    }
+                    if (maxFiles <= 0) {
+                        log.info(
+                                "Maximum number of files to keep within target is {} <= 0",
+                                maxFiles);
+                    }
+                    if (!FlightRecorder.isAvailable()) {
+                        log.error("FlightRecorder is unavailable");
+                        return;
+                    }
+                    log.info("JFR Harvester starting");
+                    try {
+                        FlightRecorder.addListener(this);
+                        this.flightRecorder = FlightRecorder.getFlightRecorder();
+                        log.info(
+                                "JFR Harvester started using template \"{}\" with period {}",
+                                template,
+                                Duration.ofMillis(period));
+                        if (exitSettings.maxAge > 0) {
+                            log.info(
+                                    "On-stop uploads will contain approximately the most recent"
+                                            + " {}ms ({}) of data",
+                                    exitSettings.maxAge,
+                                    Duration.ofMillis(exitSettings.maxAge));
+                        }
+                        if (exitSettings.maxSize > 0) {
+                            log.info(
+                                    "On-stop uploads will contain approximately the most recent {}"
+                                            + " bytes ({}) of data",
+                                    exitSettings.maxSize,
+                                    FileUtils.byteCountToDisplaySize(exitSettings.maxSize));
+                        }
+                    } catch (SecurityException | IllegalStateException e) {
+                        log.error("Harvester could not start", e);
+                        return;
+                    }
+                    safeCloseCurrentRecording();
+                    startRecording();
+                    running = true;
+                });
     }
 
     public void stop() {
-        if (!running) {
-            return;
-        }
-        log.info("Harvester stopping");
-        if (this.task != null) {
-            this.task.cancel(true);
-            this.task = null;
-        }
-        FlightRecorder.removeListener(this);
-        log.info("Harvester stopped");
-        running = false;
+        executor.submit(
+                () -> {
+                    if (!running) {
+                        return;
+                    }
+                    log.info("Harvester stopping");
+                    if (this.task != null) {
+                        this.task.cancel(true);
+                        this.task = null;
+                    }
+                    FlightRecorder.removeListener(this);
+                    log.info("Harvester stopped");
+                    running = false;
+                });
     }
 
     @Override
@@ -190,15 +203,19 @@ class Harvester implements FlightRecorderListener {
                     recording.close(); // we should get notified for the CLOSED state next
                     break;
                 case CLOSED:
-                    if (running) {
-                        try {
-                            uploadDumpedFile().get();
-                        } catch (ExecutionException | InterruptedException | IOException e) {
-                            log.warn("Could not upload exit dump file", e);
-                        } finally {
-                            startRecording();
-                        }
-                    }
+                    executor.submit(
+                            () -> {
+                                if (running) {
+                                    try {
+                                        uploadDumpedFile().get();
+                                        startRecording();
+                                    } catch (ExecutionException
+                                            | InterruptedException
+                                            | IOException e) {
+                                        log.warn("Could not upload exit dump file", e);
+                                    }
+                                }
+                            });
                     break;
                 default:
                     log.warn(
@@ -211,26 +228,29 @@ class Harvester implements FlightRecorderListener {
     }
 
     Future<Void> exitUpload() {
-        running = false;
-        if (flightRecorder == null || period <= 0) {
-            return CompletableFuture.completedFuture(null);
-        }
-        try {
-            uploadOngoing(PushType.ON_STOP, exitSettings).get();
-        } catch (ExecutionException | InterruptedException e) {
-            log.warn("Exit upload failed", e);
-            return CompletableFuture.failedFuture(e);
-        } finally {
-            safeCloseCurrentRecording();
-        }
-        log.info("Harvester stopped");
-        return CompletableFuture.completedFuture(null);
+        return CompletableFuture.supplyAsync(
+                () -> {
+                    running = false;
+                    if (flightRecorder == null || period <= 0) {
+                        return null;
+                    }
+                    try {
+                        uploadOngoing(PushType.ON_STOP, exitSettings).get();
+                    } catch (ExecutionException | InterruptedException e) {
+                        log.warn("Exit upload failed", e);
+                        throw new CompletionException(e);
+                    } finally {
+                        safeCloseCurrentRecording();
+                    }
+                    log.info("Harvester stopped");
+                    return null;
+                },
+                executor);
     }
 
     private Future<?> startRecording() {
         return executor.submit(
                 () -> {
-                    safeCloseCurrentRecording();
                     Recording recording = null;
                     try {
                         Configuration config = Configuration.getConfiguration(template);
@@ -246,10 +266,10 @@ class Harvester implements FlightRecorderListener {
                         this.recordingId.set(recording.getId());
                         startPeriodic();
                     } catch (ParseException | IOException e) {
+                        log.error("Unable to start recording", e);
                         if (recording != null) {
                             recording.close();
                         }
-                        log.error("Unable to start recording", e);
                     }
                 });
     }
@@ -259,12 +279,12 @@ class Harvester implements FlightRecorderListener {
             this.task.cancel(true);
         }
         this.task =
-                executor.scheduleAtFixedRate(
+                workerPool.scheduleAtFixedRate(
                         this::uploadOngoing, period, period, TimeUnit.MILLISECONDS);
     }
 
     private void safeCloseCurrentRecording() {
-        getById(recordingId.get()).ifPresent(Recording::close);
+        executor.submit(() -> getById(recordingId.get()).ifPresent(Recording::close));
     }
 
     private Optional<Recording> getById(long id) {
@@ -301,7 +321,7 @@ class Harvester implements FlightRecorderListener {
         } catch (IOException e) {
             return CompletableFuture.failedFuture(e);
         } finally {
-            if (settings.isApplicable()) {
+            if (recording.getId() != this.recordingId.get()) {
                 recording.close();
             }
         }

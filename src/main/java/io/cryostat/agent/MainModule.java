@@ -234,7 +234,7 @@ public abstract class MainModule {
     @Provides
     @Singleton
     public static Harvester provideHarvester(
-            ScheduledExecutorService executor,
+            ScheduledExecutorService workerPool,
             @Named(ConfigModule.CRYOSTAT_AGENT_HARVESTER_PERIOD_MS) long period,
             @Named(ConfigModule.CRYOSTAT_AGENT_HARVESTER_TEMPLATE) String template,
             @Named(ConfigModule.CRYOSTAT_AGENT_HARVESTER_MAX_FILES) int maxFiles,
@@ -251,7 +251,14 @@ public abstract class MainModule {
         periodicSettings.maxAge = maxAge > 0 ? maxAge : (long) (period * 1.5);
         periodicSettings.maxSize = maxSize;
         return new Harvester(
-                executor,
+                Executors.newSingleThreadScheduledExecutor(
+                        r -> {
+                            Thread t = new Thread(r);
+                            t.setName("cryostat-agent-harvester");
+                            t.setDaemon(true);
+                            return t;
+                        }),
+                workerPool,
                 period,
                 template,
                 maxFiles,
