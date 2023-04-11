@@ -165,8 +165,7 @@ class Harvester implements FlightRecorderListener {
                         log.error("Harvester could not start", e);
                         return;
                     }
-                    safeCloseCurrentRecording();
-                    startRecording();
+                    startRecording(true);
                     running = true;
                 });
     }
@@ -208,11 +207,12 @@ class Harvester implements FlightRecorderListener {
                                 if (running) {
                                     try {
                                         uploadDumpedFile().get();
-                                        startRecording();
                                     } catch (ExecutionException
                                             | InterruptedException
                                             | IOException e) {
                                         log.warn("Could not upload exit dump file", e);
+                                    } finally {
+                                        startRecording(false);
                                     }
                                 }
                             });
@@ -248,9 +248,14 @@ class Harvester implements FlightRecorderListener {
                 executor);
     }
 
-    private Future<?> startRecording() {
-        return executor.submit(
+    private void startRecording(boolean restart) {
+        executor.submit(
                 () -> {
+                    if (restart) {
+                        safeCloseCurrentRecording();
+                    } else if (getById(this.recordingId.get()).isPresent()) {
+                        return;
+                    }
                     Recording recording = null;
                     try {
                         Configuration config = Configuration.getConfiguration(template);
@@ -284,7 +289,7 @@ class Harvester implements FlightRecorderListener {
     }
 
     private void safeCloseCurrentRecording() {
-        executor.submit(() -> getById(recordingId.get()).ifPresent(Recording::close));
+        getById(recordingId.get()).ifPresent(Recording::close);
     }
 
     private Optional<Recording> getById(long id) {
