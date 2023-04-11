@@ -50,6 +50,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.UnaryOperator;
 
 import jdk.jfr.Configuration;
 import jdk.jfr.FlightRecorder;
@@ -68,6 +69,7 @@ class Harvester implements FlightRecorderListener {
     private final String template;
     private final int maxFiles;
     private final RecordingSettings exitSettings;
+    private final RecordingSettings periodicSettings;
     private final CryostatClient client;
     private final AtomicLong recordingId = new AtomicLong(-1L);
     private volatile Path exitPath;
@@ -81,6 +83,7 @@ class Harvester implements FlightRecorderListener {
             String template,
             int maxFiles,
             RecordingSettings exitSettings,
+            RecordingSettings periodicSettings,
             CryostatClient client,
             Registration registration) {
         this.executor = executor;
@@ -88,6 +91,7 @@ class Harvester implements FlightRecorderListener {
         this.template = template;
         this.maxFiles = maxFiles;
         this.exitSettings = exitSettings;
+        this.periodicSettings = periodicSettings;
         this.client = client;
 
         registration.addRegistrationListener(
@@ -276,11 +280,7 @@ class Harvester implements FlightRecorderListener {
     }
 
     private Future<Void> uploadOngoing() {
-        return uploadOngoing(PushType.SCHEDULED);
-    }
-
-    private Future<Void> uploadOngoing(PushType pushType) {
-        return uploadOngoing(pushType, null);
+        return uploadOngoing(PushType.SCHEDULED, periodicSettings);
     }
 
     private Future<Void> uploadOngoing(PushType pushType, RecordingSettings settings) {
@@ -289,15 +289,8 @@ class Harvester implements FlightRecorderListener {
             return CompletableFuture.failedFuture(new IllegalStateException("No source recording"));
         }
         Recording recording;
-        boolean isSynthetic = settings != null && (settings.maxSize > 0 || settings.maxAge > 0);
-        if (isSynthetic) {
-            recording = FlightRecorder.getFlightRecorder().takeSnapshot();
-            if (settings.maxSize > 0) {
-                recording.setMaxSize(settings.maxSize);
-            }
-            if (settings.maxAge > 0) {
-                recording.setMaxAge(Duration.ofMillis(settings.maxAge));
-            }
+        if (settings.isApplicable()) {
+            recording = settings.apply(FlightRecorder.getFlightRecorder().takeSnapshot());
         } else {
             recording = o.get();
         }
@@ -308,7 +301,7 @@ class Harvester implements FlightRecorderListener {
         } catch (IOException e) {
             return CompletableFuture.failedFuture(e);
         } finally {
-            if (isSynthetic) {
+            if (settings.isApplicable()) {
                 recording.close();
             }
         }
@@ -324,8 +317,26 @@ class Harvester implements FlightRecorderListener {
         EMERGENCY,
     }
 
-    static class RecordingSettings {
+    static class RecordingSettings implements UnaryOperator<Recording> {
         long maxSize;
         long maxAge;
+
+        boolean isApplicable() {
+            return maxSize > 0 || maxAge > 0;
+        }
+
+        @Override
+        public Recording apply(Recording r) {
+            if (!isApplicable()) {
+                return r;
+            }
+            if (maxSize > 0) {
+                r.setMaxSize(maxSize);
+            }
+            if (maxAge > 0) {
+                r.setMaxAge(Duration.ofMillis(maxAge));
+            }
+            return r;
+        }
     }
 }
