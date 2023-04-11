@@ -304,15 +304,10 @@ class Harvester implements FlightRecorderListener {
     }
 
     private Future<Void> uploadOngoing(PushType pushType, RecordingSettings settings) {
-        Optional<Recording> o = getById(this.recordingId.get());
-        if (o.isEmpty()) {
-            return CompletableFuture.failedFuture(new IllegalStateException("No source recording"));
-        }
-        Recording recording;
-        if (settings.isApplicable()) {
-            recording = settings.apply(FlightRecorder.getFlightRecorder().takeSnapshot());
-        } else {
-            recording = o.get();
+        Recording recording = settings.apply(flightRecorder.takeSnapshot());
+        if (recording.getSize() < 1) {
+            return CompletableFuture.failedFuture(
+                    new IllegalStateException("No source recording data"));
         }
         try {
             Files.write(exitPath, new byte[0], StandardOpenOption.TRUNCATE_EXISTING);
@@ -321,9 +316,7 @@ class Harvester implements FlightRecorderListener {
         } catch (IOException e) {
             return CompletableFuture.failedFuture(e);
         } finally {
-            if (recording.getId() != this.recordingId.get()) {
-                recording.close();
-            }
+            recording.close();
         }
     }
 
@@ -341,15 +334,8 @@ class Harvester implements FlightRecorderListener {
         long maxSize;
         long maxAge;
 
-        boolean isApplicable() {
-            return maxSize > 0 || maxAge > 0;
-        }
-
         @Override
         public Recording apply(Recording r) {
-            if (!isApplicable()) {
-                return r;
-            }
             if (maxSize > 0) {
                 r.setMaxSize(maxSize);
             }
