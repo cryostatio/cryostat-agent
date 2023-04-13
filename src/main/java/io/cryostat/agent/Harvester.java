@@ -161,6 +161,20 @@ class Harvester implements FlightRecorderListener {
                                     exitSettings.maxSize,
                                     FileUtils.byteCountToDisplaySize(exitSettings.maxSize));
                         }
+                        if (periodicSettings.maxAge > 0) {
+                            log.info(
+                                    "Periodic uploads will contain approximately the most recent"
+                                            + " {}ms ({}) of data",
+                                    periodicSettings.maxAge,
+                                    Duration.ofMillis(periodicSettings.maxAge));
+                        }
+                        if (periodicSettings.maxSize > 0) {
+                            log.info(
+                                    "On-stop uploads will contain approximately the most recent {}"
+                                            + " bytes ({}) of data",
+                                    periodicSettings.maxSize,
+                                    FileUtils.byteCountToDisplaySize(periodicSettings.maxSize));
+                        }
                     } catch (SecurityException | IllegalStateException e) {
                         log.error("Harvester could not start", e);
                         return;
