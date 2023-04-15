@@ -186,6 +186,8 @@ class Registration {
                                         }
                                     });
                             break;
+                        case REFRESHING:
+                            break;
                         case REFRESHED:
                             break;
                         case PUBLISHED:
@@ -203,6 +205,7 @@ class Registration {
     }
 
     void tryRegister() {
+        notify(RegistrationEvent.State.REFRESHING);
         try {
             URI credentialedCallback =
                     new URIBuilder(callback)
@@ -219,11 +222,12 @@ class Registration {
                                                     this.pluginInfo.isInitialized();
                                             this.pluginInfo.copyFrom(plugin);
                                             log.info("Registered as {}", this.pluginInfo.getId());
-                                            notify(
-                                                    previouslyRegistered
-                                                            ? RegistrationEvent.State.REFRESHED
-                                                            : RegistrationEvent.State.REGISTERED);
-                                            tryUpdate();
+                                            if (previouslyRegistered) {
+                                                notify(RegistrationEvent.State.REFRESHED);
+                                            } else {
+                                                notify(RegistrationEvent.State.REGISTERED);
+                                                tryUpdate();
+                                            }
                                         } else if (t != null) {
                                             this.pluginInfo.clear();
                                             throw new RegistrationException(t);
@@ -347,6 +351,7 @@ class Registration {
             REGISTERED,
             PUBLISHED,
             UNREGISTERED,
+            REFRESHING,
             REFRESHED,
         }
 

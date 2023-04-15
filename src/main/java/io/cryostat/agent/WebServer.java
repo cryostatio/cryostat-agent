@@ -185,7 +185,7 @@ class WebServer {
             switch (mtd) {
                 case "POST":
                     synchronized (WebServer.this.credentials) {
-                        executor.execute(registration.get()::deregister);
+                        executor.execute(registration.get()::tryRegister);
                         exchange.sendResponseHeaders(HttpStatus.SC_NO_CONTENT, -1);
                         exchange.close();
                     }
