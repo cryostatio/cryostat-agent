@@ -97,6 +97,7 @@ public class Agent {
                         switch (evt.state) {
                             case REGISTERED:
                             case UNREGISTERED:
+                            case REFRESHING:
                             case REFRESHED:
                             case PUBLISHED:
                                 log.info("Registration state: {}", evt.state);
