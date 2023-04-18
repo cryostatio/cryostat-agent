@@ -154,6 +154,7 @@ class Registration {
                         case UNREGISTERED:
                             if (this.registrationCheckTask != null) {
                                 this.registrationCheckTask.cancel(true);
+                                this.registrationCheckTask = null;
                             }
                             executor.submit(
                                     () -> {
