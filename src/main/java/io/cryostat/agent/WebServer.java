@@ -295,6 +295,7 @@ class WebServer {
     static class Credentials {
 
         private static final String user = "agent";
+        private final SecureRandom random = new SecureRandom();
         private byte[] passHash = new byte[0];
         private byte[] pass = new byte[0];
 
@@ -307,7 +308,6 @@ class WebServer {
 
         synchronized void regenerate() throws NoSuchAlgorithmException {
             this.clear();
-            final SecureRandom r = SecureRandom.getInstanceStrong();
             final int len = 24;
 
             this.pass = new byte[len];
@@ -315,24 +315,24 @@ class WebServer {
             // guarantee at least one character from each class
             this.pass[0] = randomSymbol();
             this.pass[1] = randomNumeric();
-            this.pass[2] = randomAlphabetical(r.nextBoolean());
+            this.pass[2] = randomAlphabetical(random.nextBoolean());
 
             // fill remaining slots with randomly assigned characters across classes
             for (int i = 3; i < len; i++) {
-                int s = r.nextInt(3);
+                int s = random.nextInt(3);
                 if (s == 0) {
                     this.pass[i] = randomSymbol();
                 } else if (s == 1) {
                     this.pass[i] = randomNumeric();
                 } else {
-                    this.pass[i] = randomAlphabetical(r.nextBoolean());
+                    this.pass[i] = randomAlphabetical(random.nextBoolean());
                 }
             }
 
             // randomly shuffle the characters
             // https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle
             for (int i = this.pass.length - 1; i > 1; i--) {
-                int j = r.nextInt(i);
+                int j = random.nextInt(i);
                 byte b = this.pass[i];
                 this.pass[i] = this.pass[j];
                 this.pass[j] = b;
@@ -353,20 +353,20 @@ class WebServer {
             Arrays.fill(this.pass, (byte) 0);
         }
 
-        private static byte randomAlphabetical(boolean upperCase) throws NoSuchAlgorithmException {
+        private byte randomAlphabetical(boolean upperCase) throws NoSuchAlgorithmException {
             return randomChar(upperCase ? 'A' : 'a', 26);
         }
 
-        private static byte randomNumeric() throws NoSuchAlgorithmException {
+        private byte randomNumeric() throws NoSuchAlgorithmException {
             return randomChar('0', 10);
         }
 
-        private static byte randomSymbol() throws NoSuchAlgorithmException {
+        private byte randomSymbol() throws NoSuchAlgorithmException {
             return randomChar(33, 14);
         }
 
-        private static byte randomChar(int offset, int range) throws NoSuchAlgorithmException {
-            return (byte) (SecureRandom.getInstanceStrong().nextInt(range) + offset);
+        private byte randomChar(int offset, int range) throws NoSuchAlgorithmException {
+            return (byte) (random.nextInt(range) + offset);
         }
 
         private static byte[] hash(String pass) throws NoSuchAlgorithmException {
