@@ -123,7 +123,11 @@ class RecordingsContext implements RemoteContext {
             this.duration = this.isContinuous ? 0 : rec.getDuration().toMillis();
             this.toDisk = rec.isToDisk();
             this.maxSize = rec.getMaxSize();
-            this.maxAge = rec.getMaxAge().toMillis();
+            if (rec.getMaxAge() != null) {
+                this.maxAge = rec.getMaxAge().toMillis();
+            } else {
+                this.maxAge = -1;
+            }
         }
     }
 }
