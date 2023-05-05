@@ -126,7 +126,7 @@ class RecordingsContext implements RemoteContext {
             if (rec.getMaxAge() != null) {
                 this.maxAge = rec.getMaxAge().toMillis();
             } else {
-                this.maxAge = -1;
+                this.maxAge = 0;
             }
         }
     }
