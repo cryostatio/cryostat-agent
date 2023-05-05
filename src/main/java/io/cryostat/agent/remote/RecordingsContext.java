@@ -118,12 +118,20 @@ class RecordingsContext implements RemoteContext {
             this.name = rec.getName();
             this.state = rec.getState().name();
             this.options = rec.getSettings();
-            this.startTime = rec.getStartTime().toEpochMilli();
+            if (rec.getStartTime() != null) {
+                this.startTime = rec.getStartTime().toEpochMilli();
+            } else {
+                this.startTime = 0;
+            }
             this.isContinuous = rec.getDuration() == null;
             this.duration = this.isContinuous ? 0 : rec.getDuration().toMillis();
             this.toDisk = rec.isToDisk();
             this.maxSize = rec.getMaxSize();
-            this.maxAge = rec.getMaxAge().toMillis();
+            if (rec.getMaxAge() != null) {
+                this.maxAge = rec.getMaxAge().toMillis();
+            } else {
+                this.maxAge = 0;
+            }
         }
     }
 }
