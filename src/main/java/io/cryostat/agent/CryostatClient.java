@@ -172,9 +172,9 @@ public class CryostatClient {
     }
 
     public CompletableFuture<Integer> submitCredentialsIfRequired(
-            int prevId, Credentials credentials) {
+            int prevId, Credentials credentials, URI callback) {
         if (prevId < 0) {
-            return submitCredentials(credentials);
+            return submitCredentials(credentials, callback);
         }
         HttpGet req = new HttpGet(baseUri.resolve(CREDENTIALS_API_PATH + "/" + prevId));
         log.info("{}", req);
@@ -185,11 +185,11 @@ public class CryostatClient {
                             if (exists) {
                                 return CompletableFuture.completedFuture(prevId);
                             }
-                            return submitCredentials(credentials);
+                            return submitCredentials(credentials, callback);
                         });
     }
 
-    private CompletableFuture<Integer> submitCredentials(Credentials credentials) {
+    private CompletableFuture<Integer> submitCredentials(Credentials credentials, URI callback) {
         HttpPost req = new HttpPost(baseUri.resolve(CREDENTIALS_API_PATH));
         MultipartEntityBuilder entityBuilder =
                 MultipartEntityBuilder.create()
@@ -211,7 +211,7 @@ public class CryostatClient {
                                 FormBodyPartBuilder.create(
                                                 "matchExpression",
                                                 new StringBody(
-                                                        selfMatchExpression(),
+                                                        selfMatchExpression(callback),
                                                         ContentType.TEXT_PLAIN))
                                         .build());
         log.info("{}", req);
@@ -353,8 +353,8 @@ public class CryostatClient {
         return new CountingInputStream(new BufferedInputStream(Files.newInputStream(filePath)));
     }
 
-    private String selfMatchExpression() {
-        return String.format("target.jvmId == \"%s\"", this.jvmId);
+    private String selfMatchExpression(URI callback) {
+        return String.format("target.connectUrl == \"%s\"", callback);
     }
 
     private boolean isOkStatus(HttpResponse res) {

@@ -39,6 +39,7 @@ package io.cryostat.agent;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -77,6 +78,7 @@ class WebServer {
     private final String host;
     private final int port;
     private final Credentials credentials;
+    private final URI callback;
     private final Lazy<Registration> registration;
     private final int registrationRetryMs;
     private HttpServer http;
@@ -92,6 +94,7 @@ class WebServer {
             ScheduledExecutorService executor,
             String host,
             int port,
+            URI callback,
             Lazy<Registration> registration,
             int registrationRetryMs) {
         this.remoteContexts = remoteContexts;
@@ -100,6 +103,7 @@ class WebServer {
         this.host = host;
         this.port = port;
         this.credentials = new Credentials();
+        this.callback = callback;
         this.registration = registration;
         this.registrationRetryMs = registrationRetryMs;
 
@@ -145,7 +149,7 @@ class WebServer {
             this.credentials.regenerate();
             return this.cryostat
                     .get()
-                    .submitCredentialsIfRequired(this.credentialId, this.credentials)
+                    .submitCredentialsIfRequired(this.credentialId, this.credentials, this.callback)
                     .handle(
                             (v, t) -> {
                                 if (t != null) {
