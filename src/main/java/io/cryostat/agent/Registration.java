@@ -291,24 +291,18 @@ class Registration {
                         .orElse(Instant.EPOCH)
                         .getEpochSecond();
         URI uri = callback;
+        int port = uri.getPort();
         if (preferJmx && jmxPort > 0) {
             uri =
                     URI.create(
                             String.format(
                                     "service:jmx:rmi:///jndi/rmi://%s:%d/jmxrmi",
                                     hostname, jmxPort));
+            port = jmxPort;
         }
         DiscoveryNode.Target target =
                 new DiscoveryNode.Target(
-                        realm,
-                        uri,
-                        appName,
-                        jvmId,
-                        pid,
-                        hostname,
-                        uri.getPort(),
-                        javaMain,
-                        startTime);
+                        realm, uri, appName, jvmId, pid, hostname, port, javaMain, startTime);
 
         DiscoveryNode selfNode =
                 new DiscoveryNode(appName + "-" + pluginInfo.getId(), NODE_TYPE, target);
