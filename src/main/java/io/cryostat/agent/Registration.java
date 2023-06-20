@@ -291,12 +291,14 @@ class Registration {
                         .orElse(Instant.EPOCH)
                         .getEpochSecond();
         URI uri = callback;
+        int port = uri.getPort();
         if (preferJmx && jmxPort > 0) {
             uri =
                     URI.create(
                             String.format(
                                     "service:jmx:rmi:///jndi/rmi://%s:%d/jmxrmi",
                                     hostname, jmxPort));
+            port = jmxPort;
         }
         DiscoveryNode.Target target =
                 new DiscoveryNode.Target(
@@ -306,7 +308,7 @@ class Registration {
                         jvmId,
                         pid,
                         hostname,
-                        uri.getPort(),
+                        port,
                         javaMain,
                         startTime);
 
