@@ -227,6 +227,9 @@ public class CryostatClient {
     }
 
     public CompletableFuture<Void> deleteCredentials(int id) {
+        if (id < 0) {
+            return CompletableFuture.completedFuture(null);
+        }
         HttpDelete req = new HttpDelete(baseUri.resolve(CREDENTIALS_API_PATH + "/" + id));
         log.info("{}", req);
         return supply(req, (res) -> logResponse(req, res))
