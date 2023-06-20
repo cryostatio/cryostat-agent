@@ -302,15 +302,7 @@ class Registration {
         }
         DiscoveryNode.Target target =
                 new DiscoveryNode.Target(
-                        realm,
-                        uri,
-                        appName,
-                        jvmId,
-                        pid,
-                        hostname,
-                        port,
-                        javaMain,
-                        startTime);
+                        realm, uri, appName, jvmId, pid, hostname, port, javaMain, startTime);
 
         DiscoveryNode selfNode =
                 new DiscoveryNode(appName + "-" + pluginInfo.getId(), NODE_TYPE, target);
