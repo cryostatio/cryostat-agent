@@ -354,7 +354,8 @@ public class CryostatClient {
     }
 
     private String selfMatchExpression(URI callback) {
-        return String.format("target.connectUrl == \"%s\"", callback);
+        return String.format(
+                "target.connectUrl == \"%s\" && target.jvmId == \"%s\"", callback, jvmId);
     }
 
     private boolean isOkStatus(HttpResponse res) {
