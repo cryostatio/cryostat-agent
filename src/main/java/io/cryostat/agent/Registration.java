@@ -70,6 +70,7 @@ class Registration {
     private final CryostatClient cryostat;
     private final URI callback;
     private final WebServer webServer;
+    private final String instanceId;
     private final String jvmId;
     private final String appName;
     private final String realm;
@@ -89,6 +90,7 @@ class Registration {
             CryostatClient cryostat,
             URI callback,
             WebServer webServer,
+            String instanceId,
             String jvmId,
             String appName,
             String realm,
@@ -101,6 +103,7 @@ class Registration {
         this.cryostat = cryostat;
         this.callback = callback;
         this.webServer = webServer;
+        this.instanceId = instanceId;
         this.jvmId = jvmId;
         this.appName = appName;
         this.realm = realm;
@@ -302,7 +305,7 @@ class Registration {
         }
         DiscoveryNode.Target target =
                 new DiscoveryNode.Target(
-                        realm, uri, appName, jvmId, pid, hostname, port, javaMain, startTime);
+                        realm, uri, appName, instanceId, jvmId, pid, hostname, port, javaMain, startTime);
 
         DiscoveryNode selfNode =
                 new DiscoveryNode(appName + "-" + pluginInfo.getId(), NODE_TYPE, target);

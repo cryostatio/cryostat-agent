@@ -99,6 +99,7 @@ public class DiscoveryNode {
                 String realm,
                 URI connectUrl,
                 String alias,
+                String instanceId,
                 String jvmId,
                 long pid,
                 String hostname,
@@ -109,7 +110,7 @@ public class DiscoveryNode {
             this.connectUrl = connectUrl;
             this.alias = alias;
             this.annotations = new Annotations();
-            annotations.setPlatform(Map.of());
+            annotations.setPlatform(Map.of("INSTANCE_ID", instanceId));
             annotations.setCryostat(
                     Map.of(
                             "REALM",

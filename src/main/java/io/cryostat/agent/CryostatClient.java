@@ -94,6 +94,7 @@ public class CryostatClient {
     private final HttpClient http;
 
     private final String appName;
+    private final String instanceId;
     private final String jvmId;
     private final URI baseUri;
     private final String realm;
@@ -102,6 +103,7 @@ public class CryostatClient {
             Executor executor,
             ObjectMapper mapper,
             HttpClient http,
+            String instanceId,
             String jvmId,
             String appName,
             URI baseUri,
@@ -109,6 +111,7 @@ public class CryostatClient {
         this.executor = executor;
         this.mapper = mapper;
         this.http = http;
+        this.instanceId = instanceId;
         this.jvmId = jvmId;
         this.appName = appName;
         this.baseUri = baseUri;
@@ -355,7 +358,9 @@ public class CryostatClient {
 
     private String selfMatchExpression(URI callback) {
         return String.format(
-                "target.connectUrl == \"%s\" && target.jvmId == \"%s\"", callback, jvmId);
+                "target.connectUrl == \"%s\" && target.jvmId == \"%s\" &&"
+                        + " target.annotations.platform[\"INSTANCE_ID\"] == \"%s\"",
+                callback, jvmId, instanceId);
     }
 
     private boolean isOkStatus(HttpResponse res) {
