@@ -201,12 +201,14 @@ public abstract class MainModule {
             ScheduledExecutorService executor,
             ObjectMapper objectMapper,
             HttpClient http,
+            @Named(ConfigModule.CRYOSTAT_AGENT_INSTANCE_ID) String instanceId,
             @Named(JVM_ID) String jvmId,
             @Named(ConfigModule.CRYOSTAT_AGENT_APP_NAME) String appName,
             @Named(ConfigModule.CRYOSTAT_AGENT_BASEURI) URI baseUri,
             @Named(ConfigModule.CRYOSTAT_AGENT_REALM) String realm,
             @Named(ConfigModule.CRYOSTAT_AGENT_AUTHORIZATION) String authorization) {
-        return new CryostatClient(executor, objectMapper, http, jvmId, appName, baseUri, realm);
+        return new CryostatClient(
+                executor, objectMapper, http, instanceId, jvmId, appName, baseUri, realm);
     }
 
     @Provides
@@ -216,6 +218,7 @@ public abstract class MainModule {
             CryostatClient cryostat,
             @Named(ConfigModule.CRYOSTAT_AGENT_CALLBACK) URI callback,
             WebServer webServer,
+            @Named(ConfigModule.CRYOSTAT_AGENT_INSTANCE_ID) String instanceId,
             @Named(JVM_ID) String jvmId,
             @Named(ConfigModule.CRYOSTAT_AGENT_APP_NAME) String appName,
             @Named(ConfigModule.CRYOSTAT_AGENT_REALM) String realm,
@@ -229,6 +232,7 @@ public abstract class MainModule {
                 cryostat,
                 callback,
                 webServer,
+                instanceId,
                 jvmId,
                 appName,
                 realm,
