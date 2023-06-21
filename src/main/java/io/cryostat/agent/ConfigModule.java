@@ -42,6 +42,7 @@ import java.net.URI;
 import java.net.UnknownHostException;
 import java.util.Arrays;
 import java.util.List;
+import java.util.UUID;
 
 import javax.inject.Named;
 import javax.inject.Singleton;
@@ -58,6 +59,7 @@ public abstract class ConfigModule {
 
     private static final Logger log = LoggerFactory.getLogger(ConfigModule.class);
 
+    public static final String CRYOSTAT_AGENT_INSTANCE_ID = "cryostat.agent.instance-id";
     public static final String CRYOSTAT_AGENT_BASEURI = "cryostat.agent.baseuri";
     public static final String CRYOSTAT_AGENT_CALLBACK = "cryostat.agent.callback";
     public static final String CRYOSTAT_AGENT_REALM = "cryostat.agent.realm";
@@ -180,6 +182,14 @@ public abstract class ConfigModule {
     @Named(CRYOSTAT_AGENT_WEBSERVER_PORT)
     public static int provideCryostatAgentWebserverPort(SmallRyeConfig config) {
         return config.getValue(CRYOSTAT_AGENT_WEBSERVER_PORT, int.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_INSTANCE_ID)
+    public static String provideCryostatAgentInstanceId(SmallRyeConfig config) {
+        return config.getOptionalValue(CRYOSTAT_AGENT_INSTANCE_ID, String.class)
+                .orElseGet(() -> UUID.randomUUID().toString());
     }
 
     @Provides
