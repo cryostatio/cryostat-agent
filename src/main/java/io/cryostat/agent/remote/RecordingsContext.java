@@ -42,8 +42,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -63,15 +61,12 @@ import io.cryostat.core.FlightRecorderException;
 import io.cryostat.core.net.JFRConnection;
 import io.cryostat.core.net.JFRConnectionToolkit;
 import io.cryostat.core.serialization.SerializableRecordingDescriptor;
-import io.cryostat.core.sys.Environment;
-import io.cryostat.core.sys.FileSystem;
 import io.cryostat.core.templates.LocalStorageTemplateService;
 import io.cryostat.core.templates.MutableTemplateService.InvalidEventTemplateException;
 import io.cryostat.core.templates.MutableTemplateService.InvalidXmlException;
 import io.cryostat.core.templates.RemoteTemplateService;
 import io.cryostat.core.templates.Template;
 import io.cryostat.core.templates.TemplateService;
-import io.cryostat.core.tui.ClientWriter;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
@@ -86,17 +81,19 @@ class RecordingsContext implements RemoteContext {
     private final Logger log = LoggerFactory.getLogger(getClass());
     private final SmallRyeConfig config;
     private final ObjectMapper mapper;
-    private final Path templatesTmp;
+    private final JFRConnectionToolkit jfrConnectionToolkit;
+    private final LocalStorageTemplateService localStorageTemplateService;
 
     @Inject
-    RecordingsContext(SmallRyeConfig config, ObjectMapper mapper) {
+    RecordingsContext(
+            SmallRyeConfig config,
+            ObjectMapper mapper,
+            JFRConnectionToolkit jfrConnectionToolkit,
+            LocalStorageTemplateService localStorageTemplateService) {
         this.config = config;
         this.mapper = mapper;
-        try {
-            this.templatesTmp = Files.createTempDirectory(null);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+        this.jfrConnectionToolkit = jfrConnectionToolkit;
+        this.localStorageTemplateService = localStorageTemplateService;
     }
 
     @Override
@@ -130,39 +127,15 @@ class RecordingsContext implements RemoteContext {
                             exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, -1);
                             return;
                         }
-                        FileSystem fs = new FileSystem();
-                        Environment env =
-                                new Environment() {
-                                    @Override
-                                    public String getEnv(String key) {
-                                        if (LocalStorageTemplateService.TEMPLATE_PATH.equals(key)) {
-                                            return templatesTmp.toString();
-                                        }
-                                        return super.getEnv(key);
-                                    }
-                                };
-                        JFRConnectionToolkit tk =
-                                new JFRConnectionToolkit(
-                                        new ClientWriter() {
-                                            @Override
-                                            public void print(String s) {
-                                                log.info(s);
-                                            }
-
-                                            @Override
-                                            public void println(Exception e) {
-                                                log.warn("JFR MBean connection failure", e);
-                                            }
-                                        },
-                                        fs,
-                                        env);
-                        JFRConnection conn = tk.connect(tk.createServiceURL("localhost", 0));
+                        JFRConnection conn =
+                                jfrConnectionToolkit.connect(
+                                        jfrConnectionToolkit.createServiceURL("localhost", 0));
                         TemplateService templates = null;
                         Template template = null;
                         IConstrainedMap<EventOptionID> events;
                         try {
                             if (req.requestsCustomTemplate()) {
-                                templates = new LocalStorageTemplateService(fs, env);
+                                templates = localStorageTemplateService;
                                 template =
                                         ((LocalStorageTemplateService) templates)
                                                 .addTemplate(

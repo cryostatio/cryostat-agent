@@ -37,7 +37,9 @@
  */
 package io.cryostat.agent;
 
+import java.io.IOException;
 import java.net.URI;
+import java.nio.file.Path;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
@@ -61,6 +63,7 @@ import io.cryostat.core.net.JFRConnection;
 import io.cryostat.core.net.JFRConnectionToolkit;
 import io.cryostat.core.sys.Environment;
 import io.cryostat.core.sys.FileSystem;
+import io.cryostat.core.templates.LocalStorageTemplateService;
 import io.cryostat.core.tui.ClientWriter;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -85,6 +88,7 @@ public abstract class MainModule {
     // one for outbound HTTP requests, one for incoming HTTP requests, and one as a general worker
     private static final int NUM_WORKER_THREADS = 3;
     private static final String JVM_ID = "JVM_ID";
+    private static final String TEMPLATES_PATH = "TEMPLATES_PATH";
 
     @Provides
     @Singleton
@@ -282,19 +286,59 @@ public abstract class MainModule {
 
     @Provides
     @Singleton
-    @Named(JVM_ID)
-    public static String provideJvmId() {
+    public static FileSystem provideFileSystem() {
+        return new FileSystem();
+    }
+
+    @Provides
+    @Singleton
+    @Named(TEMPLATES_PATH)
+    public static Path provideTemplatesTmpPath(FileSystem fs) {
+        try {
+            return fs.createTempDirectory(null);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    @Provides
+    @Singleton
+    public static Environment provideEnvironment(@Named(TEMPLATES_PATH) Path templatesTmp) {
+        return new Environment() {
+            @Override
+            public String getEnv(String key) {
+                if (LocalStorageTemplateService.TEMPLATE_PATH.equals(key)) {
+                    return templatesTmp.toString();
+                }
+                return super.getEnv(key);
+            }
+        };
+    }
+
+    @Provides
+    @Singleton
+    public static ClientWriter provideClientWriter() {
         Logger log = LoggerFactory.getLogger(JFRConnectionToolkit.class);
-        JFRConnectionToolkit tk =
-                new JFRConnectionToolkit(
-                        new ClientWriter() {
-                            @Override
-                            public void print(String msg) {
-                                log.warn(msg);
-                            }
-                        },
-                        new FileSystem(),
-                        new Environment());
+        return new ClientWriter() {
+            @Override
+            public void print(String msg) {
+                log.info(msg);
+            }
+        };
+    }
+
+    @Provides
+    @Singleton
+    public static JFRConnectionToolkit provideJfrConnectionToolkit(
+            ClientWriter cw, FileSystem fs, Environment env) {
+        return new JFRConnectionToolkit(cw, fs, env);
+    }
+
+    @Provides
+    @Singleton
+    @Named(JVM_ID)
+    public static String provideJvmId(JFRConnectionToolkit tk) {
+        Logger log = LoggerFactory.getLogger(JFRConnection.class);
         try {
             try (JFRConnection connection = tk.connect(tk.createServiceURL("localhost", 0))) {
                 String id = connection.getJvmId();
@@ -304,5 +348,12 @@ public abstract class MainModule {
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
+    }
+
+    @Provides
+    @Singleton
+    public static LocalStorageTemplateService provideLocalStorageTemplateService(
+            FileSystem fs, Environment env) {
+        return new LocalStorageTemplateService(fs, env);
     }
 }
