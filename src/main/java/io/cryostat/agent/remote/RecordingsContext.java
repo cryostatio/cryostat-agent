@@ -66,7 +66,7 @@ import io.cryostat.core.templates.MutableTemplateService.InvalidEventTemplateExc
 import io.cryostat.core.templates.MutableTemplateService.InvalidXmlException;
 import io.cryostat.core.templates.RemoteTemplateService;
 import io.cryostat.core.templates.Template;
-import io.cryostat.core.templates.TemplateService;
+import io.cryostat.core.templates.TemplateType;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
@@ -127,77 +127,20 @@ class RecordingsContext implements RemoteContext {
                             exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, -1);
                             return;
                         }
-                        JFRConnection conn =
-                                jfrConnectionToolkit.connect(
-                                        jfrConnectionToolkit.createServiceURL("localhost", 0));
-                        TemplateService templates = null;
-                        Template template = null;
-                        IConstrainedMap<EventOptionID> events;
-                        try {
-                            if (req.requestsCustomTemplate()) {
-                                templates = localStorageTemplateService;
-                                template =
-                                        ((LocalStorageTemplateService) templates)
-                                                .addTemplate(
-                                                        new ByteArrayInputStream(
-                                                                req.template.getBytes(
-                                                                        StandardCharsets.UTF_8)));
-                            } else {
-                                templates = new RemoteTemplateService(conn);
-                                template =
-                                        templates.getTemplates().stream()
-                                                .filter(
-                                                        t ->
-                                                                t.getName()
-                                                                        .equals(
-                                                                                req.localTemplateName))
-                                                .findFirst()
-                                                .orElseThrow();
-                            }
-                            events = templates.getEvents(template).orElseThrow();
-                            IFlightRecorderService svc = conn.getService();
-                            SerializableRecordingDescriptor recording =
-                                    new SerializableRecordingDescriptor(
-                                            svc.start(
-                                                    new RecordingOptionsBuilder(conn.getService())
-                                                            .name(req.name)
-                                                            .duration(
-                                                                    UnitLookup.MILLISECOND.quantity(
-                                                                            req.duration))
-                                                            .maxSize(
-                                                                    UnitLookup.BYTE.quantity(
-                                                                            req.maxSize))
-                                                            .maxAge(
-                                                                    UnitLookup.MILLISECOND.quantity(
-                                                                            req.maxAge))
-                                                            .toDisk(true)
-                                                            .build(),
-                                                    events));
-                            exchange.sendResponseHeaders(HttpStatus.SC_CREATED, 0);
-                            try (OutputStream response = exchange.getResponseBody()) {
-                                mapper.writeValue(response, recording);
-                            }
-                        } catch (QuantityConversionException
-                                | ServiceNotAvailableException
-                                | FlightRecorderException
-                                | org.openjdk.jmc.rjmx.services.jfr.FlightRecorderException
-                                | InvalidEventTemplateException
-                                | InvalidXmlException e) {
-                            log.error("Failed to start recording", e);
-                            exchange.sendResponseHeaders(HttpStatus.SC_INTERNAL_SERVER_ERROR, -1);
-                        } finally {
-                            if (templates != null
-                                    && template != null
-                                    && req.requestsCustomTemplate()) {
-                                try {
-                                    ((LocalStorageTemplateService) templates)
-                                            .deleteTemplate(template);
-                                } catch (InvalidEventTemplateException e) {
-                                    log.error(
-                                            "Failed to clean up template " + template.getName(), e);
-                                }
-                            }
+                        SerializableRecordingDescriptor recording = startRecording(req);
+                        exchange.sendResponseHeaders(HttpStatus.SC_CREATED, 0);
+                        try (OutputStream response = exchange.getResponseBody()) {
+                            mapper.writeValue(response, recording);
                         }
+                    } catch (QuantityConversionException
+                            | ServiceNotAvailableException
+                            | FlightRecorderException
+                            | org.openjdk.jmc.rjmx.services.jfr.FlightRecorderException
+                            | InvalidEventTemplateException
+                            | InvalidXmlException
+                            | IOException e) {
+                        log.error("Failed to start recording", e);
+                        exchange.sendResponseHeaders(HttpStatus.SC_INTERNAL_SERVER_ERROR, -1);
                     }
                     break;
                 default:
@@ -228,6 +171,54 @@ class RecordingsContext implements RemoteContext {
         return FlightRecorder.getFlightRecorder().getRecordings().stream()
                 .map(SerializableRecordingDescriptor::new)
                 .collect(Collectors.toList());
+    }
+
+    private SerializableRecordingDescriptor startRecording(StartRecordingRequest req)
+            throws QuantityConversionException, ServiceNotAvailableException,
+                    FlightRecorderException,
+                    org.openjdk.jmc.rjmx.services.jfr.FlightRecorderException,
+                    InvalidEventTemplateException, InvalidXmlException, IOException {
+        Runnable cleanup = () -> {};
+        try {
+            JFRConnection conn =
+                    jfrConnectionToolkit.connect(
+                            jfrConnectionToolkit.createServiceURL("localhost", 0));
+            IConstrainedMap<EventOptionID> events;
+            if (req.requestsCustomTemplate()) {
+                Template template =
+                        localStorageTemplateService.addTemplate(
+                                new ByteArrayInputStream(
+                                        req.template.getBytes(StandardCharsets.UTF_8)));
+                events = localStorageTemplateService.getEvents(template).orElseThrow();
+                cleanup =
+                        () -> {
+                            try {
+                                localStorageTemplateService.deleteTemplate(template);
+                            } catch (InvalidEventTemplateException | IOException e) {
+                                log.error("Failed to clean up template " + template.getName(), e);
+                            }
+                        };
+            } else {
+                events =
+                        new RemoteTemplateService(conn)
+                                .getEvents(req.localTemplateName, TemplateType.TARGET).stream()
+                                        .findFirst()
+                                        .orElseThrow();
+            }
+            IFlightRecorderService svc = conn.getService();
+            return new SerializableRecordingDescriptor(
+                    svc.start(
+                            new RecordingOptionsBuilder(conn.getService())
+                                    .name(req.name)
+                                    .duration(UnitLookup.MILLISECOND.quantity(req.duration))
+                                    .maxSize(UnitLookup.BYTE.quantity(req.maxSize))
+                                    .maxAge(UnitLookup.MILLISECOND.quantity(req.maxAge))
+                                    .toDisk(true)
+                                    .build(),
+                            events));
+        } finally {
+            cleanup.run();
+        }
     }
 
     static class StartRecordingRequest {
