@@ -107,6 +107,9 @@ public abstract class ConfigModule {
     public static final String CRYOSTAT_AGENT_HARVESTER_MAX_SIZE_B =
             "cryostat.agent.harvester.max-size-b";
 
+    public static final String CRYOSTAT_AGENT_API_WRITES_ENABLED =
+            "cryostat.agent.api.writes-enabled";
+
     @Provides
     @Singleton
     public static SmallRyeConfig provideConfig() {

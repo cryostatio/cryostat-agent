@@ -62,6 +62,7 @@ import com.sun.net.httpserver.BasicAuthenticator;
 import com.sun.net.httpserver.Filter;
 import com.sun.net.httpserver.HttpContext;
 import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 import dagger.Lazy;
 import org.apache.http.HttpStatus;
@@ -122,13 +123,15 @@ class WebServer {
 
         Set<RemoteContext> mergedContexts = new HashSet<>(remoteContexts.get());
         mergedContexts.add(new PingContext());
-        mergedContexts.forEach(
-                rc -> {
-                    HttpContext ctx = this.http.createContext(rc.path(), rc::handle);
-                    ctx.setAuthenticator(agentAuthenticator);
-                    ctx.getFilters().add(requestLoggingFilter);
-                    ctx.getFilters().add(compressionFilter);
-                });
+        mergedContexts.stream()
+                .filter(RemoteContext::available)
+                .forEach(
+                        rc -> {
+                            HttpContext ctx = this.http.createContext(rc.path(), wrap(rc::handle));
+                            ctx.setAuthenticator(agentAuthenticator);
+                            ctx.getFilters().add(requestLoggingFilter);
+                            ctx.getFilters().add(compressionFilter);
+                        });
 
         this.http.start();
     }
@@ -176,6 +179,18 @@ class WebServer {
         }
     }
 
+    private HttpHandler wrap(HttpHandler handler) {
+        return x -> {
+            try {
+                handler.handle(x);
+            } catch (Exception e) {
+                log.error("Unhandled exception", e);
+                x.sendResponseHeaders(HttpStatus.SC_INTERNAL_SERVER_ERROR, 0);
+                x.close();
+            }
+        };
+    }
+
     private class PingContext implements RemoteContext {
 
         @Override
@@ -185,23 +200,25 @@ class WebServer {
 
         @Override
         public void handle(HttpExchange exchange) throws IOException {
-            String mtd = exchange.getRequestMethod();
-            switch (mtd) {
-                case "POST":
-                    synchronized (WebServer.this.credentials) {
-                        executor.execute(registration.get()::tryRegister);
+            try {
+                String mtd = exchange.getRequestMethod();
+                switch (mtd) {
+                    case "POST":
+                        synchronized (WebServer.this.credentials) {
+                            executor.execute(registration.get()::tryRegister);
+                            exchange.sendResponseHeaders(HttpStatus.SC_NO_CONTENT, -1);
+                        }
+                        break;
+                    case "GET":
                         exchange.sendResponseHeaders(HttpStatus.SC_NO_CONTENT, -1);
-                        exchange.close();
-                    }
-                    break;
-                case "GET":
-                    exchange.sendResponseHeaders(HttpStatus.SC_NO_CONTENT, -1);
-                    exchange.close();
-                    break;
-                default:
-                    exchange.sendResponseHeaders(HttpStatus.SC_NOT_FOUND, -1);
-                    exchange.close();
-                    break;
+                        break;
+                    default:
+                        log.warn("Unknown request method {}", mtd);
+                        exchange.sendResponseHeaders(HttpStatus.SC_METHOD_NOT_ALLOWED, -1);
+                        break;
+                }
+            } finally {
+                exchange.close();
             }
         }
     }
