@@ -126,7 +126,6 @@ class RecordingsContext implements RemoteContext {
                     try (InputStream body = exchange.getRequestBody()) {
                         StartRecordingRequest req =
                                 mapper.readValue(body, StartRecordingRequest.class);
-                        log.info(mapper.writeValueAsString(req));
                         if (!req.isValid()) {
                             exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, -1);
                             return;
@@ -152,7 +151,7 @@ class RecordingsContext implements RemoteContext {
 
                                             @Override
                                             public void println(Exception e) {
-                                                log.warn("", e);
+                                                log.warn("JFR MBean connection failure", e);
                                             }
                                         },
                                         fs,
@@ -202,9 +201,6 @@ class RecordingsContext implements RemoteContext {
                                                             .build(),
                                                     events));
                             exchange.sendResponseHeaders(HttpStatus.SC_CREATED, 0);
-                            log.info(
-                                    "Responding with new recording:\n{}",
-                                    mapper.writeValueAsString(recording));
                             try (OutputStream response = exchange.getResponseBody()) {
                                 mapper.writeValue(response, recording);
                             }
