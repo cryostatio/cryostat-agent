@@ -16,6 +16,7 @@
 package io.cryostat.agent;
 
 import java.net.URI;
+import java.lang.instrument.Instrumentation;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -65,6 +66,7 @@ public class Agent {
             ExecutorService executor = client.executor();
             List<String> exitSignals = client.exitSignals();
             long exitDeregistrationTimeout = client.exitDeregistrationTimeout();
+            InsightsAgentHelper insights = client.insights();
 
             agentExitHandler =
                     installSignalHandlers(
@@ -90,6 +92,14 @@ public class Agent {
                     evt -> {
                         switch (evt.state) {
                             case REGISTERED:
+                                log.info("Registration state: {}", evt.state);
+                                try {
+                                    insights.runInsightsAgent(registration.getPluginInfo());
+                                    log.info("Started Red Hat Insights client");
+                                } catch (Throwable e) {
+                                    log.error("Unable to start Red Hat Insights client", e);
+                                }
+                                break;
                             case UNREGISTERED:
                             case REFRESHING:
                             case REFRESHED:
@@ -135,11 +145,12 @@ public class Agent {
         return agentExitHandler;
     }
 
-    public static void agentmain(String args) {
+    public static void agentmain(String args, Instrumentation instrumentation) {
         Thread t =
                 new Thread(
                         () -> {
                             log.info("Cryostat Agent starting...");
+                            InsightsAgentHelper.instrument(instrumentation);
                             main(args == null ? new String[0] : args.split("\\s"));
                         });
         t.setDaemon(true);
@@ -147,8 +158,8 @@ public class Agent {
         t.start();
     }
 
-    public static void premain(String args) {
-        agentmain(args);
+    public static void premain(String args, Instrumentation instrumentation) {
+        agentmain(args, instrumentation);
     }
 
     @Singleton
@@ -175,6 +186,8 @@ public class Agent {
 
         @Named(ConfigModule.CRYOSTAT_AGENT_EXIT_DEREGISTRATION_TIMEOUT_MS)
         long exitDeregistrationTimeout();
+
+        InsightsAgentHelper insights();
 
         @Component.Builder
         interface Builder {

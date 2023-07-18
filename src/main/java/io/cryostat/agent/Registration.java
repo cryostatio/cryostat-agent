@@ -378,4 +378,8 @@ public class Registration {
             this.state = state;
         }
     }
+
+    PluginInfo getPluginInfo() {
+        return pluginInfo;
+    }
 }

@@ -167,6 +167,17 @@
     <version>${io.smallrye.config.version}</version>
     <scope>runtime</scope>
   </dependency>
+  <dependency>
+    <groupId>com.redhat.insights</groupId>
+    <artifactId>runtimes-agent</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <exclusions>
+      <exclusion>
+        <groupId>jdk.tools</groupId>
+        <artifactId>jdk.tools</artifactId>
+      </exclusion>
+    </exclusions>
+  </dependency>
 
   <!-- test deps -->
   <dependency>
