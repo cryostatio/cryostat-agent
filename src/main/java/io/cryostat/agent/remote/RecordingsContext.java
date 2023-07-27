@@ -15,19 +15,41 @@
  */
 package io.cryostat.agent.remote;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import javax.inject.Inject;
 
+import org.openjdk.jmc.common.unit.IConstrainedMap;
+import org.openjdk.jmc.common.unit.QuantityConversionException;
+import org.openjdk.jmc.common.unit.UnitLookup;
+import org.openjdk.jmc.flightrecorder.configuration.events.EventOptionID;
+import org.openjdk.jmc.flightrecorder.configuration.recording.RecordingOptionsBuilder;
+import org.openjdk.jmc.rjmx.ServiceNotAvailableException;
+import org.openjdk.jmc.rjmx.services.jfr.IFlightRecorderService;
+
+import io.cryostat.agent.StringUtils;
+import io.cryostat.core.FlightRecorderException;
+import io.cryostat.core.net.JFRConnection;
+import io.cryostat.core.net.JFRConnectionToolkit;
+import io.cryostat.core.serialization.SerializableRecordingDescriptor;
+import io.cryostat.core.templates.LocalStorageTemplateService;
+import io.cryostat.core.templates.MutableTemplateService.InvalidEventTemplateException;
+import io.cryostat.core.templates.MutableTemplateService.InvalidXmlException;
+import io.cryostat.core.templates.RemoteTemplateService;
+import io.cryostat.core.templates.Template;
+import io.cryostat.core.templates.TemplateType;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+import io.smallrye.config.SmallRyeConfig;
 import jdk.jfr.FlightRecorder;
-import jdk.jfr.Recording;
 import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,11 +57,21 @@ import org.slf4j.LoggerFactory;
 class RecordingsContext implements RemoteContext {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
+    private final SmallRyeConfig config;
     private final ObjectMapper mapper;
+    private final JFRConnectionToolkit jfrConnectionToolkit;
+    private final LocalStorageTemplateService localStorageTemplateService;
 
     @Inject
-    RecordingsContext(ObjectMapper mapper) {
+    RecordingsContext(
+            SmallRyeConfig config,
+            ObjectMapper mapper,
+            JFRConnectionToolkit jfrConnectionToolkit,
+            LocalStorageTemplateService localStorageTemplateService) {
+        this.config = config;
         this.mapper = mapper;
+        this.jfrConnectionToolkit = jfrConnectionToolkit;
+        this.localStorageTemplateService = localStorageTemplateService;
     }
 
     @Override
@@ -49,67 +81,146 @@ class RecordingsContext implements RemoteContext {
 
     @Override
     public void handle(HttpExchange exchange) throws IOException {
-        String mtd = exchange.getRequestMethod();
-        switch (mtd) {
-            case "GET":
-                try {
-                    List<RecordingInfo> recordings = getRecordings();
-                    exchange.sendResponseHeaders(HttpStatus.SC_OK, 0);
+        try {
+            String mtd = exchange.getRequestMethod();
+            if (!ensureMethodAccepted(exchange)) {
+                return;
+            }
+            switch (mtd) {
+                case "GET":
                     try (OutputStream response = exchange.getResponseBody()) {
+                        List<SerializableRecordingDescriptor> recordings = getRecordings();
+                        exchange.sendResponseHeaders(HttpStatus.SC_OK, 0);
                         mapper.writeValue(response, recordings);
+                    } catch (Exception e) {
+                        log.error("recordings serialization failure", e);
                     }
-                } catch (Exception e) {
-                    log.error("recordings serialization failure", e);
-                } finally {
-                    exchange.close();
-                }
-                break;
-            default:
-                exchange.sendResponseHeaders(HttpStatus.SC_NOT_FOUND, -1);
-                exchange.close();
-                break;
+                    break;
+                case "POST":
+                    try (InputStream body = exchange.getRequestBody()) {
+                        StartRecordingRequest req =
+                                mapper.readValue(body, StartRecordingRequest.class);
+                        if (!req.isValid()) {
+                            exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, -1);
+                            return;
+                        }
+                        SerializableRecordingDescriptor recording = startRecording(req);
+                        exchange.sendResponseHeaders(HttpStatus.SC_CREATED, 0);
+                        try (OutputStream response = exchange.getResponseBody()) {
+                            mapper.writeValue(response, recording);
+                        }
+                    } catch (QuantityConversionException
+                            | ServiceNotAvailableException
+                            | FlightRecorderException
+                            | org.openjdk.jmc.rjmx.services.jfr.FlightRecorderException
+                            | InvalidEventTemplateException
+                            | InvalidXmlException
+                            | IOException e) {
+                        log.error("Failed to start recording", e);
+                        exchange.sendResponseHeaders(HttpStatus.SC_INTERNAL_SERVER_ERROR, -1);
+                    }
+                    break;
+                default:
+                    log.warn("Unknown request method {}", mtd);
+                    exchange.sendResponseHeaders(HttpStatus.SC_METHOD_NOT_ALLOWED, -1);
+                    break;
+            }
+        } finally {
+            exchange.close();
         }
     }
 
-    private List<RecordingInfo> getRecordings() {
+    private boolean ensureMethodAccepted(HttpExchange exchange) throws IOException {
+        Set<String> blocked = Set.of("POST");
+        String mtd = exchange.getRequestMethod();
+        boolean restricted = blocked.contains(mtd);
+        if (!restricted) {
+            return true;
+        }
+        boolean passed = restricted && MutatingRemoteContext.apiWritesEnabled(config);
+        if (!passed) {
+            exchange.sendResponseHeaders(HttpStatus.SC_FORBIDDEN, -1);
+        }
+        return passed;
+    }
+
+    private List<SerializableRecordingDescriptor> getRecordings() {
         return FlightRecorder.getFlightRecorder().getRecordings().stream()
-                .map(RecordingInfo::new)
+                .map(SerializableRecordingDescriptor::new)
                 .collect(Collectors.toList());
     }
 
-    @SuppressFBWarnings(value = "URF_UNREAD_FIELD")
-    private static class RecordingInfo {
-
-        public final long id;
-        public final String name;
-        public final String state;
-        public final Map<String, String> options;
-        public final long startTime;
-        public final long duration;
-        public final boolean isContinuous;
-        public final boolean toDisk;
-        public final long maxSize;
-        public final long maxAge;
-
-        RecordingInfo(Recording rec) {
-            this.id = rec.getId();
-            this.name = rec.getName();
-            this.state = rec.getState().name();
-            this.options = rec.getSettings();
-            if (rec.getStartTime() != null) {
-                this.startTime = rec.getStartTime().toEpochMilli();
+    private SerializableRecordingDescriptor startRecording(StartRecordingRequest req)
+            throws QuantityConversionException, ServiceNotAvailableException,
+                    FlightRecorderException,
+                    org.openjdk.jmc.rjmx.services.jfr.FlightRecorderException,
+                    InvalidEventTemplateException, InvalidXmlException, IOException {
+        Runnable cleanup = () -> {};
+        try {
+            JFRConnection conn =
+                    jfrConnectionToolkit.connect(
+                            jfrConnectionToolkit.createServiceURL("localhost", 0));
+            IConstrainedMap<EventOptionID> events;
+            if (req.requestsCustomTemplate()) {
+                Template template =
+                        localStorageTemplateService.addTemplate(
+                                new ByteArrayInputStream(
+                                        req.template.getBytes(StandardCharsets.UTF_8)));
+                events = localStorageTemplateService.getEvents(template).orElseThrow();
+                cleanup =
+                        () -> {
+                            try {
+                                localStorageTemplateService.deleteTemplate(template);
+                            } catch (InvalidEventTemplateException | IOException e) {
+                                log.error("Failed to clean up template " + template.getName(), e);
+                            }
+                        };
             } else {
-                this.startTime = 0;
+                events =
+                        new RemoteTemplateService(conn)
+                                .getEvents(req.localTemplateName, TemplateType.TARGET).stream()
+                                        .findFirst()
+                                        .orElseThrow();
             }
-            this.isContinuous = rec.getDuration() == null;
-            this.duration = this.isContinuous ? 0 : rec.getDuration().toMillis();
-            this.toDisk = rec.isToDisk();
-            this.maxSize = rec.getMaxSize();
-            if (rec.getMaxAge() != null) {
-                this.maxAge = rec.getMaxAge().toMillis();
-            } else {
-                this.maxAge = 0;
-            }
+            IFlightRecorderService svc = conn.getService();
+            return new SerializableRecordingDescriptor(
+                    svc.start(
+                            new RecordingOptionsBuilder(conn.getService())
+                                    .name(req.name)
+                                    .duration(UnitLookup.MILLISECOND.quantity(req.duration))
+                                    .maxSize(UnitLookup.BYTE.quantity(req.maxSize))
+                                    .maxAge(UnitLookup.MILLISECOND.quantity(req.maxAge))
+                                    .toDisk(true)
+                                    .build(),
+                            events));
+        } finally {
+            cleanup.run();
+        }
+    }
+
+    static class StartRecordingRequest {
+
+        public String name;
+        public String localTemplateName;
+        public String template;
+        public long duration;
+        public long maxSize;
+        public long maxAge;
+
+        boolean requestsCustomTemplate() {
+            return !StringUtils.isBlank(template);
+        }
+
+        boolean requestsBundledTemplate() {
+            return !StringUtils.isBlank(localTemplateName);
+        }
+
+        boolean isValid() {
+            boolean requestsCustomTemplate = requestsCustomTemplate();
+            boolean requestsBundledTemplate = requestsBundledTemplate();
+            boolean requestsEither = requestsCustomTemplate || requestsBundledTemplate;
+            boolean requestsBoth = requestsCustomTemplate && requestsBundledTemplate;
+            return requestsEither && !requestsBoth;
         }
     }
 }
