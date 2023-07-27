@@ -338,7 +338,7 @@ public abstract class MainModule {
     @Singleton
     @Named(JVM_ID)
     public static String provideJvmId(JFRConnectionToolkit tk) {
-        Logger log = LoggerFactory.getLogger(JFRConnection.class);
+        Logger log = LoggerFactory.getLogger(JFRConnectionToolkit.class);
         try {
             try (JFRConnection connection = tk.connect(tk.createServiceURL("localhost", 0))) {
                 String id = connection.getJvmId();
