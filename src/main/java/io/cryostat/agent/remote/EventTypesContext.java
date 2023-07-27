@@ -76,14 +76,17 @@ class EventTypesContext implements RemoteContext {
             String mtd = exchange.getRequestMethod();
             switch (mtd) {
                 case "GET":
+                    List<EventInfo> events = new ArrayList<>();
                     try {
-                        List<EventInfo> events = getEventTypes();
-                        exchange.sendResponseHeaders(HttpStatus.SC_OK, 0);
-                        try (OutputStream response = exchange.getResponseBody()) {
-                            mapper.writeValue(response, events);
-                        }
+                        events.addAll(getEventTypes());
                     } catch (Exception e) {
                         log.error("events serialization failure", e);
+                        exchange.sendResponseHeaders(HttpStatus.SC_INTERNAL_SERVER_ERROR, 0);
+                        break;
+                    }
+                    exchange.sendResponseHeaders(HttpStatus.SC_OK, 0);
+                    try (OutputStream response = exchange.getResponseBody()) {
+                        mapper.writeValue(response, events);
                     }
                     break;
                 default:
