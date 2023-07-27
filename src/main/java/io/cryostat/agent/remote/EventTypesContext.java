@@ -50,25 +50,30 @@ class EventTypesContext implements RemoteContext {
 
     @Override
     public void handle(HttpExchange exchange) throws IOException {
-        String mtd = exchange.getRequestMethod();
-        switch (mtd) {
-            case "GET":
-                try {
-                    List<EventInfo> events = getEventTypes();
+        try {
+            String mtd = exchange.getRequestMethod();
+            switch (mtd) {
+                case "GET":
+                    List<EventInfo> events = new ArrayList<>();
+                    try {
+                        events.addAll(getEventTypes());
+                    } catch (Exception e) {
+                        log.error("events serialization failure", e);
+                        exchange.sendResponseHeaders(HttpStatus.SC_INTERNAL_SERVER_ERROR, 0);
+                        break;
+                    }
                     exchange.sendResponseHeaders(HttpStatus.SC_OK, 0);
                     try (OutputStream response = exchange.getResponseBody()) {
                         mapper.writeValue(response, events);
                     }
-                } catch (Exception e) {
-                    log.error("events serialization failure", e);
-                } finally {
-                    exchange.close();
-                }
-                break;
-            default:
-                exchange.sendResponseHeaders(HttpStatus.SC_NOT_FOUND, -1);
-                exchange.close();
-                break;
+                    break;
+                default:
+                    log.warn("Unknown request method {}", mtd);
+                    exchange.sendResponseHeaders(HttpStatus.SC_METHOD_NOT_ALLOWED, -1);
+                    break;
+            }
+        } finally {
+            exchange.close();
         }
     }
 

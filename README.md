@@ -34,6 +34,7 @@ and how it advertises itself to a Cryostat server instance. Required properties 
 
 - [x] `cryostat.agent.baseuri` [`java.net.URI`]: the URL location of the Cryostat server backend that this agent advertises itself to.
 - [x] `cryostat.agent.callback` [`java.net.URI`]: a URL pointing back to this agent, ex. `"https://12.34.56.78:1234/"`. Cryostat will use this URL to perform health checks and request updates from the agent. This reflects the externally-visible IP address/hostname and port where this application and agent can be found.
+- [ ] `cryostat.agent.api.writes-enabled` [`boolean`]: Control whether the agent accepts "write" or mutating operations on its HTTP API. Requests for remote operations such as dynamically starting Flight Recordings will be rejected unless this is set. Default `false`.
 - [ ] `cryostat.agent.instance-id` [`String`]: a unique ID for this agent instance. This will be used to uniquely identify the agent in the Cryostat discovery database, as well as to unambiguously match its encrypted stored credentials. The default is a random UUID string. It is not recommended to override this value.
 - [ ] `cryostat.agent.hostname` [`String`]: the hostname for this application instance. This will be used for the published JMX connection URL. If not provided then the default is to attempt to resolve the localhost hostname.
 - [ ] `cryostat.agent.realm` [`String`]: the Cryostat Discovery API "realm" that this agent belongs to. This should be unique per agent instance. The default is the value of `cryostat.agent.app.name`.

@@ -19,4 +19,8 @@ import com.sun.net.httpserver.HttpHandler;
 
 public interface RemoteContext extends HttpHandler {
     String path();
+
+    default boolean available() {
+        return true;
+    }
 }

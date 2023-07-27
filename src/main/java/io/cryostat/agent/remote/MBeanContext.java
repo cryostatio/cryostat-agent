@@ -64,25 +64,27 @@ class MBeanContext implements RemoteContext {
 
     @Override
     public void handle(HttpExchange exchange) throws IOException {
-        String mtd = exchange.getRequestMethod();
-        switch (mtd) {
-            case "GET":
-                try {
-                    MBeanMetrics metrics = getMBeanMetrics();
-                    exchange.sendResponseHeaders(HttpStatus.SC_OK, 0);
-                    try (OutputStream response = exchange.getResponseBody()) {
-                        mapper.writeValue(response, metrics);
+        try {
+            String mtd = exchange.getRequestMethod();
+            switch (mtd) {
+                case "GET":
+                    try {
+                        MBeanMetrics metrics = getMBeanMetrics();
+                        exchange.sendResponseHeaders(HttpStatus.SC_OK, 0);
+                        try (OutputStream response = exchange.getResponseBody()) {
+                            mapper.writeValue(response, metrics);
+                        }
+                    } catch (Exception e) {
+                        log.error("mbean serialization failure", e);
                     }
-                } catch (Exception e) {
-                    log.error("mbean serialization failure", e);
-                } finally {
-                    exchange.close();
-                }
-                break;
-            default:
-                exchange.sendResponseHeaders(HttpStatus.SC_NOT_FOUND, -1);
-                exchange.close();
-                break;
+                    break;
+                default:
+                    log.warn("Unknown request method {}", mtd);
+                    exchange.sendResponseHeaders(HttpStatus.SC_METHOD_NOT_ALLOWED, -1);
+                    break;
+            }
+        } finally {
+            exchange.close();
         }
     }
 
