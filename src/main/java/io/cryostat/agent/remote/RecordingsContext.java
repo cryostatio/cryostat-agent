@@ -106,7 +106,6 @@ class RecordingsContext implements RemoteContext {
         try {
             String mtd = exchange.getRequestMethod();
             if (!ensureMethodAccepted(exchange)) {
-                exchange.close();
                 return;
             }
             switch (mtd) {
