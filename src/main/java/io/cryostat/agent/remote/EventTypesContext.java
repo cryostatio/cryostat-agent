@@ -45,7 +45,7 @@ class EventTypesContext implements RemoteContext {
 
     @Override
     public String path() {
-        return "/event-types";
+        return "/event-types/";
     }
 
     @Override

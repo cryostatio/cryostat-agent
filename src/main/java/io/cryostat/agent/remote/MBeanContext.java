@@ -59,7 +59,7 @@ class MBeanContext implements RemoteContext {
 
     @Override
     public String path() {
-        return "/mbean-metrics";
+        return "/mbean-metrics/";
     }
 
     @Override

@@ -43,7 +43,7 @@ class EventTemplatesContext implements RemoteContext {
 
     @Override
     public String path() {
-        return "/event-templates";
+        return "/event-templates/";
     }
 
     @Override
