@@ -109,11 +109,12 @@ class RecordingsContext implements RemoteContext {
                     break;
                 case "PATCH":
                     id = extractId(exchange);
-                    if (id < 0) {
+                    if (id >= 0) {
                         handleStop(exchange, id);
                     } else {
                         exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, -1);
                     }
+                    break;
                 case "DELETE":
                     id = extractId(exchange);
                     if (id >= 0) {
