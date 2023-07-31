@@ -116,11 +116,12 @@ class RecordingsContext implements RemoteContext {
                     }
                 case "DELETE":
                     id = extractId(exchange);
-                    if (id < 0) {
+                    if (id >= 0) {
                         handleDelete(exchange, id);
                     } else {
                         exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, -1);
                     }
+                    break;
                 default:
                     log.warn("Unknown request method {}", mtd);
                     exchange.sendResponseHeaders(HttpStatus.SC_METHOD_NOT_ALLOWED, -1);
