@@ -88,37 +88,10 @@ class RecordingsContext implements RemoteContext {
             }
             switch (mtd) {
                 case "GET":
-                    try (OutputStream response = exchange.getResponseBody()) {
-                        List<SerializableRecordingDescriptor> recordings = getRecordings();
-                        exchange.sendResponseHeaders(HttpStatus.SC_OK, 0);
-                        mapper.writeValue(response, recordings);
-                    } catch (Exception e) {
-                        log.error("recordings serialization failure", e);
-                    }
+                    handleGetList(exchange);
                     break;
                 case "POST":
-                    try (InputStream body = exchange.getRequestBody()) {
-                        StartRecordingRequest req =
-                                mapper.readValue(body, StartRecordingRequest.class);
-                        if (!req.isValid()) {
-                            exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, -1);
-                            return;
-                        }
-                        SerializableRecordingDescriptor recording = startRecording(req);
-                        exchange.sendResponseHeaders(HttpStatus.SC_CREATED, 0);
-                        try (OutputStream response = exchange.getResponseBody()) {
-                            mapper.writeValue(response, recording);
-                        }
-                    } catch (QuantityConversionException
-                            | ServiceNotAvailableException
-                            | FlightRecorderException
-                            | org.openjdk.jmc.rjmx.services.jfr.FlightRecorderException
-                            | InvalidEventTemplateException
-                            | InvalidXmlException
-                            | IOException e) {
-                        log.error("Failed to start recording", e);
-                        exchange.sendResponseHeaders(HttpStatus.SC_INTERNAL_SERVER_ERROR, -1);
-                    }
+                    handleStart(exchange);
                     break;
                 default:
                     log.warn("Unknown request method {}", mtd);
@@ -127,6 +100,40 @@ class RecordingsContext implements RemoteContext {
             }
         } finally {
             exchange.close();
+        }
+    }
+
+    private void handleGetList(HttpExchange exchange) {
+        try (OutputStream response = exchange.getResponseBody()) {
+            List<SerializableRecordingDescriptor> recordings = getRecordings();
+            exchange.sendResponseHeaders(HttpStatus.SC_OK, 0);
+            mapper.writeValue(response, recordings);
+        } catch (Exception e) {
+            log.error("recordings serialization failure", e);
+        }
+    }
+
+    private void handleStart(HttpExchange exchange) throws IOException {
+        try (InputStream body = exchange.getRequestBody()) {
+            StartRecordingRequest req = mapper.readValue(body, StartRecordingRequest.class);
+            if (!req.isValid()) {
+                exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, -1);
+                return;
+            }
+            SerializableRecordingDescriptor recording = startRecording(req);
+            exchange.sendResponseHeaders(HttpStatus.SC_CREATED, 0);
+            try (OutputStream response = exchange.getResponseBody()) {
+                mapper.writeValue(response, recording);
+            }
+        } catch (QuantityConversionException
+                | ServiceNotAvailableException
+                | FlightRecorderException
+                | org.openjdk.jmc.rjmx.services.jfr.FlightRecorderException
+                | InvalidEventTemplateException
+                | InvalidXmlException
+                | IOException e) {
+            log.error("Failed to start recording", e);
+            exchange.sendResponseHeaders(HttpStatus.SC_INTERNAL_SERVER_ERROR, -1);
         }
     }
 
