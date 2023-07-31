@@ -22,6 +22,7 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -52,6 +53,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
 import io.smallrye.config.SmallRyeConfig;
 import jdk.jfr.FlightRecorder;
+import jdk.jfr.Recording;
 import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -112,6 +114,13 @@ class RecordingsContext implements RemoteContext {
                     } else {
                         exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, -1);
                     }
+                case "DELETE":
+                    id = extractId(exchange);
+                    if (id < 0) {
+                        handleDelete(exchange, id);
+                    } else {
+                        exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, -1);
+                    }
                 default:
                     log.warn("Unknown request method {}", mtd);
                     exchange.sendResponseHeaders(HttpStatus.SC_METHOD_NOT_ALLOWED, -1);
@@ -165,33 +174,47 @@ class RecordingsContext implements RemoteContext {
     }
 
     private void handleStop(HttpExchange exchange, int id) throws IOException {
+        invokeOnRecording(
+                exchange,
+                id,
+                r -> {
+                    try {
+                        boolean stopped = r.stop();
+                        if (!stopped) {
+                            sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
+                        } else {
+                            sendHeader(exchange, HttpStatus.SC_NO_CONTENT);
+                        }
+                    } catch (IllegalStateException e) {
+                        sendHeader(exchange, HttpStatus.SC_CONFLICT);
+                    }
+                });
+    }
+
+    private void handleDelete(HttpExchange exchange, int id) throws IOException {
+        invokeOnRecording(
+                exchange,
+                id,
+                r -> {
+                    r.close();
+                    sendHeader(exchange, HttpStatus.SC_NO_CONTENT);
+                });
+    }
+
+    private void invokeOnRecording(HttpExchange exchange, long id, Consumer<Recording> consumer) {
         FlightRecorder.getFlightRecorder().getRecordings().stream()
                 .filter(r -> r.getId() == id)
                 .findFirst()
                 .ifPresentOrElse(
-                        r -> {
-                            try {
-                                try {
-                                    boolean stopped = r.stop();
-                                    if (!stopped) {
-                                        exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, -1);
-                                    } else {
-                                        exchange.sendResponseHeaders(HttpStatus.SC_NO_CONTENT, -1);
-                                    }
-                                } catch (IllegalStateException e) {
-                                    exchange.sendResponseHeaders(HttpStatus.SC_CONFLICT, -1);
-                                }
-                            } catch (IOException ioe) {
-                                throw new IllegalStateException(ioe);
-                            }
-                        },
-                        () -> {
-                            try {
-                                exchange.sendResponseHeaders(HttpStatus.SC_NOT_FOUND, -1);
-                            } catch (IOException e) {
-                                throw new IllegalStateException(e);
-                            }
-                        });
+                        consumer::accept, () -> sendHeader(exchange, HttpStatus.SC_NOT_FOUND));
+    }
+
+    private void sendHeader(HttpExchange exchange, int status) {
+        try {
+            exchange.sendResponseHeaders(status, -1);
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     private boolean ensureMethodAccepted(HttpExchange exchange) throws IOException {
