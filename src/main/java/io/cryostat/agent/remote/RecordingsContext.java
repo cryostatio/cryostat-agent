@@ -22,6 +22,8 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import javax.inject.Inject;
@@ -56,6 +58,10 @@ import org.slf4j.LoggerFactory;
 
 class RecordingsContext implements RemoteContext {
 
+    private static final String PATH = "/recordings";
+    private static final Pattern PATH_ID_PATTERN =
+            Pattern.compile("^" + PATH + "/(\\d+)$", Pattern.MULTILINE);
+
     private final Logger log = LoggerFactory.getLogger(getClass());
     private final SmallRyeConfig config;
     private final ObjectMapper mapper;
@@ -76,7 +82,7 @@ class RecordingsContext implements RemoteContext {
 
     @Override
     public String path() {
-        return "/recordings";
+        return PATH;
     }
 
     @Override
@@ -88,7 +94,12 @@ class RecordingsContext implements RemoteContext {
             }
             switch (mtd) {
                 case "GET":
-                    handleGetList(exchange);
+                    int id = extractId(exchange);
+                    if (id < 0) {
+                        handleGetList(exchange);
+                    } else {
+                        exchange.sendResponseHeaders(HttpStatus.SC_NOT_IMPLEMENTED, -1);
+                    }
                     break;
                 case "POST":
                     handleStart(exchange);
@@ -101,6 +112,14 @@ class RecordingsContext implements RemoteContext {
         } finally {
             exchange.close();
         }
+    }
+
+    private static int extractId(HttpExchange exchange) throws IOException {
+        Matcher m = PATH_ID_PATTERN.matcher(exchange.getRequestURI().getPath());
+        if (!m.find()) {
+            return Integer.MIN_VALUE;
+        }
+        return Integer.parseInt(m.group(1));
     }
 
     private void handleGetList(HttpExchange exchange) {
