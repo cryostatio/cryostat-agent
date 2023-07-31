@@ -95,7 +95,7 @@ class RecordingsContext implements RemoteContext {
             switch (mtd) {
                 case "GET":
                     int id = extractId(exchange);
-                    if (id < 0) {
+                    if (id == Integer.MIN_VALUE) {
                         handleGetList(exchange);
                     } else {
                         exchange.sendResponseHeaders(HttpStatus.SC_NOT_IMPLEMENTED, -1);
