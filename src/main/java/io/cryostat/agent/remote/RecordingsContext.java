@@ -220,9 +220,9 @@ class RecordingsContext implements RemoteContext {
     }
 
     private boolean ensureMethodAccepted(HttpExchange exchange) throws IOException {
-        Set<String> blocked = Set.of("POST");
+        Set<String> alwaysAllowed = Set.of("GET");
         String mtd = exchange.getRequestMethod();
-        boolean restricted = blocked.contains(mtd);
+        boolean restricted = !alwaysAllowed.contains(mtd);
         if (!restricted) {
             return true;
         }
