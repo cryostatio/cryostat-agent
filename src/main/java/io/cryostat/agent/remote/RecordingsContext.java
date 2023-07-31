@@ -92,9 +92,10 @@ class RecordingsContext implements RemoteContext {
             if (!ensureMethodAccepted(exchange)) {
                 return;
             }
+            int id = Integer.MIN_VALUE;
             switch (mtd) {
                 case "GET":
-                    int id = extractId(exchange);
+                    id = extractId(exchange);
                     if (id == Integer.MIN_VALUE) {
                         handleGetList(exchange);
                     } else {
@@ -104,6 +105,13 @@ class RecordingsContext implements RemoteContext {
                 case "POST":
                     handleStart(exchange);
                     break;
+                case "PATCH":
+                    id = extractId(exchange);
+                    if (id < 0) {
+                        handleStop(exchange, id);
+                    } else {
+                        exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, -1);
+                    }
                 default:
                     log.warn("Unknown request method {}", mtd);
                     exchange.sendResponseHeaders(HttpStatus.SC_METHOD_NOT_ALLOWED, -1);
@@ -154,6 +162,36 @@ class RecordingsContext implements RemoteContext {
             log.error("Failed to start recording", e);
             exchange.sendResponseHeaders(HttpStatus.SC_INTERNAL_SERVER_ERROR, -1);
         }
+    }
+
+    private void handleStop(HttpExchange exchange, int id) throws IOException {
+        FlightRecorder.getFlightRecorder().getRecordings().stream()
+                .filter(r -> r.getId() == id)
+                .findFirst()
+                .ifPresentOrElse(
+                        r -> {
+                            try {
+                                try {
+                                    boolean stopped = r.stop();
+                                    if (!stopped) {
+                                        exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, -1);
+                                    } else {
+                                        exchange.sendResponseHeaders(HttpStatus.SC_NO_CONTENT, -1);
+                                    }
+                                } catch (IllegalStateException e) {
+                                    exchange.sendResponseHeaders(HttpStatus.SC_CONFLICT, -1);
+                                }
+                            } catch (IOException ioe) {
+                                throw new IllegalStateException(ioe);
+                            }
+                        },
+                        () -> {
+                            try {
+                                exchange.sendResponseHeaders(HttpStatus.SC_NOT_FOUND, -1);
+                            } catch (IOException e) {
+                                throw new IllegalStateException(e);
+                            }
+                        });
     }
 
     private boolean ensureMethodAccepted(HttpExchange exchange) throws IOException {
