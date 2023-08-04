@@ -15,6 +15,7 @@
  */
 package io.cryostat.agent.remote;
 
+import java.io.BufferedInputStream;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -60,9 +61,9 @@ import org.slf4j.LoggerFactory;
 
 class RecordingsContext implements RemoteContext {
 
-    private static final String PATH = "/recordings";
+    private static final String PATH = "/recordings/";
     private static final Pattern PATH_ID_PATTERN =
-            Pattern.compile("^" + PATH + "/(\\d+)$", Pattern.MULTILINE);
+            Pattern.compile("^" + PATH + "(\\d+)$", Pattern.MULTILINE);
 
     private final Logger log = LoggerFactory.getLogger(getClass());
     private final SmallRyeConfig config;
@@ -98,11 +99,10 @@ class RecordingsContext implements RemoteContext {
             switch (mtd) {
                 case "GET":
                     id = extractId(exchange);
-                    if (id == Integer.MIN_VALUE) {
+                    if (id == Long.MIN_VALUE) {
                         handleGetList(exchange);
                     } else {
-                        exchange.sendResponseHeaders(
-                                HttpStatus.SC_NOT_IMPLEMENTED, BODY_LENGTH_NONE);
+                        handleGetRecording(exchange, id);
                     }
                     break;
                 case "POST":
@@ -151,6 +151,43 @@ class RecordingsContext implements RemoteContext {
         } catch (Exception e) {
             log.error("recordings serialization failure", e);
         }
+    }
+
+    private void handleGetRecording(HttpExchange exchange, long id) {
+        FlightRecorder.getFlightRecorder().getRecordings().stream()
+                .filter(r -> r.getId() == id)
+                .findFirst()
+                .ifPresentOrElse(
+                        r -> {
+                            Recording copy = r.copy(true);
+                            try (InputStream stream = copy.getStream(null, null);
+                                    BufferedInputStream bis = new BufferedInputStream(stream);
+                                    OutputStream response = exchange.getResponseBody()) {
+                                if (stream == null) {
+                                    exchange.sendResponseHeaders(HttpStatus.SC_NO_CONTENT, -1);
+                                } else {
+                                    exchange.sendResponseHeaders(HttpStatus.SC_OK, 0);
+                                    bis.transferTo(response);
+                                }
+                            } catch (IOException ioe) {
+                                log.error("I/O error", ioe);
+                                try {
+                                    exchange.sendResponseHeaders(
+                                            HttpStatus.SC_INTERNAL_SERVER_ERROR, -1);
+                                } catch (IOException ioe2) {
+                                    log.error("Failed to write response", ioe2);
+                                }
+                            } finally {
+                                copy.close();
+                            }
+                        },
+                        () -> {
+                            try {
+                                exchange.sendResponseHeaders(HttpStatus.SC_NOT_FOUND, -1);
+                            } catch (IOException e) {
+                                log.error("Failed to write response", e);
+                            }
+                        });
     }
 
     private void handleStart(HttpExchange exchange) throws IOException {
