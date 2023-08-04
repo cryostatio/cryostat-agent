@@ -94,7 +94,7 @@ class RecordingsContext implements RemoteContext {
             if (!ensureMethodAccepted(exchange)) {
                 return;
             }
-            int id = Integer.MIN_VALUE;
+            long id = Long.MIN_VALUE;
             switch (mtd) {
                 case "GET":
                     id = extractId(exchange);
@@ -135,12 +135,12 @@ class RecordingsContext implements RemoteContext {
         }
     }
 
-    private static int extractId(HttpExchange exchange) throws IOException {
+    private static long extractId(HttpExchange exchange) throws IOException {
         Matcher m = PATH_ID_PATTERN.matcher(exchange.getRequestURI().getPath());
         if (!m.find()) {
-            return Integer.MIN_VALUE;
+            return Long.MIN_VALUE;
         }
-        return Integer.parseInt(m.group(1));
+        return Long.parseLong(m.group(1));
     }
 
     private void handleGetList(HttpExchange exchange) {
@@ -177,7 +177,7 @@ class RecordingsContext implements RemoteContext {
         }
     }
 
-    private void handleStop(HttpExchange exchange, int id) throws IOException {
+    private void handleStop(HttpExchange exchange, long id) throws IOException {
         invokeOnRecording(
                 exchange,
                 id,
@@ -195,7 +195,7 @@ class RecordingsContext implements RemoteContext {
                 });
     }
 
-    private void handleDelete(HttpExchange exchange, int id) throws IOException {
+    private void handleDelete(HttpExchange exchange, long id) throws IOException {
         invokeOnRecording(
                 exchange,
                 id,
