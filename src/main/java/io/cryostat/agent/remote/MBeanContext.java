@@ -70,7 +70,8 @@ class MBeanContext implements RemoteContext {
                 case "GET":
                     try {
                         MBeanMetrics metrics = getMBeanMetrics();
-                        exchange.sendResponseHeaders(HttpStatus.SC_OK, 0);
+                        exchange.sendResponseHeaders(
+                                HttpStatus.SC_OK, RemoteContext.BODY_LENGTH_UNKNOWN);
                         try (OutputStream response = exchange.getResponseBody()) {
                             mapper.writeValue(response, metrics);
                         }
@@ -80,7 +81,8 @@ class MBeanContext implements RemoteContext {
                     break;
                 default:
                     log.warn("Unknown request method {}", mtd);
-                    exchange.sendResponseHeaders(HttpStatus.SC_METHOD_NOT_ALLOWED, -1);
+                    exchange.sendResponseHeaders(
+                            HttpStatus.SC_METHOD_NOT_ALLOWED, RemoteContext.BODY_LENGTH_NONE);
                     break;
             }
         } finally {

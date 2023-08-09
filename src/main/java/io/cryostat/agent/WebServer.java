@@ -163,7 +163,8 @@ class WebServer {
                 handler.handle(x);
             } catch (Exception e) {
                 log.error("Unhandled exception", e);
-                x.sendResponseHeaders(HttpStatus.SC_INTERNAL_SERVER_ERROR, 0);
+                x.sendResponseHeaders(
+                        HttpStatus.SC_INTERNAL_SERVER_ERROR, RemoteContext.BODY_LENGTH_NONE);
                 x.close();
             }
         };
@@ -184,15 +185,18 @@ class WebServer {
                     case "POST":
                         synchronized (WebServer.this.credentials) {
                             executor.execute(registration.get()::tryRegister);
-                            exchange.sendResponseHeaders(HttpStatus.SC_NO_CONTENT, -1);
+                            exchange.sendResponseHeaders(
+                                    HttpStatus.SC_NO_CONTENT, RemoteContext.BODY_LENGTH_NONE);
                         }
                         break;
                     case "GET":
-                        exchange.sendResponseHeaders(HttpStatus.SC_NO_CONTENT, -1);
+                        exchange.sendResponseHeaders(
+                                HttpStatus.SC_NO_CONTENT, RemoteContext.BODY_LENGTH_NONE);
                         break;
                     default:
                         log.warn("Unknown request method {}", mtd);
-                        exchange.sendResponseHeaders(HttpStatus.SC_METHOD_NOT_ALLOWED, -1);
+                        exchange.sendResponseHeaders(
+                                HttpStatus.SC_METHOD_NOT_ALLOWED, RemoteContext.BODY_LENGTH_NONE);
                         break;
                 }
             } finally {

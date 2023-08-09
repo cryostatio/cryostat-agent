@@ -101,7 +101,8 @@ class RecordingsContext implements RemoteContext {
                     if (id == Integer.MIN_VALUE) {
                         handleGetList(exchange);
                     } else {
-                        exchange.sendResponseHeaders(HttpStatus.SC_NOT_IMPLEMENTED, -1);
+                        exchange.sendResponseHeaders(
+                                HttpStatus.SC_NOT_IMPLEMENTED, BODY_LENGTH_NONE);
                     }
                     break;
                 case "POST":
@@ -112,7 +113,7 @@ class RecordingsContext implements RemoteContext {
                     if (id >= 0) {
                         handleStop(exchange, id);
                     } else {
-                        exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, -1);
+                        exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
                     }
                     break;
                 case "DELETE":
@@ -120,12 +121,13 @@ class RecordingsContext implements RemoteContext {
                     if (id >= 0) {
                         handleDelete(exchange, id);
                     } else {
-                        exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, -1);
+                        exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
                     }
                     break;
                 default:
                     log.warn("Unknown request method {}", mtd);
-                    exchange.sendResponseHeaders(HttpStatus.SC_METHOD_NOT_ALLOWED, -1);
+                    exchange.sendResponseHeaders(
+                            HttpStatus.SC_METHOD_NOT_ALLOWED, BODY_LENGTH_NONE);
                     break;
             }
         } finally {
@@ -144,7 +146,7 @@ class RecordingsContext implements RemoteContext {
     private void handleGetList(HttpExchange exchange) {
         try (OutputStream response = exchange.getResponseBody()) {
             List<SerializableRecordingDescriptor> recordings = getRecordings();
-            exchange.sendResponseHeaders(HttpStatus.SC_OK, 0);
+            exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
             mapper.writeValue(response, recordings);
         } catch (Exception e) {
             log.error("recordings serialization failure", e);
@@ -155,11 +157,11 @@ class RecordingsContext implements RemoteContext {
         try (InputStream body = exchange.getRequestBody()) {
             StartRecordingRequest req = mapper.readValue(body, StartRecordingRequest.class);
             if (!req.isValid()) {
-                exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, -1);
+                exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
                 return;
             }
             SerializableRecordingDescriptor recording = startRecording(req);
-            exchange.sendResponseHeaders(HttpStatus.SC_CREATED, 0);
+            exchange.sendResponseHeaders(HttpStatus.SC_CREATED, BODY_LENGTH_UNKNOWN);
             try (OutputStream response = exchange.getResponseBody()) {
                 mapper.writeValue(response, recording);
             }
@@ -171,7 +173,7 @@ class RecordingsContext implements RemoteContext {
                 | InvalidXmlException
                 | IOException e) {
             log.error("Failed to start recording", e);
-            exchange.sendResponseHeaders(HttpStatus.SC_INTERNAL_SERVER_ERROR, -1);
+            exchange.sendResponseHeaders(HttpStatus.SC_INTERNAL_SERVER_ERROR, BODY_LENGTH_NONE);
         }
     }
 
@@ -213,7 +215,7 @@ class RecordingsContext implements RemoteContext {
 
     private void sendHeader(HttpExchange exchange, int status) {
         try {
-            exchange.sendResponseHeaders(status, -1);
+            exchange.sendResponseHeaders(status, BODY_LENGTH_NONE);
         } catch (IOException e) {
             throw new IllegalStateException(e);
         }
@@ -228,7 +230,7 @@ class RecordingsContext implements RemoteContext {
         }
         boolean passed = restricted && MutatingRemoteContext.apiWritesEnabled(config);
         if (!passed) {
-            exchange.sendResponseHeaders(HttpStatus.SC_FORBIDDEN, -1);
+            exchange.sendResponseHeaders(HttpStatus.SC_FORBIDDEN, BODY_LENGTH_NONE);
         }
         return passed;
     }
