@@ -18,6 +18,10 @@ package io.cryostat.agent.remote;
 import com.sun.net.httpserver.HttpHandler;
 
 public interface RemoteContext extends HttpHandler {
+
+    public static final int BODY_LENGTH_NONE = -1;
+    public static final int BODY_LENGTH_UNKNOWN = 0;
+
     String path();
 
     default boolean available() {
