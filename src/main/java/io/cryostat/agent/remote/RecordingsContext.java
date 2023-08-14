@@ -164,16 +164,18 @@ class RecordingsContext implements RemoteContext {
                                     BufferedInputStream bis = new BufferedInputStream(stream);
                                     OutputStream response = exchange.getResponseBody()) {
                                 if (stream == null) {
-                                    exchange.sendResponseHeaders(HttpStatus.SC_NO_CONTENT, -1);
+                                    exchange.sendResponseHeaders(
+                                            HttpStatus.SC_NO_CONTENT, BODY_LENGTH_NONE);
                                 } else {
-                                    exchange.sendResponseHeaders(HttpStatus.SC_OK, 0);
+                                    exchange.sendResponseHeaders(
+                                            HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
                                     bis.transferTo(response);
                                 }
                             } catch (IOException ioe) {
                                 log.error("I/O error", ioe);
                                 try {
                                     exchange.sendResponseHeaders(
-                                            HttpStatus.SC_INTERNAL_SERVER_ERROR, -1);
+                                            HttpStatus.SC_INTERNAL_SERVER_ERROR, BODY_LENGTH_NONE);
                                 } catch (IOException ioe2) {
                                     log.error("Failed to write response", ioe2);
                                 }
@@ -183,7 +185,8 @@ class RecordingsContext implements RemoteContext {
                         },
                         () -> {
                             try {
-                                exchange.sendResponseHeaders(HttpStatus.SC_NOT_FOUND, -1);
+                                exchange.sendResponseHeaders(
+                                        HttpStatus.SC_NOT_FOUND, BODY_LENGTH_NONE);
                             } catch (IOException e) {
                                 log.error("Failed to write response", e);
                             }
