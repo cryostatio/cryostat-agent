@@ -27,6 +27,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        JVM_version: ['11', '17']
     if: ${{ github.repository_owner == 'cryostatio' }}
     steps:
     - name: Fail if PR and safe-to-test label NOT applied
@@ -39,7 +42,7 @@ jobs:
         submodules: true
     - uses: actions/setup-java@v2
       with:
-        java-version: '11'
+        java-version: ${{ matrix.JVM_version }}
         distribution: 'temurin'
     - name: maven-settings
       uses: s4u/maven-settings-action@v2
