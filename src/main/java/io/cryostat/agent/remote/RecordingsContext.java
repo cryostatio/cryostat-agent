@@ -22,6 +22,9 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Consumer;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import javax.inject.Inject;
@@ -50,11 +53,16 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
 import io.smallrye.config.SmallRyeConfig;
 import jdk.jfr.FlightRecorder;
+import jdk.jfr.Recording;
 import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 class RecordingsContext implements RemoteContext {
+
+    private static final String PATH = "/recordings";
+    private static final Pattern PATH_ID_PATTERN =
+            Pattern.compile("^" + PATH + "/(\\d+)$", Pattern.MULTILINE);
 
     private final Logger log = LoggerFactory.getLogger(getClass());
     private final SmallRyeConfig config;
@@ -76,7 +84,7 @@ class RecordingsContext implements RemoteContext {
 
     @Override
     public String path() {
-        return "/recordings";
+        return PATH;
     }
 
     @Override
@@ -86,43 +94,40 @@ class RecordingsContext implements RemoteContext {
             if (!ensureMethodAccepted(exchange)) {
                 return;
             }
+            int id = Integer.MIN_VALUE;
             switch (mtd) {
                 case "GET":
-                    try (OutputStream response = exchange.getResponseBody()) {
-                        List<SerializableRecordingDescriptor> recordings = getRecordings();
-                        exchange.sendResponseHeaders(HttpStatus.SC_OK, 0);
-                        mapper.writeValue(response, recordings);
-                    } catch (Exception e) {
-                        log.error("recordings serialization failure", e);
+                    id = extractId(exchange);
+                    if (id == Integer.MIN_VALUE) {
+                        handleGetList(exchange);
+                    } else {
+                        exchange.sendResponseHeaders(
+                                HttpStatus.SC_NOT_IMPLEMENTED, BODY_LENGTH_NONE);
                     }
                     break;
                 case "POST":
-                    try (InputStream body = exchange.getRequestBody()) {
-                        StartRecordingRequest req =
-                                mapper.readValue(body, StartRecordingRequest.class);
-                        if (!req.isValid()) {
-                            exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, -1);
-                            return;
-                        }
-                        SerializableRecordingDescriptor recording = startRecording(req);
-                        exchange.sendResponseHeaders(HttpStatus.SC_CREATED, 0);
-                        try (OutputStream response = exchange.getResponseBody()) {
-                            mapper.writeValue(response, recording);
-                        }
-                    } catch (QuantityConversionException
-                            | ServiceNotAvailableException
-                            | FlightRecorderException
-                            | org.openjdk.jmc.rjmx.services.jfr.FlightRecorderException
-                            | InvalidEventTemplateException
-                            | InvalidXmlException
-                            | IOException e) {
-                        log.error("Failed to start recording", e);
-                        exchange.sendResponseHeaders(HttpStatus.SC_INTERNAL_SERVER_ERROR, -1);
+                    handleStart(exchange);
+                    break;
+                case "PATCH":
+                    id = extractId(exchange);
+                    if (id >= 0) {
+                        handleStop(exchange, id);
+                    } else {
+                        exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
+                    }
+                    break;
+                case "DELETE":
+                    id = extractId(exchange);
+                    if (id >= 0) {
+                        handleDelete(exchange, id);
+                    } else {
+                        exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
                     }
                     break;
                 default:
                     log.warn("Unknown request method {}", mtd);
-                    exchange.sendResponseHeaders(HttpStatus.SC_METHOD_NOT_ALLOWED, -1);
+                    exchange.sendResponseHeaders(
+                            HttpStatus.SC_METHOD_NOT_ALLOWED, BODY_LENGTH_NONE);
                     break;
             }
         } finally {
@@ -130,16 +135,102 @@ class RecordingsContext implements RemoteContext {
         }
     }
 
+    private static int extractId(HttpExchange exchange) throws IOException {
+        Matcher m = PATH_ID_PATTERN.matcher(exchange.getRequestURI().getPath());
+        if (!m.find()) {
+            return Integer.MIN_VALUE;
+        }
+        return Integer.parseInt(m.group(1));
+    }
+
+    private void handleGetList(HttpExchange exchange) {
+        try (OutputStream response = exchange.getResponseBody()) {
+            List<SerializableRecordingDescriptor> recordings = getRecordings();
+            exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
+            mapper.writeValue(response, recordings);
+        } catch (Exception e) {
+            log.error("recordings serialization failure", e);
+        }
+    }
+
+    private void handleStart(HttpExchange exchange) throws IOException {
+        try (InputStream body = exchange.getRequestBody()) {
+            StartRecordingRequest req = mapper.readValue(body, StartRecordingRequest.class);
+            if (!req.isValid()) {
+                exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
+                return;
+            }
+            SerializableRecordingDescriptor recording = startRecording(req);
+            exchange.sendResponseHeaders(HttpStatus.SC_CREATED, BODY_LENGTH_UNKNOWN);
+            try (OutputStream response = exchange.getResponseBody()) {
+                mapper.writeValue(response, recording);
+            }
+        } catch (QuantityConversionException
+                | ServiceNotAvailableException
+                | FlightRecorderException
+                | org.openjdk.jmc.rjmx.services.jfr.FlightRecorderException
+                | InvalidEventTemplateException
+                | InvalidXmlException
+                | IOException e) {
+            log.error("Failed to start recording", e);
+            exchange.sendResponseHeaders(HttpStatus.SC_INTERNAL_SERVER_ERROR, BODY_LENGTH_NONE);
+        }
+    }
+
+    private void handleStop(HttpExchange exchange, int id) throws IOException {
+        invokeOnRecording(
+                exchange,
+                id,
+                r -> {
+                    try {
+                        boolean stopped = r.stop();
+                        if (!stopped) {
+                            sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
+                        } else {
+                            sendHeader(exchange, HttpStatus.SC_NO_CONTENT);
+                        }
+                    } catch (IllegalStateException e) {
+                        sendHeader(exchange, HttpStatus.SC_CONFLICT);
+                    }
+                });
+    }
+
+    private void handleDelete(HttpExchange exchange, int id) throws IOException {
+        invokeOnRecording(
+                exchange,
+                id,
+                r -> {
+                    r.close();
+                    sendHeader(exchange, HttpStatus.SC_NO_CONTENT);
+                });
+    }
+
+    private void invokeOnRecording(HttpExchange exchange, long id, Consumer<Recording> consumer) {
+        FlightRecorder.getFlightRecorder().getRecordings().stream()
+                .filter(r -> r.getId() == id)
+                .findFirst()
+                .ifPresentOrElse(
+                        consumer::accept, () -> sendHeader(exchange, HttpStatus.SC_NOT_FOUND));
+    }
+
+    private void sendHeader(HttpExchange exchange, int status) {
+        try {
+            exchange.sendResponseHeaders(status, BODY_LENGTH_NONE);
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
     private boolean ensureMethodAccepted(HttpExchange exchange) throws IOException {
-        Set<String> blocked = Set.of("POST");
+        Set<String> alwaysAllowed = Set.of("GET");
         String mtd = exchange.getRequestMethod();
-        boolean restricted = blocked.contains(mtd);
+        boolean restricted = !alwaysAllowed.contains(mtd);
         if (!restricted) {
             return true;
         }
         boolean passed = restricted && MutatingRemoteContext.apiWritesEnabled(config);
         if (!passed) {
-            exchange.sendResponseHeaders(HttpStatus.SC_FORBIDDEN, -1);
+            exchange.sendResponseHeaders(HttpStatus.SC_FORBIDDEN, BODY_LENGTH_NONE);
         }
         return passed;
     }
