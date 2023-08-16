@@ -62,8 +62,7 @@ import org.slf4j.LoggerFactory;
 class RecordingsContext implements RemoteContext {
 
     private static final String PATH = "/recordings/";
-    private static final Pattern PATH_ID_PATTERN =
-            Pattern.compile("^" + PATH + "(\\d+)$", Pattern.MULTILINE);
+    private static final Pattern PATH_ID_PATTERN = Pattern.compile("^" + PATH + "(\\d+)$", Pattern.MULTILINE);
 
     private final Logger log = LoggerFactory.getLogger(getClass());
     private final SmallRyeConfig config;
@@ -106,7 +105,7 @@ class RecordingsContext implements RemoteContext {
                     }
                     break;
                 case "POST":
-                    handleStart(exchange);
+                    handleStartRecordingOrSnapshot(exchange);
                     break;
                 case "PATCH":
                     id = extractId(exchange);
@@ -193,12 +192,25 @@ class RecordingsContext implements RemoteContext {
                         });
     }
 
-    private void handleStart(HttpExchange exchange) throws IOException {
+    private void handleStartRecordingOrSnapshot(HttpExchange exchange) throws IOException {
         try (InputStream body = exchange.getRequestBody()) {
             StartRecordingRequest req = mapper.readValue(body, StartRecordingRequest.class);
             if (!req.isValid()) {
                 exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
                 return;
+            }
+            if (req.requestSnapshot()) {
+                try {
+                    SerializableRecordingDescriptor snapshot = startSnapshot(req, exchange);
+                    exchange.sendResponseHeaders(HttpStatus.SC_CREATED, BODY_LENGTH_UNKNOWN);
+                    try (OutputStream response = exchange.getResponseBody()) {
+                        mapper.writeValue(response, snapshot);
+                    }
+                    return;
+                } catch (IOException e) {
+                    log.error("Failed to start snapshot", e);
+                    exchange.sendResponseHeaders(HttpStatus.SC_SERVICE_UNAVAILABLE, BODY_LENGTH_NONE);
+                }
             }
             SerializableRecordingDescriptor recording = startRecording(req);
             exchange.sendResponseHeaders(HttpStatus.SC_CREATED, BODY_LENGTH_UNKNOWN);
@@ -283,35 +295,31 @@ class RecordingsContext implements RemoteContext {
 
     private SerializableRecordingDescriptor startRecording(StartRecordingRequest req)
             throws QuantityConversionException, ServiceNotAvailableException,
-                    FlightRecorderException,
-                    org.openjdk.jmc.rjmx.services.jfr.FlightRecorderException,
-                    InvalidEventTemplateException, InvalidXmlException, IOException {
+            FlightRecorderException,
+            org.openjdk.jmc.rjmx.services.jfr.FlightRecorderException,
+            InvalidEventTemplateException, InvalidXmlException, IOException {
         Runnable cleanup = () -> {};
         try {
-            JFRConnection conn =
-                    jfrConnectionToolkit.connect(
-                            jfrConnectionToolkit.createServiceURL("localhost", 0));
+            JFRConnection conn = jfrConnectionToolkit.connect(
+                    jfrConnectionToolkit.createServiceURL("localhost", 0));
             IConstrainedMap<EventOptionID> events;
             if (req.requestsCustomTemplate()) {
-                Template template =
-                        localStorageTemplateService.addTemplate(
-                                new ByteArrayInputStream(
-                                        req.template.getBytes(StandardCharsets.UTF_8)));
+                Template template = localStorageTemplateService.addTemplate(
+                        new ByteArrayInputStream(
+                                req.template.getBytes(StandardCharsets.UTF_8)));
                 events = localStorageTemplateService.getEvents(template).orElseThrow();
-                cleanup =
-                        () -> {
-                            try {
-                                localStorageTemplateService.deleteTemplate(template);
-                            } catch (InvalidEventTemplateException | IOException e) {
-                                log.error("Failed to clean up template " + template.getName(), e);
-                            }
-                        };
+                cleanup = () -> {
+                    try {
+                        localStorageTemplateService.deleteTemplate(template);
+                    } catch (InvalidEventTemplateException | IOException e) {
+                        log.error("Failed to clean up template " + template.getName(), e);
+                    }
+                };
             } else {
-                events =
-                        new RemoteTemplateService(conn)
-                                .getEvents(req.localTemplateName, TemplateType.TARGET).stream()
-                                        .findFirst()
-                                        .orElseThrow();
+                events = new RemoteTemplateService(conn)
+                        .getEvents(req.localTemplateName, TemplateType.TARGET).stream()
+                        .findFirst()
+                        .orElseThrow();
             }
             IFlightRecorderService svc = conn.getService();
             return new SerializableRecordingDescriptor(
@@ -324,6 +332,21 @@ class RecordingsContext implements RemoteContext {
                                     .toDisk(true)
                                     .build(),
                             events));
+        } finally {
+            cleanup.run();
+        }
+    }
+
+    private SerializableRecordingDescriptor startSnapshot(StartRecordingRequest req, HttpExchange exchange)
+    throws IOException {
+        Runnable cleanup = () -> {};
+        try {
+            Recording snapshot = FlightRecorder.getFlightRecorder().takeSnapshot();
+            if (snapshot.getSize() == 0) {
+                log.warn("No active recordings");
+                exchange.sendResponseHeaders(HttpStatus.SC_SERVICE_UNAVAILABLE, BODY_LENGTH_NONE);
+            }
+            return new SerializableRecordingDescriptor(snapshot);
         } finally {
             cleanup.run();
         }
@@ -346,12 +369,19 @@ class RecordingsContext implements RemoteContext {
             return !StringUtils.isBlank(localTemplateName);
         }
 
+        boolean requestSnapshot() {
+            boolean snapshotName = name.equals("snapshot");
+            boolean snapshotTemplate = StringUtils.isBlank(template) && StringUtils.isBlank(localTemplateName);
+            boolean snapshotFeatures = duration == 0 && maxSize == 0 && maxAge == 0;
+            return snapshotName && snapshotTemplate && snapshotFeatures;
+        }
+
         boolean isValid() {
             boolean requestsCustomTemplate = requestsCustomTemplate();
             boolean requestsBundledTemplate = requestsBundledTemplate();
             boolean requestsEither = requestsCustomTemplate || requestsBundledTemplate;
             boolean requestsBoth = requestsCustomTemplate && requestsBundledTemplate;
-            return requestsEither && !requestsBoth;
+            return requestsEither && !requestsBoth && !requestSnapshot();
         }
     }
 }
