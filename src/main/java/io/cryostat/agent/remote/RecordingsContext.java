@@ -206,11 +206,11 @@ class RecordingsContext implements RemoteContext {
                     try (OutputStream response = exchange.getResponseBody()) {
                         mapper.writeValue(response, snapshot);
                     }
-                    return;
                 } catch (IOException e) {
                     log.error("Failed to start snapshot", e);
                     exchange.sendResponseHeaders(HttpStatus.SC_SERVICE_UNAVAILABLE, BODY_LENGTH_NONE);
                 }
+                return;
             }
             SerializableRecordingDescriptor recording = startRecording(req);
             exchange.sendResponseHeaders(HttpStatus.SC_CREATED, BODY_LENGTH_UNKNOWN);
