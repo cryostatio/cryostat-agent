@@ -62,7 +62,8 @@ import org.slf4j.LoggerFactory;
 class RecordingsContext implements RemoteContext {
 
     private static final String PATH = "/recordings/";
-    private static final Pattern PATH_ID_PATTERN = Pattern.compile("^" + PATH + "(\\d+)$", Pattern.MULTILINE);
+    private static final Pattern PATH_ID_PATTERN =
+            Pattern.compile("^" + PATH + "(\\d+)$", Pattern.MULTILINE);
 
     private final Logger log = LoggerFactory.getLogger(getClass());
     private final SmallRyeConfig config;
@@ -208,7 +209,8 @@ class RecordingsContext implements RemoteContext {
                     }
                 } catch (IOException e) {
                     log.error("Failed to start snapshot", e);
-                    exchange.sendResponseHeaders(HttpStatus.SC_SERVICE_UNAVAILABLE, BODY_LENGTH_NONE);
+                    exchange.sendResponseHeaders(
+                            HttpStatus.SC_SERVICE_UNAVAILABLE, BODY_LENGTH_NONE);
                 }
                 return;
             }
@@ -295,31 +297,35 @@ class RecordingsContext implements RemoteContext {
 
     private SerializableRecordingDescriptor startRecording(StartRecordingRequest req)
             throws QuantityConversionException, ServiceNotAvailableException,
-            FlightRecorderException,
-            org.openjdk.jmc.rjmx.services.jfr.FlightRecorderException,
-            InvalidEventTemplateException, InvalidXmlException, IOException {
+                    FlightRecorderException,
+                    org.openjdk.jmc.rjmx.services.jfr.FlightRecorderException,
+                    InvalidEventTemplateException, InvalidXmlException, IOException {
         Runnable cleanup = () -> {};
         try {
-            JFRConnection conn = jfrConnectionToolkit.connect(
-                    jfrConnectionToolkit.createServiceURL("localhost", 0));
+            JFRConnection conn =
+                    jfrConnectionToolkit.connect(
+                            jfrConnectionToolkit.createServiceURL("localhost", 0));
             IConstrainedMap<EventOptionID> events;
             if (req.requestsCustomTemplate()) {
-                Template template = localStorageTemplateService.addTemplate(
-                        new ByteArrayInputStream(
-                                req.template.getBytes(StandardCharsets.UTF_8)));
+                Template template =
+                        localStorageTemplateService.addTemplate(
+                                new ByteArrayInputStream(
+                                        req.template.getBytes(StandardCharsets.UTF_8)));
                 events = localStorageTemplateService.getEvents(template).orElseThrow();
-                cleanup = () -> {
-                    try {
-                        localStorageTemplateService.deleteTemplate(template);
-                    } catch (InvalidEventTemplateException | IOException e) {
-                        log.error("Failed to clean up template " + template.getName(), e);
-                    }
-                };
+                cleanup =
+                        () -> {
+                            try {
+                                localStorageTemplateService.deleteTemplate(template);
+                            } catch (InvalidEventTemplateException | IOException e) {
+                                log.error("Failed to clean up template " + template.getName(), e);
+                            }
+                        };
             } else {
-                events = new RemoteTemplateService(conn)
-                        .getEvents(req.localTemplateName, TemplateType.TARGET).stream()
-                        .findFirst()
-                        .orElseThrow();
+                events =
+                        new RemoteTemplateService(conn)
+                                .getEvents(req.localTemplateName, TemplateType.TARGET).stream()
+                                        .findFirst()
+                                        .orElseThrow();
             }
             IFlightRecorderService svc = conn.getService();
             return new SerializableRecordingDescriptor(
@@ -337,8 +343,8 @@ class RecordingsContext implements RemoteContext {
         }
     }
 
-    private SerializableRecordingDescriptor startSnapshot(StartRecordingRequest req, HttpExchange exchange)
-    throws IOException {
+    private SerializableRecordingDescriptor startSnapshot(
+            StartRecordingRequest req, HttpExchange exchange) throws IOException {
         Runnable cleanup = () -> {};
         try {
             Recording snapshot = FlightRecorder.getFlightRecorder().takeSnapshot();
@@ -371,7 +377,8 @@ class RecordingsContext implements RemoteContext {
 
         boolean requestSnapshot() {
             boolean snapshotName = name.equals("snapshot");
-            boolean snapshotTemplate = StringUtils.isBlank(template) && StringUtils.isBlank(localTemplateName);
+            boolean snapshotTemplate =
+                    StringUtils.isBlank(template) && StringUtils.isBlank(localTemplateName);
             boolean snapshotFeatures = duration == 0 && maxSize == 0 && maxAge == 0;
             return snapshotName && snapshotTemplate && snapshotFeatures;
         }
