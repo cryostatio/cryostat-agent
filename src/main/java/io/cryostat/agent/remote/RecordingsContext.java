@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Consumer;
@@ -31,6 +32,7 @@ import java.util.stream.Collectors;
 import javax.inject.Inject;
 
 import org.openjdk.jmc.common.unit.IConstrainedMap;
+import org.openjdk.jmc.common.unit.ITypedQuantity;
 import org.openjdk.jmc.common.unit.QuantityConversionException;
 import org.openjdk.jmc.common.unit.UnitLookup;
 import org.openjdk.jmc.flightrecorder.configuration.events.EventOptionID;
@@ -50,6 +52,7 @@ import io.cryostat.core.templates.RemoteTemplateService;
 import io.cryostat.core.templates.Template;
 import io.cryostat.core.templates.TemplateType;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
 import io.smallrye.config.SmallRyeConfig;
@@ -110,8 +113,19 @@ class RecordingsContext implements RemoteContext {
                     break;
                 case "PATCH":
                     id = extractId(exchange);
-                    if (id >= 0) {
-                        handleStop(exchange, id);
+                    String request = requestStopOrUpdate(exchange);
+                    if (request == "STOPPED") {
+                        if (id >= 0) {
+                            handleStop(exchange, id);
+                        } else {
+                            exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
+                        }
+                    } else if (request == "UPDATE") {
+                        if (id >= 0) {
+                            handleRecordingUpdate(exchange, id);
+                        } else {
+                            exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
+                        }
                     } else {
                         exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
                     }
@@ -132,6 +146,14 @@ class RecordingsContext implements RemoteContext {
             }
         } finally {
             exchange.close();
+        }
+    }
+
+    private static String requestStopOrUpdate(HttpExchange exchange) throws IOException {
+        try (InputStream body = exchange.getRequestBody()) {
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode jsonMap = mapper.readTree(body);
+            return jsonMap.get("state").toString();
         }
     }
 
@@ -196,10 +218,6 @@ class RecordingsContext implements RemoteContext {
     private void handleStartRecordingOrSnapshot(HttpExchange exchange) throws IOException {
         try (InputStream body = exchange.getRequestBody()) {
             StartRecordingRequest req = mapper.readValue(body, StartRecordingRequest.class);
-            if (!req.isValid()) {
-                exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
-                return;
-            }
             if (req.requestSnapshot()) {
                 try {
                     SerializableRecordingDescriptor snapshot = startSnapshot(req, exchange);
@@ -212,6 +230,10 @@ class RecordingsContext implements RemoteContext {
                     exchange.sendResponseHeaders(
                             HttpStatus.SC_SERVICE_UNAVAILABLE, BODY_LENGTH_NONE);
                 }
+                return;
+            }
+            if (!req.isValid()) {
+                exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
                 return;
             }
             SerializableRecordingDescriptor recording = startRecording(req);
@@ -228,6 +250,37 @@ class RecordingsContext implements RemoteContext {
                 | IOException e) {
             log.error("Failed to start recording", e);
             exchange.sendResponseHeaders(HttpStatus.SC_INTERNAL_SERVER_ERROR, BODY_LENGTH_NONE);
+        }
+    }
+
+    private void handleRecordingUpdate(HttpExchange exchange, long id) throws IOException {
+        try (InputStream body = exchange.getRequestBody()) {
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode jsonMap = mapper.readTree(body);
+            invokeOnRecording(
+                    exchange,
+                    id,
+                    r -> {
+                        try {
+                            if (jsonMap.has("name")) {
+                                r.setName(jsonMap.get("name").toString());
+                            }
+                            if (jsonMap.has("toDisk")) {
+                                r.setToDisk(jsonMap.get("toDisk").asBoolean());
+                            }
+                            if (jsonMap.has("duration")) {
+                                r.setDuration(Duration.ofMillis(jsonMap.get("duration").asLong()));
+                            }
+                            if (jsonMap.has("maxSize")) {
+                                r.setMaxSize(jsonMap.get("name").asLong());
+                            }
+                            if (jsonMap.has("maxAge")) {
+                                r.setMaxAge(Duration.ofMillis(jsonMap.get("name").asLong()));
+                            }
+                        } catch (IllegalStateException e) {
+                            sendHeader(exchange, HttpStatus.SC_CONFLICT);
+                        }
+                    });
         }
     }
 
@@ -378,7 +431,7 @@ class RecordingsContext implements RemoteContext {
         boolean requestSnapshot() {
             boolean snapshotName = name.equals("snapshot");
             boolean snapshotTemplate =
-                    StringUtils.isBlank(template) && StringUtils.isBlank(localTemplateName);
+            StringUtils.isBlank(template) && StringUtils.isBlank(localTemplateName);
             boolean snapshotFeatures = duration == 0 && maxSize == 0 && maxAge == 0;
             return snapshotName && snapshotTemplate && snapshotFeatures;
         }
@@ -388,7 +441,7 @@ class RecordingsContext implements RemoteContext {
             boolean requestsBundledTemplate = requestsBundledTemplate();
             boolean requestsEither = requestsCustomTemplate || requestsBundledTemplate;
             boolean requestsBoth = requestsCustomTemplate && requestsBundledTemplate;
-            return requestsEither && !requestsBoth && !requestSnapshot();
+            return (requestsEither && !requestsBoth) || requestSnapshot();
         }
     }
 }
