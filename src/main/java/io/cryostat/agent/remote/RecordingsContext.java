@@ -20,10 +20,14 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.MalformedURLException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.Map.Entry;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -32,13 +36,14 @@ import java.util.stream.Collectors;
 import javax.inject.Inject;
 
 import org.openjdk.jmc.common.unit.IConstrainedMap;
-import org.openjdk.jmc.common.unit.ITypedQuantity;
 import org.openjdk.jmc.common.unit.QuantityConversionException;
 import org.openjdk.jmc.common.unit.UnitLookup;
 import org.openjdk.jmc.flightrecorder.configuration.events.EventOptionID;
 import org.openjdk.jmc.flightrecorder.configuration.recording.RecordingOptionsBuilder;
+import org.openjdk.jmc.rjmx.ConnectionException;
 import org.openjdk.jmc.rjmx.ServiceNotAvailableException;
 import org.openjdk.jmc.rjmx.services.jfr.IFlightRecorderService;
+import org.openjdk.jmc.rjmx.services.jfr.IRecordingDescriptor;
 
 import io.cryostat.agent.StringUtils;
 import io.cryostat.core.FlightRecorderException;
@@ -113,19 +118,8 @@ class RecordingsContext implements RemoteContext {
                     break;
                 case "PATCH":
                     id = extractId(exchange);
-                    String request = requestStopOrUpdate(exchange);
-                    if (request == "STOPPED") {
-                        if (id >= 0) {
-                            handleStop(exchange, id);
-                        } else {
-                            exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
-                        }
-                    } else if (request == "UPDATE") {
-                        if (id >= 0) {
-                            handleRecordingUpdate(exchange, id);
-                        } else {
-                            exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
-                        }
+                    if (id >= 0) {
+                        handleStopOrUpdate(exchange, id);
                     } else {
                         exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
                     }
@@ -146,14 +140,6 @@ class RecordingsContext implements RemoteContext {
             }
         } finally {
             exchange.close();
-        }
-    }
-
-    private static String requestStopOrUpdate(HttpExchange exchange) throws IOException {
-        try (InputStream body = exchange.getRequestBody()) {
-            ObjectMapper mapper = new ObjectMapper();
-            JsonNode jsonMap = mapper.readTree(body);
-            return jsonMap.get("state").toString();
         }
     }
 
@@ -253,53 +239,81 @@ class RecordingsContext implements RemoteContext {
         }
     }
 
-    private void handleRecordingUpdate(HttpExchange exchange, long id) throws IOException {
-        try (InputStream body = exchange.getRequestBody()) {
-            ObjectMapper mapper = new ObjectMapper();
+    private void handleStopOrUpdate(HttpExchange exchange, long id) throws IOException {
+        try {
+            JFRConnection conn =
+                    jfrConnectionToolkit.connect(
+                            jfrConnectionToolkit.createServiceURL("localhost", 0));
+            IFlightRecorderService svc = conn.getService();
+            IRecordingDescriptor dsc = svc.getAvailableRecordings().stream().filter(r -> r.getId() == id).findFirst().get();
+            RecordingOptionsBuilder builder = new RecordingOptionsBuilder(conn.getService());
+            
+            InputStream body = exchange.getRequestBody();
             JsonNode jsonMap = mapper.readTree(body);
-            invokeOnRecording(
-                    exchange,
-                    id,
-                    r -> {
-                        try {
-                            if (jsonMap.has("name")) {
-                                r.setName(jsonMap.get("name").toString());
-                            }
-                            if (jsonMap.has("toDisk")) {
-                                r.setToDisk(jsonMap.get("toDisk").asBoolean());
-                            }
-                            if (jsonMap.has("duration")) {
-                                r.setDuration(Duration.ofMillis(jsonMap.get("duration").asLong()));
-                            }
-                            if (jsonMap.has("maxSize")) {
-                                r.setMaxSize(jsonMap.get("name").asLong());
-                            }
-                            if (jsonMap.has("maxAge")) {
-                                r.setMaxAge(Duration.ofMillis(jsonMap.get("name").asLong()));
-                            }
-                        } catch (IllegalStateException e) {
-                            sendHeader(exchange, HttpStatus.SC_CONFLICT);
+            Iterator<Entry<String, JsonNode>> fields = jsonMap.fields();
+
+            while (fields.hasNext()) {
+                Map.Entry<String, JsonNode> field = fields.next();
+
+                switch(field.getKey()){
+                    case "state":
+                        if ("STOPPED".equals(field.getValue().toString())) {
+                            handleStop(exchange, id);
+                            break;
+                        } else if (!"UPDATE".equals(field.getValue().toString())) {
+                            exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
                         }
-                    });
+                        break;
+                    case "name":
+                        builder = builder.name(field.getValue().toString());
+                        break;
+                    case "duration":
+                        builder = builder.duration(field.getValue().asLong());
+                        break;
+                    case "maxSize":
+                        builder = builder.maxSize(field.getValue().asLong());
+                        break;
+                    case "maxAge":
+                        builder = builder.maxAge(field.getValue().asLong());
+                        break;
+                    case "toDisk":
+                        builder = builder.toDisk(field.getValue().asBoolean());
+                        break;
+                    default:
+                        log.warn("Unknown recording option {}", field.getKey());
+                        exchange.sendResponseHeaders(
+                                HttpStatus.SC_METHOD_NOT_ALLOWED, BODY_LENGTH_NONE);
+                        break;
+                }
+            }
+            svc.updateRecordingOptions(dsc, builder.build());
+            exchange.sendResponseHeaders(HttpStatus.SC_CREATED, BODY_LENGTH_UNKNOWN);
+        } catch ( ServiceNotAvailableException
+                | org.openjdk.jmc.rjmx.services.jfr.FlightRecorderException
+                | QuantityConversionException e){
+            log.error("Failed to update recording", e);
+            exchange.sendResponseHeaders(HttpStatus.SC_INTERNAL_SERVER_ERROR, BODY_LENGTH_NONE);
+        } finally {
+            exchange.close();
         }
     }
 
     private void handleStop(HttpExchange exchange, long id) throws IOException {
         invokeOnRecording(
-                exchange,
-                id,
-                r -> {
-                    try {
-                        boolean stopped = r.stop();
-                        if (!stopped) {
-                            sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
-                        } else {
-                            sendHeader(exchange, HttpStatus.SC_NO_CONTENT);
-                        }
-                    } catch (IllegalStateException e) {
-                        sendHeader(exchange, HttpStatus.SC_CONFLICT);
+            exchange,
+            id,
+            r -> {
+                try {
+                    boolean stopped = r.stop();
+                    if (!stopped) {
+                        sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
+                    } else {
+                        sendHeader(exchange, HttpStatus.SC_NO_CONTENT);
                     }
-                });
+                } catch (IllegalStateException e) {
+                    sendHeader(exchange, HttpStatus.SC_CONFLICT);
+                }
+            });
     }
 
     private void handleDelete(HttpExchange exchange, long id) throws IOException {
@@ -352,7 +366,7 @@ class RecordingsContext implements RemoteContext {
             throws QuantityConversionException, ServiceNotAvailableException,
                     FlightRecorderException,
                     org.openjdk.jmc.rjmx.services.jfr.FlightRecorderException,
-                    InvalidEventTemplateException, InvalidXmlException, IOException {
+                    InvalidEventTemplateException, InvalidXmlException, IOException, FlightRecorderException {
         Runnable cleanup = () -> {};
         try {
             JFRConnection conn =
