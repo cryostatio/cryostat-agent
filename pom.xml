@@ -54,7 +54,7 @@
   <org.apache.httpcomponents.httpmime.version>${org.apache.httpcomponents.httpclient.version}</org.apache.httpcomponents.httpmime.version>
   <com.fasterxml.jackson.version>2.15.2</com.fasterxml.jackson.version>
   <javax.annotation.version>1.3.2</javax.annotation.version><!-- used by smallrye -->
-  <io.smallrye.config.version>2.12.3</io.smallrye.config.version>
+  <io.smallrye.config.version>3.3.4</io.smallrye.config.version>
   <org.slf4j.version>2.0.7</org.slf4j.version>
 
   <com.github.spotbugs.version>4.7.3</com.github.spotbugs.version>
