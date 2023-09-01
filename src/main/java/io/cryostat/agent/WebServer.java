@@ -36,6 +36,7 @@ import java.util.zip.DeflaterOutputStream;
 
 import io.cryostat.agent.remote.RemoteContext;
 
+import com.sun.net.httpserver.Authenticator;
 import com.sun.net.httpserver.BasicAuthenticator;
 import com.sun.net.httpserver.Filter;
 import com.sun.net.httpserver.HttpContext;
@@ -99,7 +100,7 @@ class WebServer {
         this.http.setExecutor(executor);
 
         Set<RemoteContext> mergedContexts = new HashSet<>(remoteContexts.get());
-        mergedContexts.add(new PingContext());
+        mergedContexts.add(new PingContext(agentAuthenticator));
         mergedContexts.forEach(
                 rc -> {
                     HttpContext ctx = this.http.createContext(rc.path(), rc::handle);
@@ -156,6 +157,12 @@ class WebServer {
 
     private class PingContext implements RemoteContext {
 
+        private final AgentAuthenticator authenticator;
+
+        PingContext(AgentAuthenticator authenticator) {
+            this.authenticator = authenticator;
+        }
+
         @Override
         public String path() {
             return "/";
@@ -166,6 +173,13 @@ class WebServer {
             String mtd = exchange.getRequestMethod();
             switch (mtd) {
                 case "POST":
+                    boolean authenticated =
+                            authenticator.authenticate(exchange) instanceof Authenticator.Success;
+                    if (!authenticated) {
+                        exchange.sendResponseHeaders(HttpStatus.SC_UNAUTHORIZED, -1);
+                        exchange.close();
+                        break;
+                    }
                     synchronized (WebServer.this.credentials) {
                         executor.execute(registration.get()::tryRegister);
                         exchange.sendResponseHeaders(HttpStatus.SC_NO_CONTENT, -1);
