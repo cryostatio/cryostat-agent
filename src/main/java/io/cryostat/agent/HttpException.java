@@ -24,4 +24,8 @@ public class HttpException extends RuntimeException {
                         "Unexpected non-OK status code %d on API path %s",
                         statusCode, uri.toString()));
     }
+
+    HttpException(int statusCode, Throwable cause) {
+        super(String.format("HTTP %d : %s", statusCode), cause);
+    }
 }

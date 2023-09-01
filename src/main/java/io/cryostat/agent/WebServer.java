@@ -29,8 +29,8 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.zip.DeflaterOutputStream;
 
@@ -100,7 +100,6 @@ class WebServer {
         this.http.setExecutor(executor);
 
         Set<RemoteContext> mergedContexts = new HashSet<>(remoteContexts.get());
-        mergedContexts.add(new PingContext(agentAuthenticator));
         mergedContexts.forEach(
                 rc -> {
                     HttpContext ctx = this.http.createContext(rc.path(), rc::handle);
@@ -108,6 +107,9 @@ class WebServer {
                     ctx.getFilters().add(requestLoggingFilter);
                     ctx.getFilters().add(compressionFilter);
                 });
+        RemoteContext ping = new PingContext(agentAuthenticator, registration);
+        HttpContext pingCtx = this.http.createContext(ping.path(), ping::handle);
+        pingCtx.getFilters().add(requestLoggingFilter);
 
         this.http.start();
     }
@@ -124,43 +126,34 @@ class WebServer {
     }
 
     CompletableFuture<Void> generateCredentials() throws NoSuchAlgorithmException {
-        synchronized (this.credentials) {
-            this.credentials.regenerate();
-            return this.cryostat
-                    .get()
-                    .submitCredentialsIfRequired(this.credentialId, this.credentials, this.callback)
-                    .handle(
-                            (v, t) -> {
-                                if (t != null) {
-                                    log.error("Could not submit credentials", t);
-                                    executor.schedule(
-                                            () -> {
-                                                try {
-                                                    this.generateCredentials();
-                                                } catch (NoSuchAlgorithmException e) {
-                                                    log.error("Cannot submit credentials", e);
-                                                }
-                                            },
-                                            registrationRetryMs,
-                                            TimeUnit.MILLISECONDS);
-                                }
-                                return v;
-                            })
-                    .thenAccept(
-                            i -> {
-                                this.credentialId = i;
-                                log.info("Defined credentials with id {}", i);
-                            })
-                    .thenRun(this.credentials::clear);
-        }
+        this.credentials.regenerate();
+        return this.cryostat
+                .get()
+                .submitCredentialsIfRequired(this.credentialId, this.credentials, this.callback)
+                .handle(
+                        (v, t) -> {
+                            this.credentials.clear();
+                            if (t != null) {
+                                this.credentialId = -1;
+                                throw new CompletionException("Could not submit credentials", t);
+                            }
+                            return v;
+                        })
+                .thenAccept(
+                        i -> {
+                            this.credentialId = i;
+                            log.info("Defined credentials with id {}", i);
+                        });
     }
 
     private class PingContext implements RemoteContext {
 
         private final AgentAuthenticator authenticator;
+        private final Lazy<Registration> registration;
 
-        PingContext(AgentAuthenticator authenticator) {
+        PingContext(AgentAuthenticator authenticator, Lazy<Registration> registration) {
             this.authenticator = authenticator;
+            this.registration = registration;
         }
 
         @Override
@@ -181,9 +174,11 @@ class WebServer {
                         break;
                     }
                     synchronized (WebServer.this.credentials) {
-                        executor.execute(registration.get()::tryRegister);
                         exchange.sendResponseHeaders(HttpStatus.SC_NO_CONTENT, -1);
                         exchange.close();
+                        this.registration
+                                .get()
+                                .notify(Registration.RegistrationEvent.State.REFRESHING);
                     }
                     break;
                 case "GET":

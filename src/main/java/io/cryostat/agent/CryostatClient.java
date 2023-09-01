@@ -30,6 +30,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.function.Function;
 
@@ -155,7 +156,7 @@ public class CryostatClient {
     public CompletableFuture<Integer> submitCredentialsIfRequired(
             int prevId, Credentials credentials, URI callback) {
         if (prevId < 0) {
-            return submitCredentials(credentials, callback);
+            return submitCredentials(prevId, credentials, callback);
         }
         HttpGet req = new HttpGet(baseUri.resolve(CREDENTIALS_API_PATH + "/" + prevId));
         log.info("{}", req);
@@ -166,11 +167,12 @@ public class CryostatClient {
                             if (exists) {
                                 return CompletableFuture.completedFuture(prevId);
                             }
-                            return submitCredentials(credentials, callback);
+                            return submitCredentials(prevId, credentials, callback);
                         });
     }
 
-    private CompletableFuture<Integer> submitCredentials(Credentials credentials, URI callback) {
+    private CompletableFuture<Integer> submitCredentials(
+            int prevId, Credentials credentials, URI callback) {
         HttpPost req = new HttpPost(baseUri.resolve(CREDENTIALS_API_PATH));
         MultipartEntityBuilder entityBuilder =
                 MultipartEntityBuilder.create()
@@ -198,7 +200,17 @@ public class CryostatClient {
         log.info("{}", req);
         req.setEntity(entityBuilder.build());
         return supply(req, (res) -> logResponse(req, res))
-                .thenApply(res -> assertOkStatus(req, res))
+                .thenApply(
+                        res -> {
+                            if (!isOkStatus(res)) {
+                                try {
+                                    deleteCredentials(prevId).get();
+                                } catch (InterruptedException | ExecutionException e) {
+                                    throw new HttpException(500, e);
+                                }
+                            }
+                            return assertOkStatus(req, res);
+                        })
                 .thenApply(res -> res.getFirstHeader(HttpHeaders.LOCATION).getValue())
                 .thenApply(res -> res.substring(res.lastIndexOf('/') + 1, res.length()))
                 .thenApply(Integer::valueOf);
@@ -346,7 +358,8 @@ public class CryostatClient {
 
     private boolean isOkStatus(HttpResponse res) {
         int sc = res.getStatusLine().getStatusCode();
-        return 200 <= sc && sc < 300;
+        // 2xx is OK, 3xx is redirect range so allow those too
+        return 200 <= sc && sc < 400;
     }
 
     private HttpResponse assertOkStatus(HttpRequestBase req, HttpResponse res) {

@@ -24,6 +24,7 @@ import java.time.Instant;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
@@ -96,10 +97,45 @@ class Registration {
         this.addRegistrationListener(
                 evt -> {
                     switch (evt.state) {
+                        case UNREGISTERED:
+                            if (this.registrationCheckTask != null) {
+                                this.registrationCheckTask.cancel(false);
+                                this.registrationCheckTask = null;
+                            }
+                            executor.submit(
+                                    () -> {
+                                        try {
+                                            webServer
+                                                    .generateCredentials()
+                                                    .handle(
+                                                            (v, t) -> {
+                                                                if (t != null) {
+                                                                    executor.schedule(
+                                                                            () ->
+                                                                                    notify(
+                                                                                            RegistrationEvent
+                                                                                                    .State
+                                                                                                    .UNREGISTERED),
+                                                                            registrationRetryMs,
+                                                                            TimeUnit.MILLISECONDS);
+                                                                    throw new CompletionException(
+                                                                            t);
+                                                                }
+                                                                ;
+                                                                notify(
+                                                                        RegistrationEvent.State
+                                                                                .REFRESHING);
+                                                                return v;
+                                                            });
+                                        } catch (NoSuchAlgorithmException nsae) {
+                                            log.error("Could not regenerate credentials", nsae);
+                                        }
+                                    });
+                            break;
                         case REGISTERED:
                             if (this.registrationCheckTask != null) {
                                 log.warn("Re-registered without previous de-registration");
-                                this.registrationCheckTask.cancel(true);
+                                this.registrationCheckTask.cancel(false);
                             }
                             this.registrationCheckTask =
                                     executor.scheduleAtFixedRate(
@@ -132,43 +168,8 @@ class Registration {
                                             registrationCheckMs,
                                             TimeUnit.MILLISECONDS);
                             break;
-                        case UNREGISTERED:
-                            if (this.registrationCheckTask != null) {
-                                this.registrationCheckTask.cancel(true);
-                                this.registrationCheckTask = null;
-                            }
-                            executor.submit(
-                                    () -> {
-                                        try {
-                                            webServer
-                                                    .generateCredentials()
-                                                    .handle(
-                                                            (t, v) -> {
-                                                                if (t != null) {
-                                                                    log.warn(
-                                                                            "Failed to generate"
-                                                                                + " credentials",
-                                                                            t);
-                                                                    executor.schedule(
-                                                                            () ->
-                                                                                    notify(
-                                                                                            RegistrationEvent
-                                                                                                    .State
-                                                                                                    .UNREGISTERED),
-                                                                            registrationRetryMs,
-                                                                            TimeUnit.MILLISECONDS);
-                                                                } else {
-                                                                    executor.submit(
-                                                                            this::tryRegister);
-                                                                }
-                                                                return null;
-                                                            });
-                                        } catch (NoSuchAlgorithmException nsae) {
-                                            log.error("Could not regenerate credentials", nsae);
-                                        }
-                                    });
-                            break;
                         case REFRESHING:
+                            executor.submit(this::tryRegister);
                             break;
                         case REFRESHED:
                             break;
@@ -187,13 +188,14 @@ class Registration {
     }
 
     void tryRegister() {
-        notify(RegistrationEvent.State.REFRESHING);
+        int credentialId = webServer.getCredentialId();
+        if (credentialId < 0) {
+            return;
+        }
         try {
             URI credentialedCallback =
                     new URIBuilder(callback)
-                            .setUserInfo(
-                                    "storedcredentials",
-                                    String.valueOf(webServer.getCredentialId()))
+                            .setUserInfo("storedcredentials", String.valueOf(credentialId))
                             .build();
             CompletableFuture<Void> f =
                     cryostat.register(pluginInfo, credentialedCallback)
@@ -307,7 +309,7 @@ class Registration {
             return CompletableFuture.completedFuture(null);
         }
         return cryostat.deleteCredentials(webServer.getCredentialId())
-                .thenCompose(v -> cryostat.deregister(pluginInfo))
+                .handle((v, t) -> cryostat.deregister(pluginInfo))
                 .handle(
                         (n, t) -> {
                             if (t != null) {
@@ -325,17 +327,17 @@ class Registration {
                         });
     }
 
-    private void notify(RegistrationEvent.State state) {
+    public void notify(RegistrationEvent.State state) {
         RegistrationEvent evt = new RegistrationEvent(state);
-        this.listeners.forEach(listener -> listener.accept(evt));
+        executor.submit(() -> this.listeners.forEach(listener -> listener.accept(evt)));
     }
 
     static class RegistrationEvent {
 
         enum State {
+            UNREGISTERED,
             REGISTERED,
             PUBLISHED,
-            UNREGISTERED,
             REFRESHING,
             REFRESHED,
         }
