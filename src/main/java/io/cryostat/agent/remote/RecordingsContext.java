@@ -257,7 +257,7 @@ class RecordingsContext implements RemoteContext {
                         if ("STOPPED".equals(field.getValue().toString())) {
                             handleStop(exchange, id);
                             break;
-                        } else if (!"UPDATE".equals(field.getValue().toString())) {
+                        } else {
                             exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
                         }
                         break;
@@ -265,16 +265,32 @@ class RecordingsContext implements RemoteContext {
                         builder = builder.name(field.getValue().toString());
                         break;
                     case "duration":
-                        builder = builder.duration(field.getValue().asLong());
+                        if (field.getValue().canConvertToLong()) {
+                            builder = builder.duration(field.getValue().asLong());
+                            break;
+                        }
+                        exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
                         break;
                     case "maxSize":
-                        builder = builder.maxSize(field.getValue().asLong());
+                        if (field.getValue().canConvertToLong()) {
+                            builder = builder.maxSize(field.getValue().asLong());
+                            break;
+                        }
+                        exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
                         break;
                     case "maxAge":
-                        builder = builder.maxAge(field.getValue().asLong());
+                        if (field.getValue().canConvertToLong()) {
+                            builder = builder.maxAge(field.getValue().asLong());
+                            break;
+                        }
+                        exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
                         break;
                     case "toDisk":
-                        builder = builder.toDisk(field.getValue().asBoolean());
+                        if (field.getValue().isBoolean()) {
+                            builder = builder.toDisk(field.getValue().asBoolean());
+                            break;
+                        }
+                        exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
                         break;
                     default:
                         log.warn("Unknown recording option {}", field.getKey());
@@ -284,7 +300,15 @@ class RecordingsContext implements RemoteContext {
                 }
             }
             svc.updateRecordingOptions(dsc, builder.build());
-            exchange.sendResponseHeaders(HttpStatus.SC_CREATED, BODY_LENGTH_UNKNOWN);
+            exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
+
+            try (OutputStream response = exchange.getResponseBody()) {
+                if (response == null) {
+                    exchange.sendResponseHeaders(HttpStatus.SC_NO_CONTENT, BODY_LENGTH_NONE);
+                } else {
+                    mapper.writeValue(response, dsc);
+                }
+            }
         } catch ( ServiceNotAvailableException
                 | org.openjdk.jmc.rjmx.services.jfr.FlightRecorderException
                 | QuantityConversionException e){
@@ -293,6 +317,7 @@ class RecordingsContext implements RemoteContext {
         } finally {
             exchange.close();
         }
+
     }
 
     private void handleStop(HttpExchange exchange, long id) throws IOException {
