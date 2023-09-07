@@ -17,19 +17,35 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
+
     - uses: skjolber/maven-cache-github-action@v1
       with:
         step: restore
-    - name: Set up JDK 11
+
+    - name: Set up JDK for build
+      uses: actions/setup-java@v3
+      with:
+        java-version: '11'
+        distribution: 'adopt'
+
+    - name: maven-settings
+      uses: s4u/maven-settings-action@v2
+      with:
+        servers: '[{"id": "github", "username": "dummy", "password": "${env.GITHUB_TOKEN_REF}"}]'
+        githubServer: false
+
+    - name: Build with Maven
+      run: mvn -B -U package
+      env:
+        GITHUB_TOKEN_REF: ${{ secrets.GH_PKGS_READ_TOKEN }}
+
+    - name: Set up JDK for publish
       uses: actions/setup-java@v3
       with:
         java-version: '11'
         distribution: 'adopt'
         server-id: github # Value of the distributionManagement/repository/id field of the pom.xml
         settings-path: ${{ github.workspace }} # location for the settings.xml file
-
-    - name: Build with Maven
-      run: mvn -B -U package -s $GITHUB_WORKSPACE/settings.xml --file pom.xml
 
     - name: Publish to GitHub Packages Apache Maven
       run: mvn deploy -s $GITHUB_WORKSPACE/settings.xml
