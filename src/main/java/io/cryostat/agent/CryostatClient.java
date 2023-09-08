@@ -141,7 +141,7 @@ public class CryostatClient {
                                     try {
                                         deleteCredentials(credentialId).get();
                                     } catch (InterruptedException | ExecutionException e) {
-                                        throw new CompletionException(e);
+                                        log.error("Failed to delete previous credentials", e);
                                     }
                                 }
                                 return assertOkStatus(req, res);
@@ -218,8 +218,7 @@ public class CryostatClient {
                 .thenApply(
                         res -> {
                             try (InputStream is = res.getEntity().getContent()) {
-                                ObjectNode node = mapper.readValue(is, ObjectNode.class);
-                                return node;
+                                return mapper.readValue(is, ObjectNode.class);
                             } catch (IOException e) {
                                 log.error("Unable to parse response as JSON", e);
                                 throw new RegistrationException(e);
@@ -228,11 +227,9 @@ public class CryostatClient {
                 .thenApply(
                         node -> {
                             try {
-                                List<StoredCredential> list =
-                                        mapper.readValue(
-                                                node.get("data").get("result").toString(),
-                                                new TypeReference<List<StoredCredential>>() {});
-                                return list;
+                                return mapper.readValue(
+                                        node.get("data").get("result").toString(),
+                                        new TypeReference<List<StoredCredential>>() {});
                             } catch (IOException e) {
                                 log.error("Unable to parse response as JSON", e);
                                 throw new RegistrationException(e);
@@ -296,6 +293,10 @@ public class CryostatClient {
                                 try {
                                     deleteCredentials(prevId).get();
                                 } catch (InterruptedException | ExecutionException e) {
+                                    log.error(
+                                            "Failed to delete previous credentials with id "
+                                                    + prevId,
+                                            e);
                                     throw new RegistrationException(e);
                                 }
                             }
@@ -316,9 +317,7 @@ public class CryostatClient {
         }
         HttpDelete req = new HttpDelete(baseUri.resolve(CREDENTIALS_API_PATH + "/" + id));
         log.info("{}", req);
-        return supply(req, (res) -> logResponse(req, res))
-                .thenApply(res -> assertOkStatus(req, res))
-                .thenApply(res -> null);
+        return supply(req, (res) -> logResponse(req, res)).thenApply(res -> null);
     }
 
     public CompletableFuture<Void> deregister(PluginInfo pluginInfo) {
@@ -447,7 +446,7 @@ public class CryostatClient {
         return String.format(
                 "target.connectUrl == \"%s\" && target.annotations.platform[\"INSTANCE_ID\"] =="
                         + " \"%s\"",
-                callback, jvmId, instanceId);
+                callback, instanceId);
     }
 
     private boolean isOkStatus(HttpResponse res) {
@@ -472,15 +471,16 @@ public class CryostatClient {
         return res;
     }
 
-    @SuppressFBWarnings(value = {"URF_UNREAD_FIELD", "UWF_UNWRITTEN_FIELD"})
-    static class StoredCredential {
-        int id;
-        String matchExpression;
+    @SuppressFBWarnings(
+            value = {
+                "URF_UNREAD_FIELD",
+                "UWF_UNWRITTEN_FIELD",
+                "UWF_UNWRITTEN_PUBLIC_OR_PROTECTED_FIELD"
+            })
+    public static class StoredCredential {
 
-        @Override
-        public String toString() {
-            return "StoredCredential [id=" + id + ", matchExpression=" + matchExpression + "]";
-        }
+        public int id;
+        public String matchExpression;
 
         @Override
         public int hashCode() {

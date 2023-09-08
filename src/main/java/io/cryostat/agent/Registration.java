@@ -194,6 +194,7 @@ class Registration {
     void tryRegister() {
         int credentialId = webServer.getCredentialId();
         if (credentialId < 0) {
+            notify(RegistrationEvent.State.UNREGISTERED);
             return;
         }
         try {
