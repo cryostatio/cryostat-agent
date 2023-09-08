@@ -41,6 +41,7 @@ import io.cryostat.core.sys.Environment;
 import io.cryostat.core.sys.FileSystem;
 import io.cryostat.core.tui.ClientWriter;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dagger.Lazy;
 import dagger.Module;
@@ -93,17 +94,9 @@ public abstract class MainModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_HOST) String host,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_PORT) int port,
             @Named(ConfigModule.CRYOSTAT_AGENT_CALLBACK) URI callback,
-            Lazy<Registration> registration,
-            @Named(ConfigModule.CRYOSTAT_AGENT_REGISTRATION_RETRY_MS) int registrationRetryMs) {
+            Lazy<Registration> registration) {
         return new WebServer(
-                remoteContexts,
-                cryostat,
-                executor,
-                host,
-                port,
-                callback,
-                registration,
-                registrationRetryMs);
+                remoteContexts, cryostat, executor, host, port, callback, registration);
     }
 
     @Provides
@@ -171,7 +164,8 @@ public abstract class MainModule {
 
     @Provides
     public static ObjectMapper provideObjectMapper() {
-        return new ObjectMapper();
+        return new ObjectMapper()
+                .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
     }
 
     @Provides

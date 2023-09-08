@@ -26,6 +26,6 @@ public class HttpException extends RuntimeException {
     }
 
     HttpException(int statusCode, Throwable cause) {
-        super(String.format("HTTP %d : %s", statusCode), cause);
+        super(String.format("HTTP %d", statusCode), cause);
     }
 }

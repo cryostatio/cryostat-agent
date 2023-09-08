@@ -26,7 +26,9 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -40,8 +42,10 @@ import io.cryostat.agent.model.PluginInfo;
 import io.cryostat.agent.model.RegistrationInfo;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.input.CountingInputStream;
 import org.apache.http.HttpHeaders;
@@ -115,7 +119,8 @@ public class CryostatClient {
         return supply(req, (res) -> logResponse(req, res)).thenApply(this::isOkStatus);
     }
 
-    public CompletableFuture<PluginInfo> register(PluginInfo pluginInfo, URI callback) {
+    public CompletableFuture<PluginInfo> register(
+            int credentialId, PluginInfo pluginInfo, URI callback) {
         try {
             RegistrationInfo registrationInfo =
                     new RegistrationInfo(
@@ -127,7 +132,20 @@ public class CryostatClient {
                             mapper.writeValueAsString(registrationInfo),
                             ContentType.APPLICATION_JSON));
             return supply(req, (res) -> logResponse(req, res))
-                    .thenApply(res -> assertOkStatus(req, res))
+                    .handle(
+                            (res, t) -> {
+                                if (t != null) {
+                                    throw new CompletionException(t);
+                                }
+                                if (!isOkStatus(res)) {
+                                    try {
+                                        deleteCredentials(credentialId).get();
+                                    } catch (InterruptedException | ExecutionException e) {
+                                        throw new CompletionException(e);
+                                    }
+                                }
+                                return assertOkStatus(req, res);
+                            })
                     .thenApply(
                             res -> {
                                 try (InputStream is = res.getEntity().getContent()) {
@@ -156,12 +174,26 @@ public class CryostatClient {
     public CompletableFuture<Integer> submitCredentialsIfRequired(
             int prevId, Credentials credentials, URI callback) {
         if (prevId < 0) {
-            return submitCredentials(prevId, credentials, callback);
+            return queryExistingCredentials(callback)
+                    .thenCompose(
+                            id -> {
+                                if (id >= 0) {
+                                    return CompletableFuture.completedFuture(id);
+                                }
+                                return submitCredentials(prevId, credentials, callback);
+                            });
         }
         HttpGet req = new HttpGet(baseUri.resolve(CREDENTIALS_API_PATH + "/" + prevId));
         log.info("{}", req);
         return supply(req, (res) -> logResponse(req, res))
-                .thenApply(this::isOkStatus)
+                .handle(
+                        (v, t) -> {
+                            if (t != null) {
+                                log.error("Failed to get credentials with ID " + prevId, t);
+                                throw new CompletionException(t);
+                            }
+                            return isOkStatus(v);
+                        })
                 .thenCompose(
                         exists -> {
                             if (exists) {
@@ -169,6 +201,54 @@ public class CryostatClient {
                             }
                             return submitCredentials(prevId, credentials, callback);
                         });
+    }
+
+    private CompletableFuture<Integer> queryExistingCredentials(URI callback) {
+        HttpGet req = new HttpGet(baseUri.resolve(CREDENTIALS_API_PATH));
+        log.info("{}", req);
+        return supply(req, (res) -> logResponse(req, res))
+                .handle(
+                        (res, t) -> {
+                            if (t != null) {
+                                log.error("Failed to get credentials", t);
+                                throw new CompletionException(t);
+                            }
+                            return assertOkStatus(req, res);
+                        })
+                .thenApply(
+                        res -> {
+                            try (InputStream is = res.getEntity().getContent()) {
+                                ObjectNode node = mapper.readValue(is, ObjectNode.class);
+                                return node;
+                            } catch (IOException e) {
+                                log.error("Unable to parse response as JSON", e);
+                                throw new RegistrationException(e);
+                            }
+                        })
+                .thenApply(
+                        node -> {
+                            try {
+                                List<StoredCredential> list =
+                                        mapper.readValue(
+                                                node.get("data").get("result").toString(),
+                                                new TypeReference<List<StoredCredential>>() {});
+                                return list;
+                            } catch (IOException e) {
+                                log.error("Unable to parse response as JSON", e);
+                                throw new RegistrationException(e);
+                            }
+                        })
+                .thenApply(
+                        l ->
+                                l.stream()
+                                        .filter(
+                                                sc ->
+                                                        Objects.equals(
+                                                                sc.matchExpression,
+                                                                selfMatchExpression(callback)))
+                                        .map(sc -> sc.id)
+                                        .findFirst()
+                                        .orElse(-1));
     }
 
     private CompletableFuture<Integer> submitCredentials(
@@ -204,16 +284,30 @@ public class CryostatClient {
                         res -> {
                             if (!isOkStatus(res)) {
                                 try {
+                                    if (res.getStatusLine().getStatusCode() == 409) {
+                                        int queried = queryExistingCredentials(callback).get();
+                                        if (queried >= 0) {
+                                            return queried;
+                                        }
+                                    }
+                                } catch (InterruptedException | ExecutionException e) {
+                                    log.error("Failed to query for existing credentials", e);
+                                }
+                                try {
                                     deleteCredentials(prevId).get();
                                 } catch (InterruptedException | ExecutionException e) {
-                                    throw new HttpException(500, e);
+                                    throw new RegistrationException(e);
                                 }
                             }
-                            return assertOkStatus(req, res);
-                        })
-                .thenApply(res -> res.getFirstHeader(HttpHeaders.LOCATION).getValue())
-                .thenApply(res -> res.substring(res.lastIndexOf('/') + 1, res.length()))
-                .thenApply(Integer::valueOf);
+                            String location =
+                                    assertOkStatus(req, res)
+                                            .getFirstHeader(HttpHeaders.LOCATION)
+                                            .getValue();
+                            String id =
+                                    location.substring(
+                                            location.lastIndexOf('/') + 1, location.length());
+                            return Integer.valueOf(id);
+                        });
     }
 
     public CompletableFuture<Void> deleteCredentials(int id) {
@@ -351,8 +445,8 @@ public class CryostatClient {
 
     private String selfMatchExpression(URI callback) {
         return String.format(
-                "target.connectUrl == \"%s\" && target.jvmId == \"%s\" &&"
-                        + " target.annotations.platform[\"INSTANCE_ID\"] == \"%s\"",
+                "target.connectUrl == \"%s\" && target.annotations.platform[\"INSTANCE_ID\"] =="
+                        + " \"%s\"",
                 callback, jvmId, instanceId);
     }
 
@@ -376,5 +470,36 @@ public class CryostatClient {
             }
         }
         return res;
+    }
+
+    @SuppressFBWarnings(value = {"URF_UNREAD_FIELD", "UWF_UNWRITTEN_FIELD"})
+    static class StoredCredential {
+        int id;
+        String matchExpression;
+
+        @Override
+        public String toString() {
+            return "StoredCredential [id=" + id + ", matchExpression=" + matchExpression + "]";
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(id, matchExpression);
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) {
+                return true;
+            }
+            if (obj == null) {
+                return false;
+            }
+            if (getClass() != obj.getClass()) {
+                return false;
+            }
+            StoredCredential other = (StoredCredential) obj;
+            return id == other.id && Objects.equals(matchExpression, other.matchExpression);
+        }
     }
 }

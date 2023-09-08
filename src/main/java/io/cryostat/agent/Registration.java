@@ -118,6 +118,10 @@ class Registration {
                                                                                                     .UNREGISTERED),
                                                                             registrationRetryMs,
                                                                             TimeUnit.MILLISECONDS);
+                                                                    log.error(
+                                                                            "Failed to generate"
+                                                                                + " credentials",
+                                                                            t);
                                                                     throw new CompletionException(
                                                                             t);
                                                                 }
@@ -198,7 +202,7 @@ class Registration {
                             .setUserInfo("storedcredentials", String.valueOf(credentialId))
                             .build();
             CompletableFuture<Void> f =
-                    cryostat.register(pluginInfo, credentialedCallback)
+                    cryostat.register(credentialId, pluginInfo, credentialedCallback)
                             .handle(
                                     (plugin, t) -> {
                                         if (plugin != null) {
@@ -213,6 +217,7 @@ class Registration {
                                                 tryUpdate();
                                             }
                                         } else if (t != null) {
+                                            this.webServer.resetCredentialId();
                                             this.pluginInfo.clear();
                                             throw new RegistrationException(t);
                                         }

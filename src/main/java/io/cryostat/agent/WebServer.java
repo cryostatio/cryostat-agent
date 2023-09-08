@@ -36,7 +36,6 @@ import java.util.zip.DeflaterOutputStream;
 
 import io.cryostat.agent.remote.RemoteContext;
 
-import com.sun.net.httpserver.Authenticator;
 import com.sun.net.httpserver.BasicAuthenticator;
 import com.sun.net.httpserver.Filter;
 import com.sun.net.httpserver.HttpContext;
@@ -59,7 +58,6 @@ class WebServer {
     private final Credentials credentials;
     private final URI callback;
     private final Lazy<Registration> registration;
-    private final int registrationRetryMs;
     private HttpServer http;
     private volatile int credentialId = -1;
 
@@ -74,8 +72,7 @@ class WebServer {
             String host,
             int port,
             URI callback,
-            Lazy<Registration> registration,
-            int registrationRetryMs) {
+            Lazy<Registration> registration) {
         this.remoteContexts = remoteContexts;
         this.cryostat = cryostat;
         this.executor = executor;
@@ -84,7 +81,6 @@ class WebServer {
         this.credentials = new Credentials();
         this.callback = callback;
         this.registration = registration;
-        this.registrationRetryMs = registrationRetryMs;
 
         this.agentAuthenticator = new AgentAuthenticator();
         this.requestLoggingFilter = new RequestLoggingFilter();
@@ -100,6 +96,7 @@ class WebServer {
         this.http.setExecutor(executor);
 
         Set<RemoteContext> mergedContexts = new HashSet<>(remoteContexts.get());
+        mergedContexts.add(new PingContext(registration));
         mergedContexts.forEach(
                 rc -> {
                     HttpContext ctx = this.http.createContext(rc.path(), rc::handle);
@@ -107,9 +104,6 @@ class WebServer {
                     ctx.getFilters().add(requestLoggingFilter);
                     ctx.getFilters().add(compressionFilter);
                 });
-        RemoteContext ping = new PingContext(agentAuthenticator, registration);
-        HttpContext pingCtx = this.http.createContext(ping.path(), ping::handle);
-        pingCtx.getFilters().add(requestLoggingFilter);
 
         this.http.start();
     }
@@ -125,6 +119,10 @@ class WebServer {
         return credentialId;
     }
 
+    void resetCredentialId() {
+        this.credentialId = -1;
+    }
+
     CompletableFuture<Void> generateCredentials() throws NoSuchAlgorithmException {
         this.credentials.regenerate();
         return this.cryostat
@@ -134,7 +132,8 @@ class WebServer {
                         (v, t) -> {
                             this.credentials.clear();
                             if (t != null) {
-                                this.credentialId = -1;
+                                this.resetCredentialId();
+                                log.error("Could not submit credentials", t);
                                 throw new CompletionException("Could not submit credentials", t);
                             }
                             return v;
@@ -148,11 +147,9 @@ class WebServer {
 
     private class PingContext implements RemoteContext {
 
-        private final AgentAuthenticator authenticator;
         private final Lazy<Registration> registration;
 
-        PingContext(AgentAuthenticator authenticator, Lazy<Registration> registration) {
-            this.authenticator = authenticator;
+        PingContext(Lazy<Registration> registration) {
             this.registration = registration;
         }
 
@@ -166,13 +163,6 @@ class WebServer {
             String mtd = exchange.getRequestMethod();
             switch (mtd) {
                 case "POST":
-                    boolean authenticated =
-                            authenticator.authenticate(exchange) instanceof Authenticator.Success;
-                    if (!authenticated) {
-                        exchange.sendResponseHeaders(HttpStatus.SC_UNAUTHORIZED, -1);
-                        exchange.close();
-                        break;
-                    }
                     synchronized (WebServer.this.credentials) {
                         exchange.sendResponseHeaders(HttpStatus.SC_NO_CONTENT, -1);
                         exchange.close();
