@@ -24,8 +24,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.Map.Entry;
+import java.util.Set;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -242,9 +242,13 @@ class RecordingsContext implements RemoteContext {
                     jfrConnectionToolkit.connect(
                             jfrConnectionToolkit.createServiceURL("localhost", 0));
             IFlightRecorderService svc = conn.getService();
-            IRecordingDescriptor dsc = svc.getAvailableRecordings().stream().filter(r -> r.getId() == id).findFirst().get();
+            IRecordingDescriptor dsc =
+                    svc.getAvailableRecordings().stream()
+                            .filter(r -> r.getId() == id)
+                            .findFirst()
+                            .get();
             RecordingOptionsBuilder builder = new RecordingOptionsBuilder(conn.getService());
-            
+
             InputStream body = exchange.getRequestBody();
             JsonNode jsonMap = mapper.readTree(body);
             Iterator<Entry<String, JsonNode>> fields = jsonMap.fields();
@@ -252,13 +256,14 @@ class RecordingsContext implements RemoteContext {
             while (fields.hasNext()) {
                 Map.Entry<String, JsonNode> field = fields.next();
 
-                switch(field.getKey()){
+                switch (field.getKey()) {
                     case "state":
                         if ("STOPPED".equals(field.getValue().toString())) {
                             handleStop(exchange, id);
                             break;
                         } else {
-                            exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
+                            exchange.sendResponseHeaders(
+                                    HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
                         }
                         break;
                     case "name":
@@ -309,33 +314,32 @@ class RecordingsContext implements RemoteContext {
                     mapper.writeValue(response, dsc);
                 }
             }
-        } catch ( ServiceNotAvailableException
+        } catch (ServiceNotAvailableException
                 | org.openjdk.jmc.rjmx.services.jfr.FlightRecorderException
-                | QuantityConversionException e){
+                | QuantityConversionException e) {
             log.error("Failed to update recording", e);
             exchange.sendResponseHeaders(HttpStatus.SC_INTERNAL_SERVER_ERROR, BODY_LENGTH_NONE);
         } finally {
             exchange.close();
         }
-
     }
 
     private void handleStop(HttpExchange exchange, long id) throws IOException {
         invokeOnRecording(
-            exchange,
-            id,
-            r -> {
-                try {
-                    boolean stopped = r.stop();
-                    if (!stopped) {
-                        sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
-                    } else {
-                        sendHeader(exchange, HttpStatus.SC_NO_CONTENT);
+                exchange,
+                id,
+                r -> {
+                    try {
+                        boolean stopped = r.stop();
+                        if (!stopped) {
+                            sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
+                        } else {
+                            sendHeader(exchange, HttpStatus.SC_NO_CONTENT);
+                        }
+                    } catch (IllegalStateException e) {
+                        sendHeader(exchange, HttpStatus.SC_CONFLICT);
                     }
-                } catch (IllegalStateException e) {
-                    sendHeader(exchange, HttpStatus.SC_CONFLICT);
-                }
-            });
+                });
     }
 
     private void handleDelete(HttpExchange exchange, long id) throws IOException {
@@ -388,7 +392,8 @@ class RecordingsContext implements RemoteContext {
             throws QuantityConversionException, ServiceNotAvailableException,
                     FlightRecorderException,
                     org.openjdk.jmc.rjmx.services.jfr.FlightRecorderException,
-                    InvalidEventTemplateException, InvalidXmlException, IOException, FlightRecorderException {
+                    InvalidEventTemplateException, InvalidXmlException, IOException,
+                    FlightRecorderException {
         Runnable cleanup = () -> {};
         try {
             JFRConnection conn =
@@ -467,7 +472,7 @@ class RecordingsContext implements RemoteContext {
         boolean requestSnapshot() {
             boolean snapshotName = name.equals("snapshot");
             boolean snapshotTemplate =
-            StringUtils.isBlank(template) && StringUtils.isBlank(localTemplateName);
+                    StringUtils.isBlank(template) && StringUtils.isBlank(localTemplateName);
             boolean snapshotFeatures = duration == 0 && maxSize == 0 && maxAge == 0;
             return snapshotName && snapshotTemplate && snapshotFeatures;
         }
