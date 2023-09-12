@@ -258,7 +258,7 @@ class RecordingsContext implements RemoteContext {
 
                 switch (field.getKey()) {
                     case "state":
-                        if ("STOPPED".equals(field.getValue().toString())) {
+                        if ("STOPPED".equals(field.getValue().textValue())) {
                             handleStop(exchange, id);
                             break;
                         } else {
@@ -267,7 +267,7 @@ class RecordingsContext implements RemoteContext {
                         }
                         break;
                     case "name":
-                        builder = builder.name(field.getValue().toString());
+                        builder = builder.name(field.getValue().textValue());
                         break;
                     case "duration":
                         if (field.getValue().canConvertToLong()) {
