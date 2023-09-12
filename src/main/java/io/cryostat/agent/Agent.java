@@ -29,6 +29,8 @@ import javax.inject.Named;
 import javax.inject.Singleton;
 
 import dagger.Component;
+import io.cryostat.agent.triggers.TriggerParser;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import sun.misc.Signal;
@@ -49,6 +51,8 @@ public class Agent {
             ExecutorService executor = client.executor();
             List<String> exitSignals = client.exitSignals();
             long exitDeregistrationTimeout = client.exitDeregistrationTimeout();
+            TriggerParser triggerParser = new TriggerParser(args[0]);
+            triggerParser.parse();
 
             agentExitHandler =
                     installSignalHandlers(
