@@ -375,7 +375,7 @@ class RecordingsContext implements RemoteContext {
         if (!restricted) {
             return true;
         }
-        boolean passed = restricted && MutatingRemoteContext.apiWritesEnabled(config);
+        boolean passed = MutatingRemoteContext.apiWritesEnabled(config);
         if (!passed) {
             exchange.sendResponseHeaders(HttpStatus.SC_FORBIDDEN, BODY_LENGTH_NONE);
         }
