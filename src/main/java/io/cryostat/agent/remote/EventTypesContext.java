@@ -45,7 +45,7 @@ class EventTypesContext implements RemoteContext {
 
     @Override
     public String path() {
-        return "/event-types";
+        return "/event-types/";
     }
 
     @Override
@@ -59,17 +59,19 @@ class EventTypesContext implements RemoteContext {
                         events.addAll(getEventTypes());
                     } catch (Exception e) {
                         log.error("events serialization failure", e);
-                        exchange.sendResponseHeaders(HttpStatus.SC_INTERNAL_SERVER_ERROR, 0);
+                        exchange.sendResponseHeaders(
+                                HttpStatus.SC_INTERNAL_SERVER_ERROR, BODY_LENGTH_NONE);
                         break;
                     }
-                    exchange.sendResponseHeaders(HttpStatus.SC_OK, 0);
+                    exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
                     try (OutputStream response = exchange.getResponseBody()) {
                         mapper.writeValue(response, events);
                     }
                     break;
                 default:
                     log.warn("Unknown request method {}", mtd);
-                    exchange.sendResponseHeaders(HttpStatus.SC_METHOD_NOT_ALLOWED, -1);
+                    exchange.sendResponseHeaders(
+                            HttpStatus.SC_METHOD_NOT_ALLOWED, BODY_LENGTH_NONE);
                     break;
             }
         } finally {

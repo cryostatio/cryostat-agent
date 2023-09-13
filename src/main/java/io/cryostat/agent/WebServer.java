@@ -160,6 +160,19 @@ class WebServer {
         };
     }
 
+    private HttpHandler wrap(HttpHandler handler) {
+        return x -> {
+            try {
+                handler.handle(x);
+            } catch (Exception e) {
+                log.error("Unhandled exception", e);
+                x.sendResponseHeaders(
+                        HttpStatus.SC_INTERNAL_SERVER_ERROR, RemoteContext.BODY_LENGTH_NONE);
+                x.close();
+            }
+        };
+    }
+
     private class PingContext implements RemoteContext {
 
         private final Lazy<Registration> registration;
@@ -180,17 +193,20 @@ class WebServer {
                 switch (mtd) {
                     case "POST":
                         synchronized (WebServer.this.credentials) {
-                            exchange.sendResponseHeaders(HttpStatus.SC_NO_CONTENT, -1);
+                            exchange.sendResponseHeaders(
+                                    HttpStatus.SC_NO_CONTENT, BODY_LENGTH_NONE);
                             this.registration
                                     .get()
                                     .notify(Registration.RegistrationEvent.State.REFRESHING);
                         }
                         break;
                     case "GET":
-                        exchange.sendResponseHeaders(HttpStatus.SC_NO_CONTENT, -1);
+                        exchange.sendResponseHeaders(HttpStatus.SC_NO_CONTENT, BODY_LENGTH_NONE);
                         break;
                     default:
-                        exchange.sendResponseHeaders(HttpStatus.SC_NOT_FOUND, -1);
+                        log.warn("Unknown request method {}", mtd);
+                        exchange.sendResponseHeaders(
+                                HttpStatus.SC_METHOD_NOT_ALLOWED, BODY_LENGTH_NONE);
                         break;
                 }
             } finally {
