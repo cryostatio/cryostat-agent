@@ -15,6 +15,7 @@
  */
 package io.cryostat.agent.remote;
 
+import java.io.BufferedInputStream;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -60,9 +61,9 @@ import org.slf4j.LoggerFactory;
 
 class RecordingsContext implements RemoteContext {
 
-    private static final String PATH = "/recordings";
+    private static final String PATH = "/recordings/";
     private static final Pattern PATH_ID_PATTERN =
-            Pattern.compile("^" + PATH + "/(\\d+)$", Pattern.MULTILINE);
+            Pattern.compile("^" + PATH + "(\\d+)$", Pattern.MULTILINE);
 
     private final Logger log = LoggerFactory.getLogger(getClass());
     private final SmallRyeConfig config;
@@ -94,15 +95,14 @@ class RecordingsContext implements RemoteContext {
             if (!ensureMethodAccepted(exchange)) {
                 return;
             }
-            int id = Integer.MIN_VALUE;
+            long id = Long.MIN_VALUE;
             switch (mtd) {
                 case "GET":
                     id = extractId(exchange);
-                    if (id == Integer.MIN_VALUE) {
+                    if (id == Long.MIN_VALUE) {
                         handleGetList(exchange);
                     } else {
-                        exchange.sendResponseHeaders(
-                                HttpStatus.SC_NOT_IMPLEMENTED, BODY_LENGTH_NONE);
+                        handleGetRecording(exchange, id);
                     }
                     break;
                 case "POST":
@@ -135,26 +135,12 @@ class RecordingsContext implements RemoteContext {
         }
     }
 
-    private boolean ensureMethodAccepted(HttpExchange exchange) throws IOException {
-        Set<String> blocked = Set.of("POST");
-        String mtd = exchange.getRequestMethod();
-        boolean restricted = blocked.contains(mtd);
-        if (!restricted) {
-            return true;
-        }
-        boolean passed = MutatingRemoteContext.apiWritesEnabled(config);
-        if (!passed) {
-            exchange.sendResponseHeaders(HttpStatus.SC_FORBIDDEN, -1);
-        }
-        return passed;
-    }
-
-    private static int extractId(HttpExchange exchange) throws IOException {
+    private static long extractId(HttpExchange exchange) throws IOException {
         Matcher m = PATH_ID_PATTERN.matcher(exchange.getRequestURI().getPath());
         if (!m.find()) {
-            return Integer.MIN_VALUE;
+            return Long.MIN_VALUE;
         }
-        return Integer.parseInt(m.group(1));
+        return Long.parseLong(m.group(1));
     }
 
     private void handleGetList(HttpExchange exchange) {
@@ -165,6 +151,68 @@ class RecordingsContext implements RemoteContext {
         } catch (Exception e) {
             log.error("recordings serialization failure", e);
         }
+    }
+
+    private void handleGetRecording(HttpExchange exchange, long id) {
+        FlightRecorder.getFlightRecorder().getRecordings().stream()
+                .filter(r -> r.getId() == id)
+                .findFirst()
+                .ifPresentOrElse(
+                        r -> {
+                            Recording copy = r.copy(true);
+                            try (InputStream stream = copy.getStream(null, null);
+                                    BufferedInputStream bis = new BufferedInputStream(stream);
+                                    OutputStream response = exchange.getResponseBody()) {
+                                if (stream == null) {
+                                    exchange.sendResponseHeaders(
+                                            HttpStatus.SC_NO_CONTENT, BODY_LENGTH_NONE);
+                                } else {
+                                    exchange.sendResponseHeaders(
+                                            HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
+                                    bis.transferTo(response);
+                                }
+                            } catch (IOException ioe) {
+                                log.error("I/O error", ioe);
+                                try {
+                                    exchange.sendResponseHeaders(
+                                            HttpStatus.SC_INTERNAL_SERVER_ERROR, BODY_LENGTH_NONE);
+                                } catch (IOException ioe2) {
+                                    log.error("Failed to write response", ioe2);
+                                }
+                            } finally {
+                                copy.close();
+                            }
+                        },
+                        () -> {
+                            try {
+                                exchange.sendResponseHeaders(
+                                        HttpStatus.SC_NOT_FOUND, BODY_LENGTH_NONE);
+                            } catch (IOException e) {
+                                log.error("Failed to write response", e);
+                            }
+                        });
+    }
+
+    private void sendHeader(HttpExchange exchange, int status) {
+        try {
+            exchange.sendResponseHeaders(status, BODY_LENGTH_NONE);
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private boolean ensureMethodAccepted(HttpExchange exchange) throws IOException {
+        Set<String> alwaysAllowed = Set.of("GET");
+        String mtd = exchange.getRequestMethod();
+        boolean restricted = !alwaysAllowed.contains(mtd);
+        if (!restricted) {
+            return true;
+        }
+        boolean passed = MutatingRemoteContext.apiWritesEnabled(config);
+        if (!passed) {
+            exchange.sendResponseHeaders(HttpStatus.SC_FORBIDDEN, BODY_LENGTH_NONE);
+        }
+        return passed;
     }
 
     private void handleStart(HttpExchange exchange) throws IOException {
@@ -191,7 +239,7 @@ class RecordingsContext implements RemoteContext {
         }
     }
 
-    private void handleStop(HttpExchange exchange, int id) throws IOException {
+    private void handleStop(HttpExchange exchange, long id) throws IOException {
         invokeOnRecording(
                 exchange,
                 id,
@@ -209,7 +257,7 @@ class RecordingsContext implements RemoteContext {
                 });
     }
 
-    private void handleDelete(HttpExchange exchange, int id) throws IOException {
+    private void handleDelete(HttpExchange exchange, long id) throws IOException {
         invokeOnRecording(
                 exchange,
                 id,
@@ -225,14 +273,6 @@ class RecordingsContext implements RemoteContext {
                 .findFirst()
                 .ifPresentOrElse(
                         consumer::accept, () -> sendHeader(exchange, HttpStatus.SC_NOT_FOUND));
-    }
-
-    private void sendHeader(HttpExchange exchange, int status) {
-        try {
-            exchange.sendResponseHeaders(status, BODY_LENGTH_NONE);
-        } catch (IOException e) {
-            throw new IllegalStateException(e);
-        }
     }
 
     private List<SerializableRecordingDescriptor> getRecordings() {

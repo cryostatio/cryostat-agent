@@ -154,7 +154,8 @@ class WebServer {
                 handler.handle(x);
             } catch (Exception e) {
                 log.error("Unhandled exception", e);
-                x.sendResponseHeaders(HttpStatus.SC_INTERNAL_SERVER_ERROR, 0);
+                x.sendResponseHeaders(
+                        HttpStatus.SC_INTERNAL_SERVER_ERROR, RemoteContext.BODY_LENGTH_NONE);
                 x.close();
             }
         };
