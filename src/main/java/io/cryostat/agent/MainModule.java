@@ -41,10 +41,12 @@ import io.cryostat.core.sys.Environment;
 import io.cryostat.core.sys.FileSystem;
 import io.cryostat.core.tui.ClientWriter;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dagger.Lazy;
 import dagger.Module;
 import dagger.Provides;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.impl.client.HttpClientBuilder;
@@ -92,17 +94,9 @@ public abstract class MainModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_HOST) String host,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_PORT) int port,
             @Named(ConfigModule.CRYOSTAT_AGENT_CALLBACK) URI callback,
-            Lazy<Registration> registration,
-            @Named(ConfigModule.CRYOSTAT_AGENT_REGISTRATION_RETRY_MS) int registrationRetryMs) {
+            Lazy<Registration> registration) {
         return new WebServer(
-                remoteContexts,
-                cryostat,
-                executor,
-                host,
-                port,
-                callback,
-                registration,
-                registrationRetryMs);
+                remoteContexts, cryostat, executor, host, port, callback, registration);
     }
 
     @Provides
@@ -170,7 +164,8 @@ public abstract class MainModule {
 
     @Provides
     public static ObjectMapper provideObjectMapper() {
-        return new ObjectMapper();
+        return new ObjectMapper()
+                .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
     }
 
     @Provides
@@ -205,8 +200,23 @@ public abstract class MainModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_APP_JMX_PORT) int jmxPort,
             @Named(ConfigModule.CRYOSTAT_AGENT_REGISTRATION_RETRY_MS) int registrationRetryMs,
             @Named(ConfigModule.CRYOSTAT_AGENT_REGISTRATION_CHECK_MS) int registrationCheckMs) {
+
+        Logger log = LoggerFactory.getLogger(Registration.class);
         return new Registration(
-                executor,
+                Executors.newSingleThreadScheduledExecutor(
+                        r -> {
+                            Thread t = new Thread(r);
+                            t.setDaemon(true);
+                            t.setName("cryostat-agent-registration");
+                            t.setUncaughtExceptionHandler(
+                                    (thread, err) ->
+                                            log.error(
+                                                    String.format(
+                                                            "[%s] Uncaught exception: %s",
+                                                            thread.getName(),
+                                                            ExceptionUtils.getStackTrace(err))));
+                            return t;
+                        }),
                 cryostat,
                 callback,
                 webServer,

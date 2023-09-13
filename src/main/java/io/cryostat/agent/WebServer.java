@@ -29,8 +29,8 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.zip.DeflaterOutputStream;
 
@@ -58,7 +58,6 @@ class WebServer {
     private final Credentials credentials;
     private final URI callback;
     private final Lazy<Registration> registration;
-    private final int registrationRetryMs;
     private HttpServer http;
     private volatile int credentialId = -1;
 
@@ -73,8 +72,7 @@ class WebServer {
             String host,
             int port,
             URI callback,
-            Lazy<Registration> registration,
-            int registrationRetryMs) {
+            Lazy<Registration> registration) {
         this.remoteContexts = remoteContexts;
         this.cryostat = cryostat;
         this.executor = executor;
@@ -83,7 +81,6 @@ class WebServer {
         this.credentials = new Credentials();
         this.callback = callback;
         this.registration = registration;
-        this.registrationRetryMs = registrationRetryMs;
 
         this.agentAuthenticator = new AgentAuthenticator();
         this.requestLoggingFilter = new RequestLoggingFilter();
@@ -99,7 +96,7 @@ class WebServer {
         this.http.setExecutor(executor);
 
         Set<RemoteContext> mergedContexts = new HashSet<>(remoteContexts.get());
-        mergedContexts.add(new PingContext());
+        mergedContexts.add(new PingContext(registration));
         mergedContexts.forEach(
                 rc -> {
                     HttpContext ctx = this.http.createContext(rc.path(), rc::handle);
@@ -122,39 +119,39 @@ class WebServer {
         return credentialId;
     }
 
+    void resetCredentialId() {
+        this.credentialId = -1;
+    }
+
     CompletableFuture<Void> generateCredentials() throws NoSuchAlgorithmException {
-        synchronized (this.credentials) {
-            this.credentials.regenerate();
-            return this.cryostat
-                    .get()
-                    .submitCredentialsIfRequired(this.credentialId, this.credentials, this.callback)
-                    .handle(
-                            (v, t) -> {
-                                if (t != null) {
-                                    log.error("Could not submit credentials", t);
-                                    executor.schedule(
-                                            () -> {
-                                                try {
-                                                    this.generateCredentials();
-                                                } catch (NoSuchAlgorithmException e) {
-                                                    log.error("Cannot submit credentials", e);
-                                                }
-                                            },
-                                            registrationRetryMs,
-                                            TimeUnit.MILLISECONDS);
-                                }
-                                return v;
-                            })
-                    .thenAccept(
-                            i -> {
-                                this.credentialId = i;
-                                log.info("Defined credentials with id {}", i);
-                            })
-                    .thenRun(this.credentials::clear);
-        }
+        this.credentials.regenerate();
+        return this.cryostat
+                .get()
+                .submitCredentialsIfRequired(this.credentialId, this.credentials, this.callback)
+                .handle(
+                        (v, t) -> {
+                            this.credentials.clear();
+                            if (t != null) {
+                                this.resetCredentialId();
+                                log.error("Could not submit credentials", t);
+                                throw new CompletionException("Could not submit credentials", t);
+                            }
+                            return v;
+                        })
+                .thenAccept(
+                        i -> {
+                            this.credentialId = i;
+                            log.info("Defined credentials with id {}", i);
+                        });
     }
 
     private class PingContext implements RemoteContext {
+
+        private final Lazy<Registration> registration;
+
+        PingContext(Lazy<Registration> registration) {
+            this.registration = registration;
+        }
 
         @Override
         public String path() {
@@ -167,9 +164,11 @@ class WebServer {
             switch (mtd) {
                 case "POST":
                     synchronized (WebServer.this.credentials) {
-                        executor.execute(registration.get()::tryRegister);
                         exchange.sendResponseHeaders(HttpStatus.SC_NO_CONTENT, -1);
                         exchange.close();
+                        this.registration
+                                .get()
+                                .notify(Registration.RegistrationEvent.State.REFRESHING);
                     }
                     break;
                 case "GET":
