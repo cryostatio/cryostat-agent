@@ -21,7 +21,10 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
@@ -37,6 +40,7 @@ import org.openjdk.jmc.flightrecorder.configuration.events.EventOptionID;
 import org.openjdk.jmc.flightrecorder.configuration.recording.RecordingOptionsBuilder;
 import org.openjdk.jmc.rjmx.ServiceNotAvailableException;
 import org.openjdk.jmc.rjmx.services.jfr.IFlightRecorderService;
+import org.openjdk.jmc.rjmx.services.jfr.IRecordingDescriptor;
 
 import io.cryostat.agent.StringUtils;
 import io.cryostat.core.FlightRecorderException;
@@ -50,6 +54,7 @@ import io.cryostat.core.templates.RemoteTemplateService;
 import io.cryostat.core.templates.Template;
 import io.cryostat.core.templates.TemplateType;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
 import io.smallrye.config.SmallRyeConfig;
@@ -106,12 +111,12 @@ class RecordingsContext implements RemoteContext {
                     }
                     break;
                 case "POST":
-                    handleStart(exchange);
+                    handleStartRecordingOrSnapshot(exchange);
                     break;
                 case "PATCH":
                     id = extractId(exchange);
                     if (id >= 0) {
-                        handleStop(exchange, id);
+                        handleStopOrUpdate(exchange, id);
                     } else {
                         exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
                     }
@@ -193,31 +198,23 @@ class RecordingsContext implements RemoteContext {
                         });
     }
 
-    private void sendHeader(HttpExchange exchange, int status) {
-        try {
-            exchange.sendResponseHeaders(status, BODY_LENGTH_NONE);
-        } catch (IOException e) {
-            throw new IllegalStateException(e);
-        }
-    }
-
-    private boolean ensureMethodAccepted(HttpExchange exchange) throws IOException {
-        Set<String> alwaysAllowed = Set.of("GET");
-        String mtd = exchange.getRequestMethod();
-        boolean restricted = !alwaysAllowed.contains(mtd);
-        if (!restricted) {
-            return true;
-        }
-        boolean passed = MutatingRemoteContext.apiWritesEnabled(config);
-        if (!passed) {
-            exchange.sendResponseHeaders(HttpStatus.SC_FORBIDDEN, BODY_LENGTH_NONE);
-        }
-        return passed;
-    }
-
-    private void handleStart(HttpExchange exchange) throws IOException {
+    private void handleStartRecordingOrSnapshot(HttpExchange exchange) throws IOException {
         try (InputStream body = exchange.getRequestBody()) {
             StartRecordingRequest req = mapper.readValue(body, StartRecordingRequest.class);
+            if (req.requestSnapshot()) {
+                try {
+                    SerializableRecordingDescriptor snapshot = startSnapshot(req, exchange);
+                    exchange.sendResponseHeaders(HttpStatus.SC_CREATED, BODY_LENGTH_UNKNOWN);
+                    try (OutputStream response = exchange.getResponseBody()) {
+                        mapper.writeValue(response, snapshot);
+                    }
+                } catch (IOException e) {
+                    log.error("Failed to start snapshot", e);
+                    exchange.sendResponseHeaders(
+                            HttpStatus.SC_SERVICE_UNAVAILABLE, BODY_LENGTH_NONE);
+                }
+                return;
+            }
             if (!req.isValid()) {
                 exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
                 return;
@@ -236,6 +233,94 @@ class RecordingsContext implements RemoteContext {
                 | IOException e) {
             log.error("Failed to start recording", e);
             exchange.sendResponseHeaders(HttpStatus.SC_INTERNAL_SERVER_ERROR, BODY_LENGTH_NONE);
+        }
+    }
+
+    private void handleStopOrUpdate(HttpExchange exchange, long id) throws IOException {
+        try {
+            JFRConnection conn =
+                    jfrConnectionToolkit.connect(
+                            jfrConnectionToolkit.createServiceURL("localhost", 0));
+            IFlightRecorderService svc = conn.getService();
+            IRecordingDescriptor dsc =
+                    svc.getAvailableRecordings().stream()
+                            .filter(r -> r.getId() == id)
+                            .findFirst()
+                            .get();
+            RecordingOptionsBuilder builder = new RecordingOptionsBuilder(conn.getService());
+
+            InputStream body = exchange.getRequestBody();
+            JsonNode jsonMap = mapper.readTree(body);
+            Iterator<Entry<String, JsonNode>> fields = jsonMap.fields();
+
+            while (fields.hasNext()) {
+                Map.Entry<String, JsonNode> field = fields.next();
+
+                switch (field.getKey()) {
+                    case "state":
+                        if ("STOPPED".equals(field.getValue().textValue())) {
+                            handleStop(exchange, id);
+                            break;
+                        } else {
+                            exchange.sendResponseHeaders(
+                                    HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
+                        }
+                        break;
+                    case "name":
+                        builder = builder.name(field.getValue().textValue());
+                        break;
+                    case "duration":
+                        if (field.getValue().canConvertToLong()) {
+                            builder = builder.duration(field.getValue().asLong());
+                            break;
+                        }
+                        exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
+                        break;
+                    case "maxSize":
+                        if (field.getValue().canConvertToLong()) {
+                            builder = builder.maxSize(field.getValue().asLong());
+                            break;
+                        }
+                        exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
+                        break;
+                    case "maxAge":
+                        if (field.getValue().canConvertToLong()) {
+                            builder = builder.maxAge(field.getValue().asLong());
+                            break;
+                        }
+                        exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
+                        break;
+                    case "toDisk":
+                        if (field.getValue().isBoolean()) {
+                            builder = builder.toDisk(field.getValue().asBoolean());
+                            break;
+                        }
+                        exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
+                        break;
+                    default:
+                        log.warn("Unknown recording option {}", field.getKey());
+                        exchange.sendResponseHeaders(
+                                HttpStatus.SC_METHOD_NOT_ALLOWED, BODY_LENGTH_NONE);
+                        break;
+                }
+            }
+            svc.updateRecordingOptions(dsc, builder.build());
+            exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
+
+            try (OutputStream response = exchange.getResponseBody()) {
+                if (response == null) {
+                    exchange.sendResponseHeaders(HttpStatus.SC_NO_CONTENT, BODY_LENGTH_NONE);
+                } else {
+                    mapper.writeValue(response, dsc);
+                }
+            }
+        } catch (ServiceNotAvailableException
+                | org.openjdk.jmc.rjmx.services.jfr.FlightRecorderException
+                | QuantityConversionException e) {
+            log.error("Failed to update recording", e);
+            exchange.sendResponseHeaders(HttpStatus.SC_INTERNAL_SERVER_ERROR, BODY_LENGTH_NONE);
+        } finally {
+            exchange.close();
         }
     }
 
@@ -275,6 +360,28 @@ class RecordingsContext implements RemoteContext {
                         consumer::accept, () -> sendHeader(exchange, HttpStatus.SC_NOT_FOUND));
     }
 
+    private void sendHeader(HttpExchange exchange, int status) {
+        try {
+            exchange.sendResponseHeaders(status, BODY_LENGTH_NONE);
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private boolean ensureMethodAccepted(HttpExchange exchange) throws IOException {
+        Set<String> alwaysAllowed = Set.of("GET");
+        String mtd = exchange.getRequestMethod();
+        boolean restricted = !alwaysAllowed.contains(mtd);
+        if (!restricted) {
+            return true;
+        }
+        boolean passed = restricted && MutatingRemoteContext.apiWritesEnabled(config);
+        if (!passed) {
+            exchange.sendResponseHeaders(HttpStatus.SC_FORBIDDEN, BODY_LENGTH_NONE);
+        }
+        return passed;
+    }
+
     private List<SerializableRecordingDescriptor> getRecordings() {
         return FlightRecorder.getFlightRecorder().getRecordings().stream()
                 .map(SerializableRecordingDescriptor::new)
@@ -285,7 +392,8 @@ class RecordingsContext implements RemoteContext {
             throws QuantityConversionException, ServiceNotAvailableException,
                     FlightRecorderException,
                     org.openjdk.jmc.rjmx.services.jfr.FlightRecorderException,
-                    InvalidEventTemplateException, InvalidXmlException, IOException {
+                    InvalidEventTemplateException, InvalidXmlException, IOException,
+                    FlightRecorderException {
         Runnable cleanup = () -> {};
         try {
             JFRConnection conn =
@@ -329,6 +437,21 @@ class RecordingsContext implements RemoteContext {
         }
     }
 
+    private SerializableRecordingDescriptor startSnapshot(
+            StartRecordingRequest req, HttpExchange exchange) throws IOException {
+        Runnable cleanup = () -> {};
+        try {
+            Recording snapshot = FlightRecorder.getFlightRecorder().takeSnapshot();
+            if (snapshot.getSize() == 0) {
+                log.warn("No active recordings");
+                exchange.sendResponseHeaders(HttpStatus.SC_SERVICE_UNAVAILABLE, BODY_LENGTH_NONE);
+            }
+            return new SerializableRecordingDescriptor(snapshot);
+        } finally {
+            cleanup.run();
+        }
+    }
+
     static class StartRecordingRequest {
 
         public String name;
@@ -346,12 +469,20 @@ class RecordingsContext implements RemoteContext {
             return !StringUtils.isBlank(localTemplateName);
         }
 
+        boolean requestSnapshot() {
+            boolean snapshotName = name.equals("snapshot");
+            boolean snapshotTemplate =
+                    StringUtils.isBlank(template) && StringUtils.isBlank(localTemplateName);
+            boolean snapshotFeatures = duration == 0 && maxSize == 0 && maxAge == 0;
+            return snapshotName && snapshotTemplate && snapshotFeatures;
+        }
+
         boolean isValid() {
             boolean requestsCustomTemplate = requestsCustomTemplate();
             boolean requestsBundledTemplate = requestsBundledTemplate();
             boolean requestsEither = requestsCustomTemplate || requestsBundledTemplate;
             boolean requestsBoth = requestsCustomTemplate && requestsBundledTemplate;
-            return requestsEither && !requestsBoth;
+            return (requestsEither && !requestsBoth) || requestSnapshot();
         }
     }
 }

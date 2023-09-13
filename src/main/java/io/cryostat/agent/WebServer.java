@@ -174,6 +174,19 @@ class WebServer {
         };
     }
 
+    private HttpHandler wrap(HttpHandler handler) {
+        return x -> {
+            try {
+                handler.handle(x);
+            } catch (Exception e) {
+                log.error("Unhandled exception", e);
+                x.sendResponseHeaders(
+                        HttpStatus.SC_INTERNAL_SERVER_ERROR, RemoteContext.BODY_LENGTH_NONE);
+                x.close();
+            }
+        };
+    }
+
     private class PingContext implements RemoteContext {
 
         private final Lazy<Registration> registration;
