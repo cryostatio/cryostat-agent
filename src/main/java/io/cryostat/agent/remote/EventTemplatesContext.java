@@ -53,14 +53,14 @@ class EventTemplatesContext implements RemoteContext {
             switch (mtd) {
                 case "GET":
                     try {
+                        FlightRecorderMXBean bean =
+                                ManagementFactory.getPlatformMXBean(FlightRecorderMXBean.class);
+                        List<String> xmlTexts =
+                                bean.getConfigurations().stream()
+                                        .map(ConfigurationInfo::getContents)
+                                        .collect(Collectors.toList());
                         exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
                         try (OutputStream response = exchange.getResponseBody()) {
-                            FlightRecorderMXBean bean =
-                                    ManagementFactory.getPlatformMXBean(FlightRecorderMXBean.class);
-                            List<String> xmlTexts =
-                                    bean.getConfigurations().stream()
-                                            .map(ConfigurationInfo::getContents)
-                                            .collect(Collectors.toList());
                             mapper.writeValue(response, xmlTexts);
                         }
                     } catch (Exception e) {
