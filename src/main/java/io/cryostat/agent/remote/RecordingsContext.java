@@ -265,14 +265,17 @@ class RecordingsContext implements RemoteContext {
                     case "state":
                         if ("STOPPED".equals(field.getValue().textValue())) {
                             handleStop(exchange, id);
-                            break;
                         } else {
                             exchange.sendResponseHeaders(
                                     HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
                         }
                         break;
                     case "name":
-                        builder = builder.name(field.getValue().textValue());
+                        if (!StringUtils.isBlank(field.getValue().textValue())) {
+                            builder = builder.name(field.getValue().textValue());
+                            break;
+                        }
+                        exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
                         break;
                     case "duration":
                         if (field.getValue().canConvertToLong()) {
