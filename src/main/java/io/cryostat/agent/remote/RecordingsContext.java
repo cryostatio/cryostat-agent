@@ -204,6 +204,11 @@ class RecordingsContext implements RemoteContext {
             if (req.requestSnapshot()) {
                 try {
                     SerializableRecordingDescriptor snapshot = startSnapshot(req, exchange);
+                    if (snapshot == null) {
+                        exchange.sendResponseHeaders(
+                                HttpStatus.SC_SERVICE_UNAVAILABLE, BODY_LENGTH_NONE);
+                        return;
+                    }
                     exchange.sendResponseHeaders(HttpStatus.SC_CREATED, BODY_LENGTH_UNKNOWN);
                     try (OutputStream response = exchange.getResponseBody()) {
                         mapper.writeValue(response, snapshot);
@@ -439,17 +444,13 @@ class RecordingsContext implements RemoteContext {
 
     private SerializableRecordingDescriptor startSnapshot(
             StartRecordingRequest req, HttpExchange exchange) throws IOException {
-        Runnable cleanup = () -> {};
-        try {
-            Recording snapshot = FlightRecorder.getFlightRecorder().takeSnapshot();
-            if (snapshot.getSize() == 0) {
-                log.warn("No active recordings");
-                exchange.sendResponseHeaders(HttpStatus.SC_SERVICE_UNAVAILABLE, BODY_LENGTH_NONE);
-            }
-            return new SerializableRecordingDescriptor(snapshot);
-        } finally {
-            cleanup.run();
+        Recording snapshot = FlightRecorder.getFlightRecorder().takeSnapshot();
+        if (snapshot.getSize() == 0) {
+            log.warn("No active recordings");
+            snapshot.close();
+            return null;
         }
+        return new SerializableRecordingDescriptor(snapshot);
     }
 
     static class StartRecordingRequest {
