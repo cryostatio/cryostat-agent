@@ -252,7 +252,13 @@ class RecordingsContext implements RemoteContext {
                             .filter(r -> r.getId() == id)
                             .findFirst()
                             .get();
-            RecordingOptionsBuilder builder = new RecordingOptionsBuilder(conn.getService());
+            RecordingOptionsBuilder builder =
+                    new RecordingOptionsBuilder(conn.getService())
+                            .name(dsc.getName())
+                            .duration(dsc.getDuration())
+                            .maxSize(dsc.getMaxSize())
+                            .maxAge(dsc.getMaxAge())
+                            .toDisk(dsc.getToDisk());
 
             InputStream body = exchange.getRequestBody();
             JsonNode jsonMap = mapper.readTree(body);
