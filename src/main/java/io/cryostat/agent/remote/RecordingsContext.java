@@ -274,12 +274,10 @@ class RecordingsContext implements RemoteContext {
 
             while (fields.hasNext()) {
                 Map.Entry<String, JsonNode> field = fields.next();
-                log.info("Processing {0}={1}", field.getKey(), field.getValue().toPrettyString());
 
                 switch (field.getKey()) {
                     case "state":
                         if ("STOPPED".equals(field.getValue().textValue())) {
-                            log.info("shouldStop = true");
                             shouldStop = true;
                             break;
                         }
@@ -287,7 +285,6 @@ class RecordingsContext implements RemoteContext {
                         return;
                     case "name":
                         if (!StringUtils.isBlank(field.getValue().textValue())) {
-                            log.info("name = {0}", field.getValue().textValue());
                             builder = builder.name(field.getValue().textValue());
                             break;
                         }
@@ -295,7 +292,6 @@ class RecordingsContext implements RemoteContext {
                         return;
                     case "duration":
                         if (field.getValue().canConvertToLong()) {
-                            log.info("duration = {0}", field.getValue().longValue());
                             builder = builder.duration(field.getValue().longValue());
                             break;
                         }
@@ -303,7 +299,6 @@ class RecordingsContext implements RemoteContext {
                         return;
                     case "maxSize":
                         if (field.getValue().canConvertToLong()) {
-                            log.info("maxSize = {0}", field.getValue().longValue());
                             builder = builder.maxSize(field.getValue().longValue());
                             break;
                         }
@@ -311,7 +306,6 @@ class RecordingsContext implements RemoteContext {
                         return;
                     case "maxAge":
                         if (field.getValue().canConvertToLong()) {
-                            log.info("maxAge = {0}", field.getValue().longValue());
                             builder = builder.maxAge(field.getValue().longValue());
                             break;
                         }
@@ -319,7 +313,6 @@ class RecordingsContext implements RemoteContext {
                         return;
                     case "toDisk":
                         if (field.getValue().isBoolean()) {
-                            log.info("toDisk = {0}", field.getValue().booleanValue());
                             builder = builder.toDisk(field.getValue().booleanValue());
                             break;
                         }
