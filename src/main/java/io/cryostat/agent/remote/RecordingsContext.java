@@ -268,6 +268,7 @@ class RecordingsContext implements RemoteContext {
                         } else {
                             exchange.sendResponseHeaders(
                                     HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
+                            return;
                         }
                         break;
                     case "name":
@@ -276,40 +277,39 @@ class RecordingsContext implements RemoteContext {
                             break;
                         }
                         exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
-                        break;
+                        return;
                     case "duration":
                         if (field.getValue().canConvertToLong()) {
                             builder = builder.duration(field.getValue().asLong());
                             break;
                         }
                         exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
-                        break;
+                        return;
                     case "maxSize":
                         if (field.getValue().canConvertToLong()) {
                             builder = builder.maxSize(field.getValue().asLong());
                             break;
                         }
                         exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
-                        break;
+                        return;
                     case "maxAge":
                         if (field.getValue().canConvertToLong()) {
                             builder = builder.maxAge(field.getValue().asLong());
                             break;
                         }
                         exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
-                        break;
+                        return;
                     case "toDisk":
                         if (field.getValue().isBoolean()) {
                             builder = builder.toDisk(field.getValue().asBoolean());
                             break;
                         }
                         exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
-                        break;
+                        return;
                     default:
                         log.warn("Unknown recording option {}", field.getKey());
-                        exchange.sendResponseHeaders(
-                                HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
-                        break;
+                        exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
+                        return;
                 }
             }
             svc.updateRecordingOptions(dsc, builder.build());
