@@ -42,6 +42,7 @@ import org.openjdk.jmc.flightrecorder.configuration.recording.RecordingOptionsBu
 import org.openjdk.jmc.rjmx.ServiceNotAvailableException;
 import org.openjdk.jmc.rjmx.services.jfr.IFlightRecorderService;
 import org.openjdk.jmc.rjmx.services.jfr.IRecordingDescriptor;
+import org.openjdk.jmc.rjmx.services.jfr.IRecordingDescriptor.RecordingState;
 
 import io.cryostat.agent.StringUtils;
 import io.cryostat.core.FlightRecorderException;
@@ -256,10 +257,15 @@ class RecordingsContext implements RemoteContext {
             RecordingOptionsBuilder builder =
                     new RecordingOptionsBuilder(conn.getService())
                             .name(dsc.getName())
-                            .duration(dsc.getDuration())
                             .maxSize(dsc.getMaxSize())
                             .maxAge(dsc.getMaxAge())
                             .toDisk(dsc.getToDisk());
+            if (!RecordingState.STOPPED.equals(dsc.getState())) {
+                // we should apply this default, but if this key is present when the recording is
+                // stopped then updating the recording options will throw, even if we are re-setting
+                // the same duration
+                builder = builder.duration(dsc.getDuration());
+            }
 
             boolean shouldStop = false;
             InputStream body = exchange.getRequestBody();
