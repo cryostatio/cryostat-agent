@@ -308,7 +308,7 @@ class RecordingsContext implements RemoteContext {
                     default:
                         log.warn("Unknown recording option {}", field.getKey());
                         exchange.sendResponseHeaders(
-                                HttpStatus.SC_METHOD_NOT_ALLOWED, BODY_LENGTH_NONE);
+                                HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
                         break;
                 }
             }
