@@ -277,7 +277,7 @@ class RecordingsContext implements RemoteContext {
 
                 switch (field.getKey()) {
                     case "state":
-                        if ("STOPPED".equals(field.getValue().textValue())) {
+                        if ("stopped".equalsIgnoreCase(field.getValue().textValue())) {
                             shouldStop = true;
                             break;
                         }
