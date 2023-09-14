@@ -25,6 +25,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
@@ -260,25 +261,27 @@ class RecordingsContext implements RemoteContext {
                             .maxAge(dsc.getMaxAge())
                             .toDisk(dsc.getToDisk());
 
+            boolean shouldStop = false;
             InputStream body = exchange.getRequestBody();
             JsonNode jsonMap = mapper.readTree(body);
             Iterator<Entry<String, JsonNode>> fields = jsonMap.fields();
 
             while (fields.hasNext()) {
                 Map.Entry<String, JsonNode> field = fields.next();
+                log.info("Processing {0}={1}", field.getKey(), field.getValue().toPrettyString());
 
                 switch (field.getKey()) {
                     case "state":
                         if ("STOPPED".equals(field.getValue().textValue())) {
-                            handleStop(exchange, id);
-                        } else {
-                            exchange.sendResponseHeaders(
-                                    HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
-                            return;
+                            log.info("shouldStop = true");
+                            shouldStop = true;
+                            break;
                         }
-                        break;
+                        exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
+                        return;
                     case "name":
                         if (!StringUtils.isBlank(field.getValue().textValue())) {
+                            log.info("name = {0}", field.getValue().textValue());
                             builder = builder.name(field.getValue().textValue());
                             break;
                         }
@@ -286,28 +289,32 @@ class RecordingsContext implements RemoteContext {
                         return;
                     case "duration":
                         if (field.getValue().canConvertToLong()) {
-                            builder = builder.duration(field.getValue().asLong());
+                            log.info("duration = {0}", field.getValue().longValue());
+                            builder = builder.duration(field.getValue().longValue());
                             break;
                         }
                         exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
                         return;
                     case "maxSize":
                         if (field.getValue().canConvertToLong()) {
-                            builder = builder.maxSize(field.getValue().asLong());
+                            log.info("maxSize = {0}", field.getValue().longValue());
+                            builder = builder.maxSize(field.getValue().longValue());
                             break;
                         }
                         exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
                         return;
                     case "maxAge":
                         if (field.getValue().canConvertToLong()) {
-                            builder = builder.maxAge(field.getValue().asLong());
+                            log.info("maxAge = {0}", field.getValue().longValue());
+                            builder = builder.maxAge(field.getValue().longValue());
                             break;
                         }
                         exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
                         return;
                     case "toDisk":
                         if (field.getValue().isBoolean()) {
-                            builder = builder.toDisk(field.getValue().asBoolean());
+                            log.info("toDisk = {0}", field.getValue().booleanValue());
+                            builder = builder.toDisk(field.getValue().booleanValue());
                             break;
                         }
                         exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
@@ -319,12 +326,15 @@ class RecordingsContext implements RemoteContext {
                 }
             }
             svc.updateRecordingOptions(dsc, builder.build());
-            exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
+            if (shouldStop) {
+                svc.stop(dsc);
+            }
 
             try (OutputStream response = exchange.getResponseBody()) {
                 if (response == null) {
                     exchange.sendResponseHeaders(HttpStatus.SC_NO_CONTENT, BODY_LENGTH_NONE);
                 } else {
+                    exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
                     mapper.writeValue(response, dsc);
                 }
             }
@@ -338,24 +348,6 @@ class RecordingsContext implements RemoteContext {
         }
     }
 
-    private void handleStop(HttpExchange exchange, long id) throws IOException {
-        invokeOnRecording(
-                exchange,
-                id,
-                r -> {
-                    try {
-                        boolean stopped = r.stop();
-                        if (!stopped) {
-                            sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
-                        } else {
-                            sendHeader(exchange, HttpStatus.SC_NO_CONTENT);
-                        }
-                    } catch (IllegalStateException e) {
-                        sendHeader(exchange, HttpStatus.SC_CONFLICT);
-                    }
-                });
-    }
-
     private void handleDelete(HttpExchange exchange, long id) throws IOException {
         invokeOnRecording(
                 exchange,
@@ -366,12 +358,23 @@ class RecordingsContext implements RemoteContext {
                 });
     }
 
-    private void invokeOnRecording(HttpExchange exchange, long id, Consumer<Recording> consumer) {
-        FlightRecorder.getFlightRecorder().getRecordings().stream()
+    private Optional<Recording> getRecordingById(long id) {
+        return FlightRecorder.getFlightRecorder().getRecordings().stream()
                 .filter(r -> r.getId() == id)
-                .findFirst()
-                .ifPresentOrElse(
-                        consumer::accept, () -> sendHeader(exchange, HttpStatus.SC_NOT_FOUND));
+                .findFirst();
+    }
+
+    private void invokeOnRecording(HttpExchange exchange, long id, Consumer<Recording> consumer) {
+        Optional<Recording> opt = getRecordingById(id);
+        if (!opt.isPresent()) {
+            sendHeader(exchange, HttpStatus.SC_NOT_FOUND);
+        }
+        try {
+            consumer.accept(opt.get());
+        } catch (Exception e) {
+            log.error("Operation failed", e);
+            sendHeader(exchange, HttpStatus.SC_INTERNAL_SERVER_ERROR);
+        }
     }
 
     private void sendHeader(HttpExchange exchange, int status) {
