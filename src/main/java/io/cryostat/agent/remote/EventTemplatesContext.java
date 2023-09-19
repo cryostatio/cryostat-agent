@@ -43,35 +43,38 @@ class EventTemplatesContext implements RemoteContext {
 
     @Override
     public String path() {
-        return "/event-templates";
+        return "/event-templates/";
     }
 
     @Override
     public void handle(HttpExchange exchange) throws IOException {
-        String mtd = exchange.getRequestMethod();
-        switch (mtd) {
-            case "GET":
-                try {
-                    exchange.sendResponseHeaders(HttpStatus.SC_OK, 0);
-                    try (OutputStream response = exchange.getResponseBody()) {
+        try {
+            String mtd = exchange.getRequestMethod();
+            switch (mtd) {
+                case "GET":
+                    try {
                         FlightRecorderMXBean bean =
                                 ManagementFactory.getPlatformMXBean(FlightRecorderMXBean.class);
                         List<String> xmlTexts =
                                 bean.getConfigurations().stream()
                                         .map(ConfigurationInfo::getContents)
                                         .collect(Collectors.toList());
-                        mapper.writeValue(response, xmlTexts);
+                        exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
+                        try (OutputStream response = exchange.getResponseBody()) {
+                            mapper.writeValue(response, xmlTexts);
+                        }
+                    } catch (Exception e) {
+                        log.error("events serialization failure", e);
                     }
-                } catch (Exception e) {
-                    log.error("events serialization failure", e);
-                } finally {
-                    exchange.close();
-                }
-                break;
-            default:
-                exchange.sendResponseHeaders(HttpStatus.SC_NOT_FOUND, -1);
-                exchange.close();
-                break;
+                    break;
+                default:
+                    log.warn("Unknown request method {}", mtd);
+                    exchange.sendResponseHeaders(
+                            HttpStatus.SC_METHOD_NOT_ALLOWED, BODY_LENGTH_NONE);
+                    break;
+            }
+        } finally {
+            exchange.close();
         }
     }
 }
