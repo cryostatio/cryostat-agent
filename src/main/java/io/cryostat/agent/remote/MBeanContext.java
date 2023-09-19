@@ -93,7 +93,12 @@ class MBeanContext implements RemoteContext {
         // TODO refactor, extract into -core library?
         RuntimeMXBean runtimeBean = ManagementFactory.getRuntimeMXBean();
         Map<String, Object> runtimeAttrs = new HashMap<>();
-        safeStore("BootClassPath", runtimeAttrs, runtimeBean::getBootClassPath);
+        safeStore(
+                "BootClassPathSupported",
+                runtimeAttrs,
+                runtimeBean::isBootClassPathSupported,
+                true);
+        safeStore("BootClassPath", runtimeAttrs, runtimeBean::getBootClassPath, true);
         safeStore("ClassPath", runtimeAttrs, runtimeBean::getClassPath);
         safeStore(
                 "InputArguments",
@@ -110,7 +115,6 @@ class MBeanContext implements RemoteContext {
         safeStore("VmName", runtimeAttrs, runtimeBean::getVmName);
         safeStore("VmVendor", runtimeAttrs, runtimeBean::getVmVendor);
         safeStore("VmVersion", runtimeAttrs, runtimeBean::getVmVersion);
-        safeStore("BootClassPathSupported", runtimeAttrs, runtimeBean::isBootClassPathSupported);
         RuntimeMetrics runtime = new RuntimeMetrics(runtimeAttrs);
 
         MemoryMXBean memoryBean = ManagementFactory.getMemoryMXBean();
@@ -217,10 +221,16 @@ class MBeanContext implements RemoteContext {
     }
 
     private <T> void safeStore(String key, Map<String, Object> map, Callable<T> fn) {
+        safeStore(key, map, fn, true);
+    }
+
+    private <T> void safeStore(String key, Map<String, Object> map, Callable<T> fn, boolean quiet) {
         try {
             map.put(key, fn.call());
         } catch (Exception e) {
-            log.warn("Call failed", e);
+            if (!quiet) {
+                log.warn("Call failed", e);
+            }
         }
     }
 }
