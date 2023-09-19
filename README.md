@@ -1,5 +1,10 @@
 # `cryostat-agent`
 
+
+[![CI build and push](https://github.com/cryostatio/cryostat-agent/actions/workflows/ci.yaml/badge.svg)](https://github.com/cryostatio/cryostat-agent/actions/workflows/ci.yaml)
+[![Google Group : Cryostat Development](https://img.shields.io/badge/Google%20Group-Cryostat%20Development-blue.svg)](https://groups.google.com/g/cryostat-development)
+
+
 Discovery agent plugin for [Cryostat](https://github.com/cryostatio/cryostat).
 
 Cryostat has a Discovery API to allow service locator bridges ("Discovery Plugins") to inform Cryostat about the
