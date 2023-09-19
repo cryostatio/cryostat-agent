@@ -28,9 +28,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import javax.inject.Named;
 import javax.inject.Singleton;
 
-import dagger.Component;
+import io.cryostat.agent.triggers.TriggerEvaluator;
 import io.cryostat.agent.triggers.TriggerParser;
 
+import dagger.Component;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import sun.misc.Signal;
@@ -52,7 +53,9 @@ public class Agent {
             List<String> exitSignals = client.exitSignals();
             long exitDeregistrationTimeout = client.exitDeregistrationTimeout();
             TriggerParser triggerParser = new TriggerParser(args[0]);
-            triggerParser.parse();
+            TriggerEvaluator triggerEvaluator = new TriggerEvaluator(triggerParser.parse());
+            triggerEvaluator.setDaemon(true);
+            triggerEvaluator.start();
 
             agentExitHandler =
                     installSignalHandlers(

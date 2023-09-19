@@ -15,35 +15,16 @@
  */
 package io.cryostat.agent.remote;
 
-import java.io.ByteArrayOutputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.lang.management.ManagementFactory;
-import java.lang.management.MemoryMXBean;
-import java.lang.management.OperatingSystemMXBean;
-import java.lang.management.RuntimeMXBean;
-import java.lang.management.ThreadMXBean;
-import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
-import java.util.Base64;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.Callable;
 
 import javax.inject.Inject;
 
 import io.cryostat.agent.model.MBeanInfo;
 import io.cryostat.core.net.MBeanMetrics;
-import io.cryostat.core.net.MemoryMetrics;
-import io.cryostat.core.net.OperatingSystemMetrics;
-import io.cryostat.core.net.RuntimeMetrics;
-import io.cryostat.core.net.ThreadMetrics;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.sun.management.UnixOperatingSystemMXBean;
 import com.sun.net.httpserver.HttpExchange;
-import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

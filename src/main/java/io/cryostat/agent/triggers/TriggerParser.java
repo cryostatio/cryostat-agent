@@ -15,62 +15,41 @@
  */
 package io.cryostat.agent.triggers;
 
-import java.lang.management.ManagementFactory;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
-import org.projectnessie.cel.checker.Decls;
-import org.projectnessie.cel.tools.Script;
-import org.projectnessie.cel.tools.ScriptHost;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import io.cryostat.agent.model.MBeanInfo;
-import jdk.management.jfr.FlightRecorderMXBean;
-
 public class TriggerParser {
 
+    private static final String EXPRESSION_PATTERN_STRING = "\\[(.*(&&)*|(\\|\\|)*)\\]~(.*\\.jfc)";
+    private static final Pattern EXPRESSION_PATTERN = Pattern.compile(EXPRESSION_PATTERN_STRING);
     private final Logger log = LoggerFactory.getLogger(getClass());
-    private ScriptHost scriptHost = ScriptHost.newBuilder().build();
-    private String rawTriggerDefinitions;
-    private Map<String, Object> metrics;
-    private String recordingTemplateName;
+    private String triggerDefinitions;
 
     public TriggerParser(String args) {
         if (args.isEmpty()) {
             log.warn("Agent args were empty, no Triggers were defined");
             return;
-        } 
-        rawTriggerDefinitions = args;
-    }
-
-    public void parse() {
-        // Build the script
-        // Trigger Syntax: (constraint1, ...)~template
-        // target.processCPULoad > 0.2 && target.duration > 30s
-        // (constraint 1, constraint 2, ...)
-        // target.metrics.processCPULoad
-        // (target.ProcessCPULoad > 0.2 for 30s && target.physicalMemoryUsage > 0.5 for 0s)~foo.jfc
-        String[] triggerDefinitions = rawTriggerDefinitions.split("~");
-        recordingTemplateName = triggerDefinitions[triggerDefinitions.length-1];
-        try {
-            metrics = new MBeanInfo().rawMetrics;
-            Script script = scriptHost.buildScript(triggerDefinitions[0])
-            .withDeclarations(
-                Decls.newVar("metrics", Decls.newMapType(Decls.String, Decls.Any)))
-                .build();
-            List<Boolean> results = script.execute(List.class, metrics);
-            if (results.contains(true)) {
-                handleRecording(recordingTemplateName);
-            }
-        } catch (Exception e) {
-            log.error("Failed to create/run script: ", e);
         }
+        triggerDefinitions = args;
     }
 
-    public void handleRecording(String recordingName) {
-        FlightRecorderMXBean FlightRecorderBean = ManagementFactory.getPlatformMXBean(FlightRecorderMXBean.class);
-        // TODO: Find recording template on disk
-        FlightRecorderBean.startRecording(0);
+    public List<SmartTrigger> parse() {
+        String[] expressions = triggerDefinitions.split(",");
+        List<SmartTrigger> triggers = new ArrayList();
+        for (String s : expressions) {
+            Matcher m = EXPRESSION_PATTERN.matcher(s);
+            if (m.matches()) {
+                String constraintString = m.group(1);
+                String templateName = m.group(4);
+                SmartTrigger trigger = new SmartTrigger(constraintString, templateName);
+                triggers.add(trigger);
+            }
+        }
+        return triggers;
     }
 }

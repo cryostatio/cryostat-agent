@@ -26,14 +26,10 @@ import java.lang.management.ThreadMXBean;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.Callable;
-
-import org.apache.commons.codec.digest.DigestUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import com.sun.management.UnixOperatingSystemMXBean;
 
 import io.cryostat.core.net.MBeanMetrics;
 import io.cryostat.core.net.MemoryMetrics;
@@ -41,25 +37,35 @@ import io.cryostat.core.net.OperatingSystemMetrics;
 import io.cryostat.core.net.RuntimeMetrics;
 import io.cryostat.core.net.ThreadMetrics;
 
+import com.sun.management.UnixOperatingSystemMXBean;
+import org.apache.commons.codec.digest.DigestUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 public class MBeanInfo {
-    
+
     private final Logger log = LoggerFactory.getLogger(getClass());
     private MBeanMetrics mBeanMetrics;
-    public Map<String, Object> rawMetrics;
+    private Map<String, Object> simplifiedMetrics;
 
     public MBeanInfo() {
+        this.simplifiedMetrics = new HashMap<>();
         RuntimeMetrics r = getRuntimeMetrics();
-        mBeanMetrics = new MBeanMetrics(r, getMemoryMetrics(),
-         getThreadMetrics(), getOperatingSystemMetrics(), getJvmID(r));
-        rawMetrics = new HashMap<>();
-    }
-
-    public Map<String, Object> getRawMetrics() {
-        return rawMetrics;
+        mBeanMetrics =
+                new MBeanMetrics(
+                        r,
+                        getMemoryMetrics(),
+                        getThreadMetrics(),
+                        getOperatingSystemMetrics(),
+                        getJvmID(r));
     }
 
     public MBeanMetrics getMBeanMetrics() {
         return mBeanMetrics;
+    }
+
+    public Map<String, Object> getSimplifiedMetrics() {
+        return Collections.unmodifiableMap(simplifiedMetrics);
     }
 
     private OperatingSystemMetrics getOperatingSystemMetrics() {
@@ -81,7 +87,6 @@ public class MBeanInfo {
             safeStore("TotalPhysicalMemorySize", osAttrs, unix::getTotalPhysicalMemorySize);
             safeStore("TotalSwapSpaceSize", osAttrs, unix::getTotalSwapSpaceSize);
         }
-        rawMetrics.putAll(osAttrs);
         return new OperatingSystemMetrics(osAttrs);
     }
 
@@ -117,7 +122,6 @@ public class MBeanInfo {
                 threadBean::isThreadContentionMonitoringSupported);
         safeStore("ThreadCpuTimeEnabled", threadAttrs, threadBean::isThreadCpuTimeEnabled);
         safeStore("ThreadCpuTimeSupported", threadAttrs, threadBean::isThreadCpuTimeSupported);
-        rawMetrics.putAll(threadAttrs);
         return new ThreadMetrics(threadAttrs);
     }
 
@@ -142,7 +146,6 @@ public class MBeanInfo {
         safeStore("VmVendor", runtimeAttrs, runtimeBean::getVmVendor);
         safeStore("VmVersion", runtimeAttrs, runtimeBean::getVmVersion);
         safeStore("BootClassPathSupported", runtimeAttrs, runtimeBean::isBootClassPathSupported);
-        rawMetrics.putAll(runtimeAttrs);
         return new RuntimeMetrics(runtimeAttrs);
     }
 
@@ -176,10 +179,9 @@ public class MBeanInfo {
                         ((double) memoryBean.getHeapMemoryUsage().getUsed()
                                 / (double) memoryBean.getHeapMemoryUsage().getCommitted()));
         safeStore("Verbose", memoryAttrs, memoryBean::isVerbose);
-        rawMetrics.putAll(memoryAttrs);
         return new MemoryMetrics(memoryAttrs);
     }
-    
+
     private String getJvmID(RuntimeMetrics runtime) {
         try (ByteArrayOutputStream baos = new ByteArrayOutputStream(512);
                 DataOutputStream dos = new DataOutputStream(baos)) {
@@ -201,6 +203,7 @@ public class MBeanInfo {
     private <T> void safeStore(String key, Map<String, Object> map, Callable<T> fn) {
         try {
             map.put(key, fn.call());
+            simplifiedMetrics.put(key, fn.call());
         } catch (Exception e) {
             log.warn("Call failed", e);
         }
