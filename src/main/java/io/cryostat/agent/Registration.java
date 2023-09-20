@@ -21,9 +21,8 @@ import java.net.UnknownHostException;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -237,7 +236,7 @@ class Registration {
             log.warn("update attempted before initialized");
             return;
         }
-        List<DiscoveryNode> selfNodes;
+        Collection<DiscoveryNode> selfNodes;
         try {
             selfNodes = defineSelf();
         } catch (UnknownHostException | URISyntaxException e) {
@@ -267,8 +266,8 @@ class Registration {
         }
     }
 
-    private List<DiscoveryNode> defineSelf() throws UnknownHostException, URISyntaxException {
-        List<DiscoveryNode> discoveryNodes = new ArrayList<>();
+    private Set<DiscoveryNode> defineSelf() throws UnknownHostException, URISyntaxException {
+        Set<DiscoveryNode> discoveryNodes = new HashSet<>();
 
         long pid = ProcessHandle.current().pid();
         String javaMain = System.getProperty("sun.java.command", System.getenv("JAVA_MAIN_CLASS"));
