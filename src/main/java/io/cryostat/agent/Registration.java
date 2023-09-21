@@ -32,6 +32,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 import io.cryostat.agent.model.DiscoveryNode;
 import io.cryostat.agent.model.PluginInfo;
@@ -245,7 +246,9 @@ class Registration {
         }
         log.info(
                 "publishing self as {}",
-                selfNodes.stream().map(n -> n.getTarget().getConnectUrl()).toList());
+                selfNodes.stream()
+                        .map(n -> n.getTarget().getConnectUrl())
+                        .collect(Collectors.toList()));
         Future<Void> f =
                 cryostat.update(pluginInfo, selfNodes)
                         .handle(
