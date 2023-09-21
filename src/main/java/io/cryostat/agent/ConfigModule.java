@@ -58,8 +58,6 @@ public abstract class ConfigModule {
     public static final String CRYOSTAT_AGENT_APP_NAME = "cryostat.agent.app.name";
     public static final String CRYOSTAT_AGENT_HOSTNAME = "cryostat.agent.hostname";
     public static final String CRYOSTAT_AGENT_APP_JMX_PORT = "cryostat.agent.app.jmx.port";
-    public static final String CRYOSTAT_AGENT_REGISTRATION_PREFER_JMX =
-            "cryostat.agent.registration.prefer-jmx";
     public static final String CRYOSTAT_AGENT_REGISTRATION_RETRY_MS =
             "cryostat.agent.registration.retry-ms";
     public static final String CRYOSTAT_AGENT_REGISTRATION_CHECK_MS =
@@ -204,14 +202,6 @@ public abstract class ConfigModule {
                 .orElse(
                         Integer.valueOf(
                                 System.getProperty("com.sun.management.jmxremote.port", "-1")));
-    }
-
-    @Provides
-    @Singleton
-    @Named(CRYOSTAT_AGENT_REGISTRATION_PREFER_JMX)
-    public static boolean provideCryostatAgentRegistrationPreferJmx(SmallRyeConfig config) {
-        return config.getOptionalValue(CRYOSTAT_AGENT_REGISTRATION_PREFER_JMX, boolean.class)
-                .orElse(false);
     }
 
     @Provides
