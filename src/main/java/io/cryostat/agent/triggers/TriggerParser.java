@@ -20,6 +20,8 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import io.cryostat.agent.FlightRecorderModule;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -29,6 +31,7 @@ public class TriggerParser {
     private static final Pattern EXPRESSION_PATTERN = Pattern.compile(EXPRESSION_PATTERN_STRING);
     private final Logger log = LoggerFactory.getLogger(getClass());
     private String triggerDefinitions;
+    private FlightRecorderModule flightRecorderModule;
 
     public TriggerParser(String args) {
         if (args.isEmpty()) {
@@ -36,6 +39,7 @@ public class TriggerParser {
             return;
         }
         triggerDefinitions = args;
+        flightRecorderModule = new FlightRecorderModule();
     }
 
     public List<SmartTrigger> parse() {
@@ -46,8 +50,12 @@ public class TriggerParser {
             if (m.matches()) {
                 String constraintString = m.group(1);
                 String templateName = m.group(4);
-                SmartTrigger trigger = new SmartTrigger(constraintString, templateName);
-                triggers.add(trigger);
+                if (flightRecorderModule.isValidTemplate(templateName)) {
+                    SmartTrigger trigger = new SmartTrigger(constraintString, templateName);
+                    triggers.add(trigger);
+                } else {
+                    log.error("Template " + templateName + " not found. Skipping trigger.");
+                }
             }
         }
         return triggers;

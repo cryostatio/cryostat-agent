@@ -50,14 +50,13 @@ public class MBeanInfo {
 
     public MBeanInfo() {
         this.simplifiedMetrics = new HashMap<>();
-        RuntimeMetrics r = getRuntimeMetrics();
         mBeanMetrics =
                 new MBeanMetrics(
-                        r,
+                        getRuntimeMetrics(),
                         getMemoryMetrics(),
                         getThreadMetrics(),
                         getOperatingSystemMetrics(),
-                        getJvmID(r));
+                        getJvmID(getRuntimeMetrics()));
     }
 
     public MBeanMetrics getMBeanMetrics() {
@@ -65,6 +64,7 @@ public class MBeanInfo {
     }
 
     public Map<String, Object> getSimplifiedMetrics() {
+        // Map<String, Object> simplifiedMetrics = new HashMap<>();
         return Collections.unmodifiableMap(simplifiedMetrics);
     }
 

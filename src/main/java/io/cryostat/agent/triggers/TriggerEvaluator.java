@@ -15,7 +15,6 @@
  */
 package io.cryostat.agent.triggers;
 
-import java.lang.management.ManagementFactory;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Date;
@@ -23,14 +22,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
+import io.cryostat.agent.FlightRecorderModule;
 import io.cryostat.agent.model.MBeanInfo;
 import io.cryostat.agent.triggers.SmartTrigger.TriggerState;
 
 import com.google.api.expr.v1alpha1.Decl;
 import com.google.api.expr.v1alpha1.Type;
 import com.google.api.expr.v1alpha1.Type.PrimitiveType;
-import jdk.management.jfr.ConfigurationInfo;
-import jdk.management.jfr.FlightRecorderMXBean;
 import org.projectnessie.cel.checker.Decls;
 import org.projectnessie.cel.tools.Script;
 import org.projectnessie.cel.tools.ScriptHost;
@@ -41,16 +39,16 @@ public class TriggerEvaluator extends Thread {
 
     private ConcurrentLinkedQueue<SmartTrigger> triggers;
     private final Logger log = LoggerFactory.getLogger(getClass());
+    private FlightRecorderModule flightRecorderModule;
 
     public TriggerEvaluator(List<SmartTrigger> triggers) {
         this.triggers = new ConcurrentLinkedQueue<>(triggers);
+        this.flightRecorderModule = new FlightRecorderModule();
     }
 
     public void registerTrigger(SmartTrigger t) {
         triggers.add(t);
     }
-
-    public void evaluateTriggers() {}
 
     @Override
     public void run() {
@@ -70,8 +68,8 @@ public class TriggerEvaluator extends Thread {
                         // Simple Constraint, no duration specified so condition only needs to be
                         // met once
                         if (t.getTargetDuration().equals(Duration.ZERO)
-                                && evaluateTriggerConstraint(t, t.getTargetDuration()) == true) {
-                            handleRecordingStart(t.getRecordingTemplateName());
+                                && evaluateTriggerConstraint(t, t.getTargetDuration())) {
+                            flightRecorderModule.startRecording(t.getRecordingTemplateName());
                             t.setState(TriggerState.COMPLETE);
                         } else if (!t.getTargetDuration().equals(Duration.ZERO)) {
                             if (evaluateTriggerConstraint(t, Duration.ZERO) == true) {
@@ -90,14 +88,14 @@ public class TriggerEvaluator extends Thread {
                             if (evaluateTriggerConstraint(t, Duration.ofMillis(difference))
                                     == true) {
                                 t.setState(TriggerState.COMPLETE);
-                                handleRecordingStart(t.getRecordingTemplateName());
+                                flightRecorderModule.startRecording(t.getRecordingTemplateName());
                             } else {
                                 t.setState(TriggerState.WAITING_LOW);
                             }
                         }
                         break;
                     case WAITING_LOW:
-                        if (evaluateTriggerConstraint(t, Duration.ofMillis(difference)) == true) {
+                        if (evaluateTriggerConstraint(t, Duration.ofMillis(difference))) {
                             t.setState(TriggerState.WAITING_HIGH);
                             t.setTimeConditionFirstMet(new Date(System.currentTimeMillis()));
                         }
@@ -156,18 +154,5 @@ public class TriggerEvaluator extends Thread {
         else
             // Default to String so we can still do some comparison
             return Decls.String;
-    }
-
-    public void handleRecordingStart(String recordingTemplateName) {
-        FlightRecorderMXBean bean = ManagementFactory.getPlatformMXBean(FlightRecorderMXBean.class);
-        for (ConfigurationInfo info : bean.getConfigurations()) {
-            if (info.getName().equals(recordingTemplateName)) {
-                long recordingId = bean.getRecordings().size() + 1;
-                bean.startRecording(recordingId);
-                bean.setConfiguration(recordingId, info.getContents());
-                return;
-            }
-        }
-        log.error("Recording template not found: " + recordingTemplateName);
     }
 }
