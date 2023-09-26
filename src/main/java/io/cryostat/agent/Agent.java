@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -54,9 +55,9 @@ public class Agent {
             long exitDeregistrationTimeout = client.exitDeregistrationTimeout();
             TriggerParser triggerParser = new TriggerParser(args[0]);
             TriggerEvaluator triggerEvaluator = new TriggerEvaluator(triggerParser.parse());
-            triggerEvaluator.setDaemon(true);
-            triggerEvaluator.start();
-
+            ScheduledExecutorService triggerExecutor = Executors.newScheduledThreadPool(0);
+            triggerExecutor.scheduleAtFixedRate(triggerEvaluator, 0, 1, TimeUnit.SECONDS);
+        
             agentExitHandler =
                     installSignalHandlers(
                             exitSignals,

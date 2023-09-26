@@ -35,7 +35,7 @@ import org.projectnessie.cel.tools.ScriptHost;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class TriggerEvaluator extends Thread {
+public class TriggerEvaluator implements Runnable {
 
     private ConcurrentLinkedQueue<SmartTrigger> triggers;
     private final Logger log = LoggerFactory.getLogger(getClass());
@@ -52,55 +52,52 @@ public class TriggerEvaluator extends Thread {
 
     @Override
     public void run() {
-        while (true) {
-            for (SmartTrigger t : triggers) {
-                Date currentTime = new Date(System.currentTimeMillis());
-                long difference = 0;
-                if (t.getTimeConditionFirstMet() != null) {
-                    difference = currentTime.getTime() - t.getTimeConditionFirstMet().getTime();
-                }
-                switch (t.getState()) {
-                    case COMPLETE:
-                        /* Trigger condition has been met, can remove it */
-                        triggers.remove(t);
-                        break;
-                    case NEW:
-                        // Simple Constraint, no duration specified so condition only needs to be
-                        // met once
-                        if (t.getTargetDuration().equals(Duration.ZERO)
-                                && evaluateTriggerConstraint(t, t.getTargetDuration())) {
-                            flightRecorderModule.startRecording(t.getRecordingTemplateName());
-                            t.setState(TriggerState.COMPLETE);
-                        } else if (!t.getTargetDuration().equals(Duration.ZERO)) {
-                            if (evaluateTriggerConstraint(t, Duration.ZERO) == true) {
-                                // Condition was met, set the state accordingly
-                                t.setState(TriggerState.WAITING_HIGH);
-                                t.setTimeConditionFirstMet(new Date(System.currentTimeMillis()));
-                            } else {
-                                // Condition wasn't met, keep waiting.
-                                t.setState(TriggerState.WAITING_LOW);
-                            }
-                        }
-                        break;
-                    case WAITING_HIGH:
-                        // Condition was met at last check but duration hasn't passed
-                        if (handleDuration(difference, t)) {
-                            if (evaluateTriggerConstraint(t, Duration.ofMillis(difference))
-                                    == true) {
-                                t.setState(TriggerState.COMPLETE);
-                                flightRecorderModule.startRecording(t.getRecordingTemplateName());
-                            } else {
-                                t.setState(TriggerState.WAITING_LOW);
-                            }
-                        }
-                        break;
-                    case WAITING_LOW:
-                        if (evaluateTriggerConstraint(t, Duration.ofMillis(difference))) {
+        for (SmartTrigger t : triggers) {
+            Date currentTime = new Date(System.currentTimeMillis());
+            long difference = 0;
+            if (t.getTimeConditionFirstMet() != null) {
+                difference = currentTime.getTime() - t.getTimeConditionFirstMet().getTime();
+            }
+            switch (t.getState()) {
+                case COMPLETE:
+                    /* Trigger condition has been met, can remove it */
+                    triggers.remove(t);
+                    break;
+                case NEW:
+                    // Simple Constraint, no duration specified so condition only needs to be
+                    // met once
+                    if (t.getTargetDuration().equals(Duration.ZERO)
+                            && evaluateTriggerConstraint(t, t.getTargetDuration())) {
+                        flightRecorderModule.startRecording(t.getRecordingTemplateName());
+                        t.setState(TriggerState.COMPLETE);
+                    } else if (!t.getTargetDuration().equals(Duration.ZERO)) {
+                        if (evaluateTriggerConstraint(t, Duration.ZERO) == true) {
+                            // Condition was met, set the state accordingly
                             t.setState(TriggerState.WAITING_HIGH);
                             t.setTimeConditionFirstMet(new Date(System.currentTimeMillis()));
+                        } else {
+                            // Condition wasn't met, keep waiting.
+                            t.setState(TriggerState.WAITING_LOW);
                         }
-                        break;
-                }
+                    }
+                    break;
+                case WAITING_HIGH:
+                    // Condition was met at last check but duration hasn't passed
+                    if (handleDuration(difference, t)) {
+                        if (evaluateTriggerConstraint(t, Duration.ofMillis(difference)) == true) {
+                            t.setState(TriggerState.COMPLETE);
+                            flightRecorderModule.startRecording(t.getRecordingTemplateName());
+                        } else {
+                            t.setState(TriggerState.WAITING_LOW);
+                        }
+                    }
+                    break;
+                case WAITING_LOW:
+                    if (evaluateTriggerConstraint(t, Duration.ofMillis(difference))) {
+                        t.setState(TriggerState.WAITING_HIGH);
+                        t.setTimeConditionFirstMet(new Date(System.currentTimeMillis()));
+                    }
+                    break;
             }
         }
     }
