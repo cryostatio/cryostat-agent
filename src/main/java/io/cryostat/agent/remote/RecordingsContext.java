@@ -428,7 +428,8 @@ class RecordingsContext implements RemoteContext {
                                 .orElseThrow(
                                         () ->
                                                 new InvalidEventTemplateException(
-                                                        "Falied to retrieve recording events for " + template.getName()));
+                                                        "Falied to retrieve recording events for "
+                                                                + template.getName()));
                 cleanup =
                         () -> {
                             try {
@@ -445,7 +446,9 @@ class RecordingsContext implements RemoteContext {
                                         .orElseThrow(
                                                 () ->
                                                         new InvalidEventTemplateException(
-                                                                "Failed to retrieve recording events for " + req.localTemplateName));
+                                                                "Failed to retrieve recording"
+                                                                        + " events for "
+                                                                        + req.localTemplateName));
             }
             IFlightRecorderService svc = conn.getService();
             return new SerializableRecordingDescriptor(
