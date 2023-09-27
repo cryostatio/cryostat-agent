@@ -45,30 +45,37 @@ class EventTypesContext implements RemoteContext {
 
     @Override
     public String path() {
-        return "/event-types";
+        return "/event-types/";
     }
 
     @Override
     public void handle(HttpExchange exchange) throws IOException {
-        String mtd = exchange.getRequestMethod();
-        switch (mtd) {
-            case "GET":
-                try {
-                    List<EventInfo> events = getEventTypes();
-                    exchange.sendResponseHeaders(HttpStatus.SC_OK, 0);
+        try {
+            String mtd = exchange.getRequestMethod();
+            switch (mtd) {
+                case "GET":
+                    List<EventInfo> events = new ArrayList<>();
+                    try {
+                        events.addAll(getEventTypes());
+                    } catch (Exception e) {
+                        log.error("events serialization failure", e);
+                        exchange.sendResponseHeaders(
+                                HttpStatus.SC_INTERNAL_SERVER_ERROR, BODY_LENGTH_NONE);
+                        break;
+                    }
+                    exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
                     try (OutputStream response = exchange.getResponseBody()) {
                         mapper.writeValue(response, events);
                     }
-                } catch (Exception e) {
-                    log.error("events serialization failure", e);
-                } finally {
-                    exchange.close();
-                }
-                break;
-            default:
-                exchange.sendResponseHeaders(HttpStatus.SC_NOT_FOUND, -1);
-                exchange.close();
-                break;
+                    break;
+                default:
+                    log.warn("Unknown request method {}", mtd);
+                    exchange.sendResponseHeaders(
+                            HttpStatus.SC_METHOD_NOT_ALLOWED, BODY_LENGTH_NONE);
+                    break;
+            }
+        } finally {
+            exchange.close();
         }
     }
 

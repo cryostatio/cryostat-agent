@@ -21,6 +21,7 @@ import java.net.UnknownHostException;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -31,6 +32,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 import io.cryostat.agent.model.DiscoveryNode;
 import io.cryostat.agent.model.PluginInfo;
@@ -54,7 +56,6 @@ class Registration {
     private final String appName;
     private final String realm;
     private final String hostname;
-    private final boolean preferJmx;
     private final int jmxPort;
     private final int registrationRetryMs;
     private final int registrationCheckMs;
@@ -74,7 +75,6 @@ class Registration {
             String appName,
             String realm,
             String hostname,
-            boolean preferJmx,
             int jmxPort,
             int registrationRetryMs,
             int registrationCheckMs) {
@@ -87,7 +87,6 @@ class Registration {
         this.appName = appName;
         this.realm = realm;
         this.hostname = hostname;
-        this.preferJmx = preferJmx;
         this.jmxPort = jmxPort;
         this.registrationRetryMs = registrationRetryMs;
         this.registrationCheckMs = registrationCheckMs;
@@ -238,16 +237,20 @@ class Registration {
             log.warn("update attempted before initialized");
             return;
         }
-        DiscoveryNode selfNode;
+        Collection<DiscoveryNode> selfNodes;
         try {
-            selfNode = defineSelf();
+            selfNodes = defineSelf();
         } catch (UnknownHostException | URISyntaxException e) {
             log.error("Unable to define self", e);
             return;
         }
-        log.info("publishing self as {}", selfNode.getTarget().getConnectUrl());
+        log.info(
+                "publishing self as {}",
+                selfNodes.stream()
+                        .map(n -> n.getTarget().getConnectUrl())
+                        .collect(Collectors.toList()));
         Future<Void> f =
-                cryostat.update(pluginInfo, Set.of(selfNode))
+                cryostat.update(pluginInfo, selfNodes)
                         .handle(
                                 (n, t) -> {
                                     if (t != null) {
@@ -266,7 +269,9 @@ class Registration {
         }
     }
 
-    private DiscoveryNode defineSelf() throws UnknownHostException, URISyntaxException {
+    private Set<DiscoveryNode> defineSelf() throws UnknownHostException, URISyntaxException {
+        Set<DiscoveryNode> discoveryNodes = new HashSet<>();
+
         long pid = ProcessHandle.current().pid();
         String javaMain = System.getProperty("sun.java.command", System.getenv("JAVA_MAIN_CLASS"));
         if (StringUtils.isBlank(javaMain)) {
@@ -281,15 +286,7 @@ class Registration {
                         .getEpochSecond();
         URI uri = callback;
         int port = uri.getPort();
-        if (preferJmx && jmxPort > 0) {
-            uri =
-                    URI.create(
-                            String.format(
-                                    "service:jmx:rmi:///jndi/rmi://%s:%d/jmxrmi",
-                                    hostname, jmxPort));
-            port = jmxPort;
-        }
-        DiscoveryNode.Target target =
+        DiscoveryNode.Target httpSelf =
                 new DiscoveryNode.Target(
                         realm,
                         uri,
@@ -301,10 +298,33 @@ class Registration {
                         port,
                         javaMain,
                         startTime);
+        discoveryNodes.add(
+                new DiscoveryNode(appName + "-agent-" + pluginInfo.getId(), NODE_TYPE, httpSelf));
 
-        DiscoveryNode selfNode =
-                new DiscoveryNode(appName + "-" + pluginInfo.getId(), NODE_TYPE, target);
-        return selfNode;
+        if (jmxPort > 0) {
+            uri =
+                    URI.create(
+                            String.format(
+                                    "service:jmx:rmi:///jndi/rmi://%s:%d/jmxrmi",
+                                    hostname, jmxPort));
+            port = jmxPort;
+            DiscoveryNode.Target jmxSelf =
+                    new DiscoveryNode.Target(
+                            realm,
+                            uri,
+                            appName,
+                            instanceId,
+                            jvmId,
+                            pid,
+                            hostname,
+                            port,
+                            javaMain,
+                            startTime);
+            discoveryNodes.add(
+                    new DiscoveryNode(appName + "-jmx-" + pluginInfo.getId(), NODE_TYPE, jmxSelf));
+        }
+
+        return discoveryNodes;
     }
 
     void stop() {}

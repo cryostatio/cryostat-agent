@@ -15,16 +15,24 @@
  */
 package io.cryostat.agent.remote;
 
-import com.sun.net.httpserver.HttpHandler;
+import io.cryostat.agent.ConfigModule;
 
-public interface RemoteContext extends HttpHandler {
+import io.smallrye.config.SmallRyeConfig;
 
-    public static final int BODY_LENGTH_NONE = -1;
-    public static final int BODY_LENGTH_UNKNOWN = 0;
+public abstract class MutatingRemoteContext implements RemoteContext {
 
-    String path();
+    protected final SmallRyeConfig config;
 
-    default boolean available() {
-        return true;
+    protected MutatingRemoteContext(SmallRyeConfig config) {
+        this.config = config;
+    }
+
+    @Override
+    public boolean available() {
+        return apiWritesEnabled(config);
+    }
+
+    public static boolean apiWritesEnabled(SmallRyeConfig config) {
+        return config.getValue(ConfigModule.CRYOSTAT_AGENT_API_WRITES_ENABLED, boolean.class);
     }
 }

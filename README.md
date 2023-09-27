@@ -1,5 +1,10 @@
 # `cryostat-agent`
 
+
+[![CI build and push](https://github.com/cryostatio/cryostat-agent/actions/workflows/ci.yaml/badge.svg)](https://github.com/cryostatio/cryostat-agent/actions/workflows/ci.yaml)
+[![Google Group : Cryostat Development](https://img.shields.io/badge/Google%20Group-Cryostat%20Development-blue.svg)](https://groups.google.com/g/cryostat-development)
+
+
 Discovery agent plugin for [Cryostat](https://github.com/cryostatio/cryostat).
 
 Cryostat has a Discovery API to allow service locator bridges ("Discovery Plugins") to inform Cryostat about the
@@ -52,6 +57,7 @@ and how it advertises itself to a Cryostat server instance. Required properties 
 
 - [x] `cryostat.agent.baseuri` [`java.net.URI`]: the URL location of the Cryostat server backend that this agent advertises itself to.
 - [x] `cryostat.agent.callback` [`java.net.URI`]: a URL pointing back to this agent, ex. `"https://12.34.56.78:1234/"`. Cryostat will use this URL to perform health checks and request updates from the agent. This reflects the externally-visible IP address/hostname and port where this application and agent can be found.
+- [ ] `cryostat.agent.api.writes-enabled` [`boolean`]: Control whether the agent accepts "write" or mutating operations on its HTTP API. Requests for remote operations such as dynamically starting Flight Recordings will be rejected unless this is set. Default `false`.
 - [ ] `cryostat.agent.instance-id` [`String`]: a unique ID for this agent instance. This will be used to uniquely identify the agent in the Cryostat discovery database, as well as to unambiguously match its encrypted stored credentials. The default is a random UUID string. It is not recommended to override this value.
 - [ ] `cryostat.agent.hostname` [`String`]: the hostname for this application instance. This will be used for the published JMX connection URL. If not provided then the default is to attempt to resolve the localhost hostname.
 - [ ] `cryostat.agent.realm` [`String`]: the Cryostat Discovery API "realm" that this agent belongs to. This should be unique per agent instance. The default is the value of `cryostat.agent.app.name`.
@@ -64,7 +70,6 @@ and how it advertises itself to a Cryostat server instance. Required properties 
 - [ ] `cryostat.agent.webserver.port` [`int`]: the internal port number for the embedded webserver to bind to. Default `9977`.
 - [ ] `cryostat.agent.app.name` [`String`]: a human-friendly name for this application. Default `cryostat-agent`.
 - [ ] `cryostat.agent.app.jmx.port` [`int`]: the JMX RMI port that the application is listening on. The default is to attempt to determine this from the `com.sun.management.jmxremote.port` system property.
-- [ ] `cryostat.agent.registration.prefer-jmx` [`boolean`]: control whether the Agent prefers to publish itself as reachable via JMX or HTTP. If JMX is not enabled on the application JVM then the Agent will always publish itself using HTTP. Default `false`.
 - [ ] `cryostat.agent.registration.retry-ms` [`long`]: the duration in milliseconds between attempts to register with the Cryostat server. Default `5000`.
 - [ ] `cryostat.agent.exit.signals` [`[String]`]: a comma-separated list of signals that the agent should handle. When any of these signals is caught the agent initiates an orderly shutdown, deregistering from the Cryostat server and potentially uploading the latest harvested JFR data. Default `INT,TERM`.
 - [ ] `cryostat.agent.exit.deregistration.timeout-ms` [`long`]: the duration in milliseconds to wait for a response from the Cryostat server when attempting to deregister at shutdown time . Default `3s`.

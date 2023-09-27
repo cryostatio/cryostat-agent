@@ -29,7 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        JVM_version: ['11', '17']
+        JVM_version: ['11', '17', '21']
     if: ${{ github.repository_owner == 'cryostatio' }}
     steps:
     - name: Fail if PR and safe-to-test label NOT applied
