@@ -53,7 +53,7 @@ public class Agent {
             ExecutorService executor = client.executor();
             List<String> exitSignals = client.exitSignals();
             long exitDeregistrationTimeout = client.exitDeregistrationTimeout();
-            if (!args[0].isEmpty()) {
+            if (args.length > 0 && !StringUtils.isBlank(args[0])) {
                 TriggerParser triggerParser = new TriggerParser(args[0]);
                 TriggerEvaluator triggerEvaluator = new TriggerEvaluator(triggerParser.parse());
                 ScheduledExecutorService triggerExecutor = Executors.newScheduledThreadPool(0);
