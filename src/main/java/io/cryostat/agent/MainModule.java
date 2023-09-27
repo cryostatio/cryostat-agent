@@ -297,8 +297,10 @@ public abstract class MainModule {
     public static TriggerEvaluator provideTriggerEvaluatorFactory(
             @Named(TRIGGER_SCHEDULER) ScheduledExecutorService scheduler,
             TriggerParser parser,
-            FlightRecorderHelper helper) {
-        return new TriggerEvaluator(scheduler, parser, helper);
+            FlightRecorderHelper helper,
+            @Named(ConfigModule.CRYOSTAT_AGENT_SMART_TRIGGER_EVALUATION_PERIOD_MS)
+                    long evaluationPeriodMs) {
+        return new TriggerEvaluator(scheduler, parser, helper, evaluationPeriodMs);
     }
 
     @Provides

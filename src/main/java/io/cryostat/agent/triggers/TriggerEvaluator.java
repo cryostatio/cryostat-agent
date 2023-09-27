@@ -43,6 +43,7 @@ public class TriggerEvaluator {
     private final ScheduledExecutorService scheduler;
     private final TriggerParser parser;
     private final FlightRecorderHelper flightRecorderHelper;
+    private final long evaluationPeriodMs;
     private final ConcurrentLinkedQueue<SmartTrigger> triggers = new ConcurrentLinkedQueue<>();
     private Future<?> task;
     private final Logger log = LoggerFactory.getLogger(getClass());
@@ -50,10 +51,12 @@ public class TriggerEvaluator {
     public TriggerEvaluator(
             ScheduledExecutorService scheduler,
             TriggerParser parser,
-            FlightRecorderHelper flightRecorderModule) {
+            FlightRecorderHelper flightRecorderModule,
+            long evaluationPeriodMs) {
         this.scheduler = scheduler;
         this.parser = parser;
         this.flightRecorderHelper = flightRecorderModule;
+        this.evaluationPeriodMs = evaluationPeriodMs;
     }
 
     public void registerTrigger(SmartTrigger t) {
@@ -67,7 +70,9 @@ public class TriggerEvaluator {
             this.task.cancel(false);
         }
         parser.parse(args).forEach(this::registerTrigger);
-        this.task = scheduler.scheduleAtFixedRate(this::evaluate, 0, 1, TimeUnit.SECONDS);
+        this.task =
+                scheduler.scheduleAtFixedRate(
+                        this::evaluate, 0, evaluationPeriodMs, TimeUnit.MILLISECONDS);
     }
 
     private void evaluate() {
