@@ -235,11 +235,12 @@ class RecordingsContext implements RemoteContext {
                 | ServiceNotAvailableException
                 | FlightRecorderException
                 | org.openjdk.jmc.rjmx.services.jfr.FlightRecorderException
-                | InvalidEventTemplateException
                 | InvalidXmlException
                 | IOException e) {
             log.error("Failed to start recording", e);
             exchange.sendResponseHeaders(HttpStatus.SC_INTERNAL_SERVER_ERROR, BODY_LENGTH_NONE);
+        } catch (InvalidEventTemplateException e) {
+            exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
         }
     }
 
@@ -421,7 +422,14 @@ class RecordingsContext implements RemoteContext {
                         localStorageTemplateService.addTemplate(
                                 new ByteArrayInputStream(
                                         req.template.getBytes(StandardCharsets.UTF_8)));
-                events = localStorageTemplateService.getEvents(template).orElseThrow();
+                events =
+                        localStorageTemplateService
+                                .getEvents(template)
+                                .orElseThrow(
+                                        () ->
+                                                new InvalidEventTemplateException(
+                                                        "Falied to retrieve recording events for "
+                                                                + template.getName()));
                 cleanup =
                         () -> {
                             try {
@@ -435,7 +443,12 @@ class RecordingsContext implements RemoteContext {
                         new RemoteTemplateService(conn)
                                 .getEvents(req.localTemplateName, TemplateType.TARGET).stream()
                                         .findFirst()
-                                        .orElseThrow();
+                                        .orElseThrow(
+                                                () ->
+                                                        new InvalidEventTemplateException(
+                                                                "Failed to retrieve recording"
+                                                                        + " events for "
+                                                                        + req.localTemplateName));
             }
             IFlightRecorderService svc = conn.getService();
             return new SerializableRecordingDescriptor(
