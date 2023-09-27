@@ -33,25 +33,36 @@ This assumes that the agent JAR has been included in the application image withi
 
 ## SMART TRIGGERS
 
-'cryostat-agent' supports smart triggers that listen to the values of the MBean Counters and can start recordings based on a set of constraints specified by the user. The general form of a smart trigger expression is as follows:
+`cryostat-agent` supports smart triggers that listen to the values of the MBean Counters and can start recordings based on a set of constraints specified by the user.
+The general form of a smart trigger expression is as follows:
 
+```
 [constraint1(&&/||)constraint2...constraintN]~recordingTemplate.jfc
+```
 
 An example for listening to CPU Usage and starting a recording using the Profiling template when it exceeds 0.2%:
 
+```
 [processCpuUsage>0.2]~Profiling.jfc
+```
 
 An example for watching for the Thread Count to exceed 20 for longer than 10 seconds and starting a recording using the Continuous template:
 
+```
 [threadCount>20&&targetDuration>duration("10s")]~Continuous.jfc
+```
 
 These must be passed as an argument to the cryostat agent, for example:
 
-JAVA_OPTIONS=-javaagent:/deployments/app/cryostat-agent-${CRYOSTAT_AGENT_VERSION}.jar=[processCpuUsage>0.2]~Profiling.jfc
+```
+JAVA_OPTIONS="-javaagent:/deployments/app/cryostat-agent-${CRYOSTAT_AGENT_VERSION}.jar=[processCpuUsage>0.2]~Profiling.jfc"
+```
 
-Multiple smart trigger definitions may be specified and separated by commas, for example
+Multiple smart trigger definitions may be specified and separated by commas, for example:
 
+```
 [processCpuUsage>0.2]~Profiling.jfc,[threadCount>30]~Continuous.jfc
+```
 
 ## CONFIGURATION
 
