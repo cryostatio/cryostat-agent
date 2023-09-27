@@ -59,17 +59,29 @@ public class TriggerEvaluator {
         this.evaluationPeriodMs = evaluationPeriodMs;
     }
 
-    public void registerTrigger(SmartTrigger t) {
+    public void start(String[] args) {
+        this.stop();
+        parser.parse(args).forEach(this::registerTrigger);
+        this.start();
+    }
+
+    public void stop() {
+        if (this.task != null) {
+            this.task.cancel(false);
+        }
+    }
+
+    private void registerTrigger(SmartTrigger t) {
         if (!triggers.contains(t)) {
             triggers.add(t);
         }
     }
 
-    public void start(String[] args) {
-        if (this.task != null) {
-            this.task.cancel(false);
+    private void start() {
+        this.stop();
+        if (this.triggers.isEmpty()) {
+            return;
         }
-        parser.parse(args).forEach(this::registerTrigger);
         this.task =
                 scheduler.scheduleAtFixedRate(
                         this::evaluate, 0, evaluationPeriodMs, TimeUnit.MILLISECONDS);
