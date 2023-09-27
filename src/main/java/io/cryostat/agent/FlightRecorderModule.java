@@ -44,7 +44,7 @@ public class FlightRecorderModule {
 
     public boolean isValidTemplate(String templateName) {
         for (ConfigurationInfo config : bean.getConfigurations()) {
-            if (config.getName().equals(templateName)) {
+            if (config.getName().equals(templateName) || config.getLabel().equals(templateName)) {
                 return true;
             }
         }

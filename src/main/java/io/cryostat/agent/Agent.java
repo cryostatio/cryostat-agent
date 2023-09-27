@@ -53,11 +53,12 @@ public class Agent {
             ExecutorService executor = client.executor();
             List<String> exitSignals = client.exitSignals();
             long exitDeregistrationTimeout = client.exitDeregistrationTimeout();
-            TriggerParser triggerParser = new TriggerParser(args[0]);
-            TriggerEvaluator triggerEvaluator = new TriggerEvaluator(triggerParser.parse());
-            ScheduledExecutorService triggerExecutor = Executors.newScheduledThreadPool(0);
-            triggerExecutor.scheduleAtFixedRate(triggerEvaluator, 0, 1, TimeUnit.SECONDS);
-        
+            if (!args[0].isEmpty()) {
+                TriggerParser triggerParser = new TriggerParser(args[0]);
+                TriggerEvaluator triggerEvaluator = new TriggerEvaluator(triggerParser.parse());
+                ScheduledExecutorService triggerExecutor = Executors.newScheduledThreadPool(0);
+                triggerExecutor.scheduleAtFixedRate(triggerEvaluator, 0, 1, TimeUnit.SECONDS);
+            }
             agentExitHandler =
                     installSignalHandlers(
                             exitSignals,

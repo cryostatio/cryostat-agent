@@ -53,7 +53,7 @@ class MBeanContext implements RemoteContext {
                     try {
                         MBeanInfo info = new MBeanInfo();
                         MBeanMetrics metrics = info.getMBeanMetrics();
-                        exchange.sendResponseHeaders(HttpStatus.SC_OK, 0);
+                        exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
                         try (OutputStream response = exchange.getResponseBody()) {
                             mapper.writeValue(response, metrics);
                         }

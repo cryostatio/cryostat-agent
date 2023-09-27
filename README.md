@@ -49,6 +49,10 @@ These must be passed as an argument to the cryostat agent, for example:
 
 JAVA_OPTIONS=-javaagent:/deployments/app/cryostat-agent-${CRYOSTAT_AGENT_VERSION}.jar=[processCpuUsage>0.2]~Profiling.jfc
 
+Multiple smart trigger definitions may be specified and separated by commas, for example
+
+[processCpuUsage>0.2]~Profiling.jfc,[threadCount>30]~Continuous.jfc
+
 ## CONFIGURATION
 
 `cryostat-agent` uses [smallrye-config](https://github.com/smallrye/smallrye-config) for configuration.
