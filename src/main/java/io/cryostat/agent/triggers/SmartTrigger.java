@@ -25,7 +25,7 @@ public class SmartTrigger {
 
     private static final String DURATION_PATTERN =
             "(.*)(targetDuration[<>=]duration\\(\"(\\d+[sS]|[mM])\"\\))";
-    private Pattern durationPattern = Pattern.compile(DURATION_PATTERN);
+    private static final Pattern durationPattern = Pattern.compile(DURATION_PATTERN);
 
     public enum TriggerState {
         /* Newly Created or Condition not met. */
@@ -38,17 +38,16 @@ public class SmartTrigger {
         COMPLETE
     };
 
-    private TriggerState state;
-    private String expression;
-    private String durationConstraint;
-    private String triggerCondition;
-    private String recordingTemplate;
-    private Duration targetDuration;
-
+    private final String expression;
+    private final String durationConstraint;
+    private final String triggerCondition;
+    private final String recordingTemplate;
+    private final Duration targetDuration;
     /* Keep track of the time the condition was first met for
      * sustained durations
      */
     private Date firstMetTime;
+    private TriggerState state;
 
     public SmartTrigger(String expression, String templateName) {
         this.expression = expression;
@@ -59,8 +58,8 @@ public class SmartTrigger {
         if (m.matches()) {
             String durationString = m.group(m.groupCount());
             durationConstraint = m.group(2);
-            triggerCondition = m.group(1);
-            triggerCondition = triggerCondition.substring(0, triggerCondition.length() - 2);
+            String rawCondition = m.group(1);
+            triggerCondition = rawCondition.substring(0, rawCondition.length() - 2);
             /* Duration.parse requires timestamps in ISO8601 Duration format */
             targetDuration = Duration.parse("PT" + durationString);
         } else {
@@ -109,13 +108,11 @@ public class SmartTrigger {
     @Override
     public int hashCode() {
         return Objects.hash(
-                durationPattern,
                 expression,
                 durationConstraint,
                 triggerCondition,
                 recordingTemplate,
-                targetDuration,
-                firstMetTime);
+                targetDuration);
     }
 
     @Override
@@ -130,12 +127,10 @@ public class SmartTrigger {
             return false;
         }
         SmartTrigger other = (SmartTrigger) obj;
-        return Objects.equals(durationPattern, other.durationPattern)
-                && Objects.equals(expression, other.expression)
+        return Objects.equals(expression, other.expression)
                 && Objects.equals(durationConstraint, other.durationConstraint)
                 && Objects.equals(triggerCondition, other.triggerCondition)
                 && Objects.equals(recordingTemplate, other.recordingTemplate)
-                && Objects.equals(targetDuration, other.targetDuration)
-                && Objects.equals(firstMetTime, other.firstMetTime);
+                && Objects.equals(targetDuration, other.targetDuration);
     }
 }
