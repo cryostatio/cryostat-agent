@@ -21,8 +21,11 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
-import io.cryostat.agent.FlightRecorderModule;
+import io.cryostat.agent.FlightRecorderHelper;
 import io.cryostat.agent.model.MBeanInfo;
 import io.cryostat.agent.triggers.SmartTrigger.TriggerState;
 
@@ -35,23 +38,39 @@ import org.projectnessie.cel.tools.ScriptHost;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class TriggerEvaluator implements Runnable {
+public class TriggerEvaluator {
 
-    private ConcurrentLinkedQueue<SmartTrigger> triggers;
+    private final ScheduledExecutorService scheduler;
+    private final TriggerParser parser;
+    private final FlightRecorderHelper flightRecorderHelper;
+    private final ConcurrentLinkedQueue<SmartTrigger> triggers = new ConcurrentLinkedQueue<>();
+    private Future<?> task;
     private final Logger log = LoggerFactory.getLogger(getClass());
-    private FlightRecorderModule flightRecorderModule;
 
-    public TriggerEvaluator(List<SmartTrigger> triggers) {
-        this.triggers = new ConcurrentLinkedQueue<>(triggers);
-        this.flightRecorderModule = new FlightRecorderModule();
+    public TriggerEvaluator(
+            ScheduledExecutorService scheduler,
+            TriggerParser parser,
+            FlightRecorderHelper flightRecorderModule) {
+        this.scheduler = scheduler;
+        this.parser = parser;
+        this.flightRecorderHelper = flightRecorderModule;
     }
 
     public void registerTrigger(SmartTrigger t) {
-        triggers.add(t);
+        if (!triggers.contains(t)) {
+            triggers.add(t);
+        }
     }
 
-    @Override
-    public void run() {
+    public void start(String[] args) {
+        if (this.task != null) {
+            this.task.cancel(false);
+        }
+        parser.parse(args).forEach(this::registerTrigger);
+        this.task = scheduler.scheduleAtFixedRate(this::evaluate, 0, 1, TimeUnit.SECONDS);
+    }
+
+    private void evaluate() {
         for (SmartTrigger t : triggers) {
             Date currentTime = new Date(System.currentTimeMillis());
             long difference = 0;
@@ -68,7 +87,7 @@ public class TriggerEvaluator implements Runnable {
                     // met once
                     if (t.getTargetDuration().equals(Duration.ZERO)
                             && evaluateTriggerConstraint(t, t.getTargetDuration())) {
-                        flightRecorderModule.startRecording(t.getRecordingTemplateName());
+                        flightRecorderHelper.startRecording(t.getRecordingTemplateName());
                         t.setState(TriggerState.COMPLETE);
                     } else if (!t.getTargetDuration().equals(Duration.ZERO)) {
                         if (evaluateTriggerConstraint(t, Duration.ZERO) == true) {
@@ -86,7 +105,7 @@ public class TriggerEvaluator implements Runnable {
                     if (handleDuration(difference, t)) {
                         if (evaluateTriggerConstraint(t, Duration.ofMillis(difference)) == true) {
                             t.setState(TriggerState.COMPLETE);
-                            flightRecorderModule.startRecording(t.getRecordingTemplateName());
+                            flightRecorderHelper.startRecording(t.getRecordingTemplateName());
                         } else {
                             t.setState(TriggerState.WAITING_LOW);
                         }

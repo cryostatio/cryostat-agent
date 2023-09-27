@@ -26,11 +26,11 @@ import jdk.jfr.Recording;
 import jdk.management.jfr.ConfigurationInfo;
 import jdk.management.jfr.FlightRecorderMXBean;
 
-public class FlightRecorderModule {
+public class FlightRecorderHelper {
 
     private FlightRecorderMXBean bean;
 
-    public FlightRecorderModule() {
+    public FlightRecorderHelper() {
         bean = ManagementFactory.getPlatformMXBean(FlightRecorderMXBean.class);
     }
 

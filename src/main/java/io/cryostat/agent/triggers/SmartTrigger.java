@@ -17,6 +17,7 @@ package io.cryostat.agent.triggers;
 
 import java.time.Duration;
 import java.util.Date;
+import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -103,5 +104,38 @@ public class SmartTrigger {
 
     public String getDurationConstraint() {
         return durationConstraint;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(
+                durationPattern,
+                expression,
+                durationConstraint,
+                triggerCondition,
+                recordingTemplate,
+                targetDuration,
+                firstMetTime);
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) {
+            return true;
+        }
+        if (obj == null) {
+            return false;
+        }
+        if (getClass() != obj.getClass()) {
+            return false;
+        }
+        SmartTrigger other = (SmartTrigger) obj;
+        return Objects.equals(durationPattern, other.durationPattern)
+                && Objects.equals(expression, other.expression)
+                && Objects.equals(durationConstraint, other.durationConstraint)
+                && Objects.equals(triggerCondition, other.triggerCondition)
+                && Objects.equals(recordingTemplate, other.recordingTemplate)
+                && Objects.equals(targetDuration, other.targetDuration)
+                && Objects.equals(firstMetTime, other.firstMetTime);
     }
 }

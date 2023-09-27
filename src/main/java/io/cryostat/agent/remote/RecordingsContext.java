@@ -59,12 +59,12 @@ import io.cryostat.core.templates.TemplateType;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
-import org.apache.http.HttpStatus;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import io.smallrye.config.SmallRyeConfig;
 import jdk.jfr.FlightRecorder;
 import jdk.jfr.Recording;
+import org.apache.http.HttpStatus;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 class RecordingsContext implements RemoteContext {
 

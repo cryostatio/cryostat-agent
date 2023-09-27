@@ -21,7 +21,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -30,7 +29,6 @@ import javax.inject.Named;
 import javax.inject.Singleton;
 
 import io.cryostat.agent.triggers.TriggerEvaluator;
-import io.cryostat.agent.triggers.TriggerParser;
 
 import dagger.Component;
 import org.slf4j.Logger;
@@ -53,12 +51,7 @@ public class Agent {
             ExecutorService executor = client.executor();
             List<String> exitSignals = client.exitSignals();
             long exitDeregistrationTimeout = client.exitDeregistrationTimeout();
-            if (args.length > 0 && !StringUtils.isBlank(args[0])) {
-                TriggerParser triggerParser = new TriggerParser(args[0]);
-                TriggerEvaluator triggerEvaluator = new TriggerEvaluator(triggerParser.parse());
-                ScheduledExecutorService triggerExecutor = Executors.newScheduledThreadPool(0);
-                triggerExecutor.scheduleAtFixedRate(triggerEvaluator, 0, 1, TimeUnit.SECONDS);
-            }
+
             agentExitHandler =
                     installSignalHandlers(
                             exitSignals,
@@ -96,6 +89,7 @@ public class Agent {
                     });
             webServer.start();
             registration.start();
+            client.triggerEvaluator().start(args);
             log.info("Startup complete");
         } catch (Exception e) {
             log.error(Agent.class.getSimpleName() + " startup failure", e);
@@ -151,6 +145,10 @@ public class Agent {
         Registration registration();
 
         Harvester harvester();
+
+        FlightRecorderHelper flightRecorderHelper();
+
+        TriggerEvaluator triggerEvaluator();
 
         ScheduledExecutorService executor();
 

@@ -37,6 +37,8 @@ import javax.net.ssl.X509TrustManager;
 import io.cryostat.agent.Harvester.RecordingSettings;
 import io.cryostat.agent.remote.RemoteContext;
 import io.cryostat.agent.remote.RemoteModule;
+import io.cryostat.agent.triggers.TriggerEvaluator;
+import io.cryostat.agent.triggers.TriggerParser;
 import io.cryostat.core.net.JFRConnection;
 import io.cryostat.core.net.JFRConnectionToolkit;
 import io.cryostat.core.sys.Environment;
@@ -69,6 +71,7 @@ public abstract class MainModule {
     private static final int NUM_WORKER_THREADS = 3;
     private static final String JVM_ID = "JVM_ID";
     private static final String TEMPLATES_PATH = "TEMPLATES_PATH";
+    private static final String TRIGGER_SCHEDULER = "TRIGGER_SCHEDULER";
 
     @Provides
     @Singleton
@@ -268,6 +271,34 @@ public abstract class MainModule {
                 periodicSettings,
                 client,
                 registration);
+    }
+
+    @Provides
+    @Singleton
+    @Named(TRIGGER_SCHEDULER)
+    public static ScheduledExecutorService provideTriggerScheduler() {
+        return Executors.newScheduledThreadPool(0);
+    }
+
+    @Provides
+    @Singleton
+    public static FlightRecorderHelper provideFlightRecorderHelper() {
+        return new FlightRecorderHelper();
+    }
+
+    @Provides
+    @Singleton
+    public static TriggerParser provideTriggerParser(FlightRecorderHelper helper) {
+        return new TriggerParser(helper);
+    }
+
+    @Provides
+    @Singleton
+    public static TriggerEvaluator provideTriggerEvaluatorFactory(
+            @Named(TRIGGER_SCHEDULER) ScheduledExecutorService scheduler,
+            TriggerParser parser,
+            FlightRecorderHelper helper) {
+        return new TriggerEvaluator(scheduler, parser, helper);
     }
 
     @Provides

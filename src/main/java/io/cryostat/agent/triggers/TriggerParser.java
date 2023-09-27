@@ -20,7 +20,8 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import io.cryostat.agent.FlightRecorderModule;
+import io.cryostat.agent.FlightRecorderHelper;
+import io.cryostat.agent.StringUtils;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,28 +30,32 @@ public class TriggerParser {
 
     private static final String EXPRESSION_PATTERN_STRING = "\\[(.*(&&)*|(\\|\\|)*)\\]~(.*\\.jfc)";
     private static final Pattern EXPRESSION_PATTERN = Pattern.compile(EXPRESSION_PATTERN_STRING);
+    private final FlightRecorderHelper flightRecorderHelper;
     private final Logger log = LoggerFactory.getLogger(getClass());
-    private String triggerDefinitions;
-    private FlightRecorderModule flightRecorderModule;
 
-    public TriggerParser(String args) {
-        if (args.isEmpty()) {
-            log.warn("Agent args were empty, no Triggers were defined");
-            return;
-        }
-        triggerDefinitions = args;
-        flightRecorderModule = new FlightRecorderModule();
+    public TriggerParser(FlightRecorderHelper flightRecorderHelper) {
+        this.flightRecorderHelper = flightRecorderHelper;
     }
 
-    public List<SmartTrigger> parse() {
+    public List<SmartTrigger> parse(String[] args) {
+        List<SmartTrigger> triggers = new ArrayList<>();
+        if (args.length < 1) {
+            log.trace("Agent args were empty, no Triggers were defined");
+            return triggers;
+        }
+        if (StringUtils.isBlank(args[0])) {
+            log.warn("Agent arg[0] was blank, no Triggers were defined");
+            return triggers;
+        }
+        String triggerDefinitions = args[0];
+
         String[] expressions = triggerDefinitions.split(",");
-        List<SmartTrigger> triggers = new ArrayList();
         for (String s : expressions) {
             Matcher m = EXPRESSION_PATTERN.matcher(s);
             if (m.matches()) {
                 String constraintString = m.group(1);
                 String templateName = m.group(4);
-                if (flightRecorderModule.isValidTemplate(templateName)) {
+                if (flightRecorderHelper.isValidTemplate(templateName)) {
                     SmartTrigger trigger = new SmartTrigger(constraintString, templateName);
                     triggers.add(trigger);
                 } else {
