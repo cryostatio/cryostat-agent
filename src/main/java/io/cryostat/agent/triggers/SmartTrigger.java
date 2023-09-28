@@ -46,8 +46,8 @@ public class SmartTrigger {
     /* Keep track of the time the condition was first met for
      * sustained durations
      */
-    private Date firstMetTime;
-    private TriggerState state;
+    private volatile Date firstMetTime;
+    private volatile TriggerState state;
 
     public SmartTrigger(String expression, String templateName) {
         this.expression = expression;
