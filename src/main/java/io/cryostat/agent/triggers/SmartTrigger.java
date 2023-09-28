@@ -94,7 +94,7 @@ public class SmartTrigger {
     }
 
     public Date getTimeConditionFirstMet() {
-        return new Date(firstMetTime.getTime());
+        return firstMetTime == null ? null : new Date(firstMetTime.getTime());
     }
 
     public String getTriggerCondition() {
