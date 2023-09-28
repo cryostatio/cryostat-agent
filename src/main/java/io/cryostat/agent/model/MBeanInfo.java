@@ -128,7 +128,12 @@ public class MBeanInfo {
     private RuntimeMetrics getRuntimeMetrics() {
         RuntimeMXBean runtimeBean = ManagementFactory.getRuntimeMXBean();
         Map<String, Object> runtimeAttrs = new HashMap<>();
-        safeStore("BootClassPath", runtimeAttrs, runtimeBean::getBootClassPath);
+        safeStore(
+                "BootClassPathSupported",
+                runtimeAttrs,
+                runtimeBean::isBootClassPathSupported,
+                true);
+        safeStore("BootClassPath", runtimeAttrs, runtimeBean::getBootClassPath, true);
         safeStore("ClassPath", runtimeAttrs, runtimeBean::getClassPath);
         safeStore(
                 "InputArguments",
@@ -145,7 +150,6 @@ public class MBeanInfo {
         safeStore("VmName", runtimeAttrs, runtimeBean::getVmName);
         safeStore("VmVendor", runtimeAttrs, runtimeBean::getVmVendor);
         safeStore("VmVersion", runtimeAttrs, runtimeBean::getVmVersion);
-        safeStore("BootClassPathSupported", runtimeAttrs, runtimeBean::isBootClassPathSupported);
         return new RuntimeMetrics(runtimeAttrs);
     }
 
@@ -201,11 +205,17 @@ public class MBeanInfo {
     }
 
     private <T> void safeStore(String key, Map<String, Object> map, Callable<T> fn) {
+        safeStore(key, map, fn, true);
+    }
+
+    private <T> void safeStore(String key, Map<String, Object> map, Callable<T> fn, boolean quiet) {
         try {
             map.put(key, fn.call());
             simplifiedMetrics.put(key, fn.call());
         } catch (Exception e) {
-            log.warn("Call failed", e);
+            if (!quiet) {
+                log.warn("Call failed", e);
+            }
         }
     }
 }
