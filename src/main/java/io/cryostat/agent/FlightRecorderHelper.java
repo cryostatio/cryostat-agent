@@ -25,21 +25,30 @@ import jdk.jfr.FlightRecorder;
 import jdk.jfr.Recording;
 import jdk.management.jfr.ConfigurationInfo;
 import jdk.management.jfr.FlightRecorderMXBean;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class FlightRecorderHelper {
 
-    private FlightRecorderMXBean bean;
-
-    public FlightRecorderHelper() {
-        bean = ManagementFactory.getPlatformMXBean(FlightRecorderMXBean.class);
-    }
+    private final FlightRecorderMXBean bean =
+            ManagementFactory.getPlatformMXBean(FlightRecorderMXBean.class);
+    private final Logger log = LoggerFactory.getLogger(getClass());
 
     public void startRecording(String templateName) {
-        if (isValidTemplate(templateName)) {
-            long recordingId = bean.getRecordings().size() + 1;
-            bean.startRecording(recordingId);
-            bean.setConfiguration(recordingId, templateName);
+        if (!isValidTemplate(templateName)) {
+            log.error("Cannot start recording with template named {}", templateName);
+            return;
         }
+        long recordingId = bean.newRecording();
+        bean.setPredefinedConfiguration(recordingId, templateName);
+        bean.setRecordingOptions(
+                recordingId,
+                Map.of(
+                        "name",
+                        String.format("cryostat-smart-trigger-%d", recordingId),
+                        "disk",
+                        "true"));
+        bean.startRecording(recordingId);
     }
 
     public boolean isValidTemplate(String templateName) {
