@@ -42,14 +42,10 @@ public class FlightRecorderHelper {
         }
         long recordingId = bean.newRecording();
         bean.setPredefinedConfiguration(recordingId, templateName);
-        bean.setRecordingOptions(
-                recordingId,
-                Map.of(
-                        "name",
-                        String.format("cryostat-smart-trigger-%d", recordingId),
-                        "disk",
-                        "true"));
+        String recoringName = String.format("cryostat-smart-trigger-%d", recordingId);
+        bean.setRecordingOptions(recordingId, Map.of("name", recoringName, "disk", "true"));
         bean.startRecording(recordingId);
+        log.info("Started recording \"{}\" using template \"{}\"", recoringName, templateName);
     }
 
     public boolean isValidTemplate(String templateName) {
