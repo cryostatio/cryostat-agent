@@ -146,8 +146,6 @@ public class Agent {
 
         Harvester harvester();
 
-        FlightRecorderHelper flightRecorderHelper();
-
         TriggerEvaluator triggerEvaluator();
 
         ScheduledExecutorService executor();
