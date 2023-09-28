@@ -18,6 +18,7 @@ package io.cryostat.agent.triggers;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -89,53 +90,64 @@ public class TriggerEvaluator {
     }
 
     private void evaluate() {
-        for (SmartTrigger t : triggers) {
-            Date currentTime = new Date(System.currentTimeMillis());
-            long difference = 0;
-            if (t.getTimeConditionFirstMet() != null) {
-                difference = currentTime.getTime() - t.getTimeConditionFirstMet().getTime();
-            }
-            switch (t.getState()) {
-                case COMPLETE:
-                    /* Trigger condition has been met, can remove it */
-                    triggers.remove(t);
-                    break;
-                case NEW:
-                    // Simple Constraint, no duration specified so condition only needs to be
-                    // met once
-                    if (t.getTargetDuration().equals(Duration.ZERO)
-                            && evaluateTriggerConstraint(t, t.getTargetDuration())) {
-                        flightRecorderHelper.startRecording(t.getRecordingTemplateName());
-                        t.setState(TriggerState.COMPLETE);
-                    } else if (!t.getTargetDuration().equals(Duration.ZERO)) {
-                        if (evaluateTriggerConstraint(t, Duration.ZERO) == true) {
-                            // Condition was met, set the state accordingly
+        try {
+            for (SmartTrigger t : triggers) {
+                log.trace("Evaluating {}", t);
+                Date currentTime = new Date(System.currentTimeMillis());
+                long difference = 0;
+                if (t.getTimeConditionFirstMet() != null) {
+                    difference = currentTime.getTime() - t.getTimeConditionFirstMet().getTime();
+                }
+                switch (t.getState()) {
+                    case COMPLETE:
+                        /* Trigger condition has been met, can remove it */
+                        log.trace("Completed {} , removing", t);
+                        triggers.remove(t);
+                        break;
+                    case NEW:
+                        // Simple Constraint, no duration specified so condition only needs to be
+                        // met once
+                        if (t.getTargetDuration().equals(Duration.ZERO)
+                                && evaluateTriggerConstraint(t, t.getTargetDuration())) {
+                            log.trace("Trigger {} satisfied, starting recording...", t);
+                            flightRecorderHelper.startRecording(t.getRecordingTemplateName());
+                            t.setState(TriggerState.COMPLETE);
+                        } else if (!t.getTargetDuration().equals(Duration.ZERO)) {
+                            if (evaluateTriggerConstraint(t, Duration.ZERO)) {
+                                // Condition was met, set the state accordingly
+                                log.trace("Trigger {} satisfied, watching...", t);
+                                t.setState(TriggerState.WAITING_HIGH);
+                                t.setTimeConditionFirstMet(new Date(System.currentTimeMillis()));
+                            } else {
+                                // Condition wasn't met, keep waiting.
+                                log.trace("Trigger {} not yet satisfied...", t);
+                                t.setState(TriggerState.WAITING_LOW);
+                            }
+                        }
+                        break;
+                    case WAITING_HIGH:
+                        // Condition was met at last check but duration hasn't passed
+                        if (handleDuration(difference, t)) {
+                            if (evaluateTriggerConstraint(t, Duration.ofMillis(difference))) {
+                                log.trace("Trigger {} satisfied, completing...", t);
+                                t.setState(TriggerState.COMPLETE);
+                                flightRecorderHelper.startRecording(t.getRecordingTemplateName());
+                            } else {
+                                log.trace("Trigger {} satisfied, waiting for duration...", t);
+                                t.setState(TriggerState.WAITING_LOW);
+                            }
+                        }
+                        break;
+                    case WAITING_LOW:
+                        if (evaluateTriggerConstraint(t, Duration.ofMillis(difference))) {
                             t.setState(TriggerState.WAITING_HIGH);
                             t.setTimeConditionFirstMet(new Date(System.currentTimeMillis()));
-                        } else {
-                            // Condition wasn't met, keep waiting.
-                            t.setState(TriggerState.WAITING_LOW);
                         }
-                    }
-                    break;
-                case WAITING_HIGH:
-                    // Condition was met at last check but duration hasn't passed
-                    if (handleDuration(difference, t)) {
-                        if (evaluateTriggerConstraint(t, Duration.ofMillis(difference)) == true) {
-                            t.setState(TriggerState.COMPLETE);
-                            flightRecorderHelper.startRecording(t.getRecordingTemplateName());
-                        } else {
-                            t.setState(TriggerState.WAITING_LOW);
-                        }
-                    }
-                    break;
-                case WAITING_LOW:
-                    if (evaluateTriggerConstraint(t, Duration.ofMillis(difference))) {
-                        t.setState(TriggerState.WAITING_HIGH);
-                        t.setTimeConditionFirstMet(new Date(System.currentTimeMillis()));
-                    }
-                    break;
+                        break;
+                }
             }
+        } catch (Exception e) {
+            log.error("Unexpected exception during evaluation", e);
         }
     }
 
@@ -155,14 +167,15 @@ public class TriggerEvaluator {
 
     private boolean evaluateTriggerConstraint(SmartTrigger trigger, Duration target) {
         try {
-            Map<String, Object> scriptVars = new MBeanInfo().getSimplifiedMetrics();
+            Map<String, Object> scriptVars = new HashMap<>(new MBeanInfo().getSimplifiedMetrics());
             ScriptHost scriptHost = ScriptHost.newBuilder().build();
             Script script =
                     scriptHost
                             .buildScript(trigger.getExpression())
                             .withDeclarations(buildDeclarations(scriptVars))
                             .build();
-            scriptVars.put("targetDuration", trigger.getTargetDuration());
+            scriptVars.put("TargetDuration", trigger.getTargetDuration());
+            log.trace("evaluating mbean map:\n{}", scriptVars);
             Boolean result = script.execute(Boolean.class, scriptVars);
             return Boolean.TRUE.equals(result);
         } catch (Exception e) {
@@ -174,9 +187,12 @@ public class TriggerEvaluator {
     private List<Decl> buildDeclarations(Map<String, Object> scriptVars) {
         ArrayList<Decl> decls = new ArrayList<>();
         for (Map.Entry<String, Object> s : scriptVars.entrySet()) {
-            decls.add(Decls.newVar(s.getKey(), parseType(s.getValue())));
+            String key = s.getKey();
+            Type parseType = parseType(s.getValue());
+            log.trace("Declaring script var {} [{}]", key, parseType);
+            decls.add(Decls.newVar(key, parseType));
         }
-        decls.add(Decls.newVar("targetDuration", Decls.Duration));
+        decls.add(Decls.newVar("TargetDuration", Decls.Duration));
         return decls;
     }
 
