@@ -72,6 +72,7 @@ public class TriggerEvaluator {
     }
 
     private void registerTrigger(SmartTrigger t) {
+        log.info("Registering Smart Trigger: {}", t);
         if (!triggers.contains(t)) {
             triggers.add(t);
         }

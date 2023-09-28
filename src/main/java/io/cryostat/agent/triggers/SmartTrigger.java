@@ -133,4 +133,19 @@ public class SmartTrigger {
                 && Objects.equals(recordingTemplate, other.recordingTemplate)
                 && Objects.equals(targetDuration, other.targetDuration);
     }
+
+    @Override
+    public String toString() {
+        return "SmartTrigger [durationConstraint="
+                + durationConstraint
+                + ", expression="
+                + expression
+                + ", recordingTemplate="
+                + recordingTemplate
+                + ", targetDuration="
+                + targetDuration
+                + ", triggerCondition="
+                + triggerCondition
+                + "]";
+    }
 }
