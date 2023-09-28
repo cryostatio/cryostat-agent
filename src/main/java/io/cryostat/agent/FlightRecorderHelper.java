@@ -34,6 +34,7 @@ public class FlightRecorderHelper {
             ManagementFactory.getPlatformMXBean(FlightRecorderMXBean.class);
     private final Logger log = LoggerFactory.getLogger(getClass());
 
+    // FIXME this is repeated logic shared with Harvester startRecording
     public void startRecording(String templateName) {
         if (!isValidTemplate(templateName)) {
             log.error("Cannot start recording with template named {}", templateName);
