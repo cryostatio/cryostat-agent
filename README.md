@@ -43,25 +43,25 @@ The general form of a smart trigger expression is as follows:
 An example for listening to CPU Usage and starting a recording using the Profiling template when it exceeds 0.2%:
 
 ```
-[processCpuUsage>0.2]~profile
+[ProcessCpuLoad>0.2]~profile
 ```
 
 An example for watching for the Thread Count to exceed 20 for longer than 10 seconds and starting a recording using the Continuous template:
 
 ```
-[threadCount>20&&targetDuration>duration("10s")]~Continuous
+[ThreadCount>20&&TargetDuration>duration("10s")]~Continuous
 ```
 
 These must be passed as an argument to the cryostat agent, for example:
 
 ```
-JAVA_OPTIONS="-javaagent:/deployments/app/cryostat-agent-${CRYOSTAT_AGENT_VERSION}.jar=[processCpuUsage>0.2]~profile
+JAVA_OPTIONS="-javaagent:/deployments/app/cryostat-agent-${CRYOSTAT_AGENT_VERSION}.jar=[ProcessCpuLoad>0.2]~profile
 ```
 
 Multiple smart trigger definitions may be specified and separated by commas, for example:
 
 ```
-[processCpuUsage>0.2]~profile,[threadCount>30]~Continuous
+[ProcessCpuLoad>0.2]~profile,[ThreadCount>30]~Continuous
 ```
 
 ## CONFIGURATION
