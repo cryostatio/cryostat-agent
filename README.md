@@ -64,6 +64,8 @@ Multiple smart trigger definitions may be specified and separated by commas, for
 [ProcessCpuLoad>0.2]~profile,[ThreadCount>30]~Continuous
 ```
 
+**NOTE**: Smart Triggers are evaluated on a polling basis. The poll period is configurable (see list below). This means that your conditions are subject to sampling biases.
+
 ## CONFIGURATION
 
 `cryostat-agent` uses [smallrye-config](https://github.com/smallrye/smallrye-config) for configuration.
