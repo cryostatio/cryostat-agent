@@ -148,10 +148,12 @@ public class TriggerEvaluator {
             return trigger.getTargetDuration().toMillis() > difference;
         } else if (trigger.getDurationConstraint().contains("<")) {
             return trigger.getTargetDuration().toMillis() < difference;
-        } else return trigger.getTargetDuration().toMillis() == difference;
+        } else {
+            return trigger.getTargetDuration().toMillis() == difference;
+        }
     }
 
-    public boolean evaluateTriggerConstraint(SmartTrigger trigger, Duration target) {
+    private boolean evaluateTriggerConstraint(SmartTrigger trigger, Duration target) {
         try {
             Map<String, Object> scriptVars = new MBeanInfo().getSimplifiedMetrics();
             ScriptHost scriptHost = ScriptHost.newBuilder().build();
@@ -162,7 +164,7 @@ public class TriggerEvaluator {
                             .build();
             scriptVars.put("targetDuration", trigger.getTargetDuration());
             Boolean result = script.execute(Boolean.class, scriptVars);
-            return result;
+            return Boolean.TRUE.equals(result);
         } catch (Exception e) {
             log.error("Failed to create or execute script", e);
             return false;
