@@ -28,7 +28,8 @@ import org.slf4j.LoggerFactory;
 
 public class TriggerParser {
 
-    private static final String EXPRESSION_PATTERN_STRING = "\\[(.*(&&)*|(\\|\\|)*)\\]~(.*\\.jfc)";
+    private static final String EXPRESSION_PATTERN_STRING =
+            "\\[(.*(&&)*|(\\|\\|)*)\\]~([\\w\\-]+)(?:\\.jfc)?";
     private static final Pattern EXPRESSION_PATTERN = Pattern.compile(EXPRESSION_PATTERN_STRING);
     private final FlightRecorderHelper flightRecorderHelper;
     private final Logger log = LoggerFactory.getLogger(getClass());
