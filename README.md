@@ -37,31 +37,31 @@ This assumes that the agent JAR has been included in the application image withi
 The general form of a smart trigger expression is as follows:
 
 ```
-[constraint1(&&/||)constraint2...constraintN]~recordingTemplate.jfc
+[constraint1(&&/||)constraint2...constraintN]~recordingTemplate
 ```
 
 An example for listening to CPU Usage and starting a recording using the Profiling template when it exceeds 0.2%:
 
 ```
-[processCpuUsage>0.2]~Profiling.jfc
+[processCpuUsage>0.2]~profile
 ```
 
 An example for watching for the Thread Count to exceed 20 for longer than 10 seconds and starting a recording using the Continuous template:
 
 ```
-[threadCount>20&&targetDuration>duration("10s")]~Continuous.jfc
+[threadCount>20&&targetDuration>duration("10s")]~Continuous
 ```
 
 These must be passed as an argument to the cryostat agent, for example:
 
 ```
-JAVA_OPTIONS="-javaagent:/deployments/app/cryostat-agent-${CRYOSTAT_AGENT_VERSION}.jar=[processCpuUsage>0.2]~Profiling.jfc"
+JAVA_OPTIONS="-javaagent:/deployments/app/cryostat-agent-${CRYOSTAT_AGENT_VERSION}.jar=[processCpuUsage>0.2]~profile
 ```
 
 Multiple smart trigger definitions may be specified and separated by commas, for example:
 
 ```
-[processCpuUsage>0.2]~Profiling.jfc,[threadCount>30]~Continuous.jfc
+[processCpuUsage>0.2]~profile,[threadCount>30]~Continuous
 ```
 
 ## CONFIGURATION
