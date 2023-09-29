@@ -53,7 +53,6 @@ public class SmartTrigger {
         this.expression = expression;
         this.recordingTemplate = templateName;
         this.state = TriggerState.NEW;
-        // this.firstMetTime = new Date(System.currentTimeMillis());
         Matcher m = durationPattern.matcher(expression);
         if (m.matches()) {
             String durationString = m.group(m.groupCount());
@@ -83,6 +82,10 @@ public class SmartTrigger {
 
     public String getRecordingTemplateName() {
         return recordingTemplate;
+    }
+
+    public boolean isSimple() {
+        return Duration.ZERO.equals(getTargetDuration());
     }
 
     public Duration getTargetDuration() {

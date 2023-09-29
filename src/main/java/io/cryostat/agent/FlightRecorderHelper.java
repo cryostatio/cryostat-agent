@@ -18,6 +18,7 @@ package io.cryostat.agent;
 import java.lang.management.ManagementFactory;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
@@ -35,26 +36,36 @@ public class FlightRecorderHelper {
     private final Logger log = LoggerFactory.getLogger(getClass());
 
     // FIXME this is repeated logic shared with Harvester startRecording
-    public void startRecording(String templateName) {
-        if (!isValidTemplate(templateName)) {
-            log.error("Cannot start recording with template named {}", templateName);
-            return;
-        }
-        long recordingId = bean.newRecording();
-        bean.setPredefinedConfiguration(recordingId, templateName);
-        String recoringName = String.format("cryostat-smart-trigger-%d", recordingId);
-        bean.setRecordingOptions(recordingId, Map.of("name", recoringName, "disk", "true"));
-        bean.startRecording(recordingId);
-        log.info("Started recording \"{}\" using template \"{}\"", recoringName, templateName);
+    public void startRecording(String templateNameOrLabel) {
+        getTemplate(templateNameOrLabel)
+                .ifPresentOrElse(
+                        c -> {
+                            long recordingId = bean.newRecording();
+                            bean.setPredefinedConfiguration(recordingId, c.getName());
+                            String recoringName =
+                                    String.format("cryostat-smart-trigger-%d", recordingId);
+                            bean.setRecordingOptions(
+                                    recordingId, Map.of("name", recoringName, "disk", "true"));
+                            bean.startRecording(recordingId);
+                            log.info(
+                                    "Started recording \"{}\" using template \"{}\"",
+                                    recoringName,
+                                    templateNameOrLabel);
+                        },
+                        () ->
+                                log.error(
+                                        "Cannot start recording with template named or labelled {}",
+                                        templateNameOrLabel));
     }
 
-    public boolean isValidTemplate(String templateName) {
-        for (ConfigurationInfo config : bean.getConfigurations()) {
-            if (config.getName().equals(templateName) || config.getLabel().equals(templateName)) {
-                return true;
-            }
-        }
-        return false;
+    public Optional<ConfigurationInfo> getTemplate(String nameOrLabel) {
+        return bean.getConfigurations().stream()
+                .filter(c -> c.getName().equals(nameOrLabel) || c.getLabel().equals(nameOrLabel))
+                .findFirst();
+    }
+
+    public boolean isValidTemplate(String nameOrLabel) {
+        return getTemplate(nameOrLabel).isPresent();
     }
 
     public List<RecordingInfo> getRecordings() {
