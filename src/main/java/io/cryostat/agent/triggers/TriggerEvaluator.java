@@ -165,7 +165,7 @@ public class TriggerEvaluator {
         }
     }
 
-    private boolean evaluateTriggerConstraint(SmartTrigger trigger, Duration target) {
+    private boolean evaluateTriggerConstraint(SmartTrigger trigger, Duration targetDuration) {
         try {
             Map<String, Object> scriptVars = new HashMap<>(new MBeanInfo().getSimplifiedMetrics());
             ScriptHost scriptHost = ScriptHost.newBuilder().build();
@@ -174,7 +174,7 @@ public class TriggerEvaluator {
                             .buildScript(trigger.getExpression())
                             .withDeclarations(buildDeclarations(scriptVars))
                             .build();
-            scriptVars.put("TargetDuration", trigger.getTargetDuration());
+            scriptVars.put("TargetDuration", targetDuration);
             log.trace("evaluating mbean map:\n{}", scriptVars);
             Boolean result = script.execute(Boolean.class, scriptVars);
             return Boolean.TRUE.equals(result);
