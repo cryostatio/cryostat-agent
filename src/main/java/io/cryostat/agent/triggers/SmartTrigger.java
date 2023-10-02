@@ -24,7 +24,7 @@ import java.util.regex.Pattern;
 public class SmartTrigger {
 
     private static final String DURATION_PATTERN =
-            "(.+)(?:[&|]{2})(TargetDuration[<>=]duration\\(\"(\\d+[sSmMhH]+)\"\\))";
+            "(.+)(?:[&|]{2})(TargetDuration[<>=]+duration\\(\"(\\d+[sSmMhH]+)\"\\))";
     private static final Pattern durationPattern = Pattern.compile(DURATION_PATTERN);
 
     public enum TriggerState {
