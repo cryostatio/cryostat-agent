@@ -140,7 +140,8 @@ public class TriggerEvaluator {
                     case WAITING_LOW:
                         log.trace("Trigger {} in WAITING_LOW, checking...", t);
                         if (evaluateTriggerConstraint(t, Duration.ZERO)) {
-                            log.trace("Trigger {} met for the first time! Going to WAITING_HIGH", t);
+                            log.trace(
+                                    "Trigger {} met for the first time! Going to WAITING_HIGH", t);
                             t.setTimeConditionFirstMet(new Date(System.currentTimeMillis()));
                             t.setState(TriggerState.WAITING_HIGH);
                         }
