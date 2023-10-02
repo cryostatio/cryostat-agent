@@ -15,6 +15,7 @@
  */
 package io.cryostat.agent.triggers;
 
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -57,8 +58,12 @@ public class TriggerParser {
                 String constraintString = m.group(1);
                 String templateName = m.group(4);
                 if (flightRecorderHelper.isValidTemplate(templateName)) {
-                    SmartTrigger trigger = new SmartTrigger(constraintString, templateName);
-                    triggers.add(trigger);
+                    try {
+                        SmartTrigger trigger = new SmartTrigger(constraintString, templateName);
+                        triggers.add(trigger);
+                    } catch (DateTimeParseException dtpe) {
+                        log.error("Failed to parse trigger duration constraint", dtpe);
+                    }
                 } else {
                     log.error("Template " + templateName + " not found. Skipping trigger.");
                 }
