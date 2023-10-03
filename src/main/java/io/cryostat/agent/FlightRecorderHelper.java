@@ -59,6 +59,10 @@ public class FlightRecorderHelper {
     }
 
     public List<RecordingInfo> getRecordings() {
+        if (!FlightRecorder.isAvailable()) {
+            log.error("FlightRecorder is unavailable");
+            return List.of();
+        }
         return FlightRecorder.getFlightRecorder().getRecordings().stream()
                 .map(RecordingInfo::new)
                 .collect(Collectors.toList());
