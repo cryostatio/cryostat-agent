@@ -233,17 +233,15 @@ public class Harvester implements FlightRecorderListener {
                                 case CLOSED:
                                     executor.submit(
                                             () -> {
-                                                if (running) {
-                                                    try {
-                                                        Path exitPath = exitPaths.remove(tr);
-                                                        recordings.remove(tr);
-                                                        Files.deleteIfExists(exitPath);
-                                                        log.trace("Deleted temp file {}", exitPath);
-                                                    } catch (IOException e) {
-                                                        log.warn("Could not delete temp file", e);
-                                                    } finally {
-                                                        startRecording(false);
-                                                    }
+                                                try {
+                                                    recordings.remove(tr);
+                                                    Path exitPath = exitPaths.remove(tr);
+                                                    Files.deleteIfExists(exitPath);
+                                                    log.trace("Deleted temp file {}", exitPath);
+                                                } catch (IOException e) {
+                                                    log.warn("Could not delete temp file", e);
+                                                } finally {
+                                                    startRecording(false);
                                                 }
                                             });
                                     break;
