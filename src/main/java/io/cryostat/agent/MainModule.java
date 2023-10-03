@@ -34,8 +34,7 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 
-import io.cryostat.agent.harvest.Harvester;
-import io.cryostat.agent.harvest.Harvester.RecordingSettings;
+import io.cryostat.agent.harvest.HarvestModule;
 import io.cryostat.agent.remote.RemoteContext;
 import io.cryostat.agent.remote.RemoteModule;
 import io.cryostat.agent.triggers.TriggerEvaluator;
@@ -65,6 +64,7 @@ import org.slf4j.LoggerFactory;
         includes = {
             ConfigModule.class,
             RemoteModule.class,
+            HarvestModule.class,
         })
 public abstract class MainModule {
 
@@ -235,43 +235,6 @@ public abstract class MainModule {
                 jmxPort,
                 registrationRetryMs,
                 registrationCheckMs);
-    }
-
-    @Provides
-    @Singleton
-    public static Harvester provideHarvester(
-            ScheduledExecutorService workerPool,
-            @Named(ConfigModule.CRYOSTAT_AGENT_HARVESTER_PERIOD_MS) long period,
-            @Named(ConfigModule.CRYOSTAT_AGENT_HARVESTER_TEMPLATE) String template,
-            @Named(ConfigModule.CRYOSTAT_AGENT_HARVESTER_MAX_FILES) int maxFiles,
-            @Named(ConfigModule.CRYOSTAT_AGENT_HARVESTER_EXIT_MAX_AGE_MS) long exitMaxAge,
-            @Named(ConfigModule.CRYOSTAT_AGENT_HARVESTER_EXIT_MAX_SIZE_B) long exitMaxSize,
-            @Named(ConfigModule.CRYOSTAT_AGENT_HARVESTER_MAX_AGE_MS) long maxAge,
-            @Named(ConfigModule.CRYOSTAT_AGENT_HARVESTER_MAX_SIZE_B) long maxSize,
-            CryostatClient client,
-            Registration registration) {
-        RecordingSettings exitSettings = new RecordingSettings();
-        exitSettings.maxAge = exitMaxAge;
-        exitSettings.maxSize = exitMaxSize;
-        RecordingSettings periodicSettings = new RecordingSettings();
-        periodicSettings.maxAge = maxAge > 0 ? maxAge : (long) (period * 1.5);
-        periodicSettings.maxSize = maxSize;
-        return new Harvester(
-                Executors.newSingleThreadScheduledExecutor(
-                        r -> {
-                            Thread t = new Thread(r);
-                            t.setName("cryostat-agent-harvester");
-                            t.setDaemon(true);
-                            return t;
-                        }),
-                workerPool,
-                period,
-                template,
-                maxFiles,
-                exitSettings,
-                periodicSettings,
-                client,
-                registration);
     }
 
     @Provides
