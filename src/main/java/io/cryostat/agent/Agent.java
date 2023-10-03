@@ -28,6 +28,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import javax.inject.Named;
 import javax.inject.Singleton;
 
+import io.cryostat.agent.triggers.TriggerEvaluator;
+
 import dagger.Component;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -87,6 +89,7 @@ public class Agent {
                     });
             webServer.start();
             registration.start();
+            client.triggerEvaluator().start(args);
             log.info("Startup complete");
         } catch (Exception e) {
             log.error(Agent.class.getSimpleName() + " startup failure", e);
@@ -142,6 +145,8 @@ public class Agent {
         Registration registration();
 
         Harvester harvester();
+
+        TriggerEvaluator triggerEvaluator();
 
         ScheduledExecutorService executor();
 
