@@ -127,7 +127,6 @@ public class Harvester implements FlightRecorderListener {
                     try {
                         FlightRecorder.addListener(this);
                         this.flightRecorder = FlightRecorder.getFlightRecorder();
-                        log.info("JFR Harvester started with period {}", Duration.ofMillis(period));
                         if (exitSettings.maxAge > 0) {
                             log.info(
                                     "On-stop uploads will contain approximately the most recent"
@@ -164,12 +163,15 @@ public class Harvester implements FlightRecorderListener {
                     if (this.task != null) {
                         this.task.cancel(true);
                     }
-                    if (period <= 0) {
-                        log.info("Harvester periodic uploads disabled, period {} < 0", period);
-                    } else {
+                    if (period > 0) {
+                        log.info("JFR Harvester started with period {}", Duration.ofMillis(period));
                         this.task =
                                 workerPool.scheduleAtFixedRate(
                                         this::uploadOngoing, period, period, TimeUnit.MILLISECONDS);
+                    } else {
+                        log.info(
+                                "JFR Harvester started, periodic uploads disabled (period {} < 0)",
+                                period);
                     }
                 });
     }
