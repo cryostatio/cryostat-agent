@@ -274,8 +274,8 @@ public class Harvester implements FlightRecorderListener {
     public void handleNewRecording(Recording recording) {
         try {
             recording.setToDisk(true);
-            recording.setMaxAge(Duration.ofMillis(period));
             recording.setDumpOnExit(true);
+            recording = this.periodicSettings.apply(recording);
             Path path = Files.createTempFile(null, null);
             Files.write(path, new byte[0], StandardOpenOption.TRUNCATE_EXISTING);
             recording.setDestination(path);
