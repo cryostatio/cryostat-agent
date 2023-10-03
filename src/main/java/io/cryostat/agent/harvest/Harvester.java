@@ -111,12 +111,8 @@ public class Harvester implements FlightRecorderListener {
                         return;
                     }
                     this.running = true;
-                    if (period <= 0) {
-                        log.info("Harvester disabled, period {} < 0", period);
-                        return;
-                    }
                     if (StringUtils.isBlank(template)) {
-                        log.error("Template not specified");
+                        log.info("Template not specified");
                     }
                     if (maxFiles <= 0) {
                         log.info(
@@ -168,9 +164,13 @@ public class Harvester implements FlightRecorderListener {
                     if (this.task != null) {
                         this.task.cancel(true);
                     }
-                    this.task =
-                            workerPool.scheduleAtFixedRate(
-                                    this::uploadOngoing, period, period, TimeUnit.MILLISECONDS);
+                    if (period <= 0) {
+                        log.info("Harvester periodic uploads disabled, period {} < 0", period);
+                    } else {
+                        this.task =
+                                workerPool.scheduleAtFixedRate(
+                                        this::uploadOngoing, period, period, TimeUnit.MILLISECONDS);
+                    }
                 });
     }
 
