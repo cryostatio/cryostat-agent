@@ -117,7 +117,6 @@ public class Harvester implements FlightRecorderListener {
                     }
                     if (StringUtils.isBlank(template)) {
                         log.error("Template not specified");
-                        return;
                     }
                     if (maxFiles <= 0) {
                         log.info(
@@ -132,10 +131,7 @@ public class Harvester implements FlightRecorderListener {
                     try {
                         FlightRecorder.addListener(this);
                         this.flightRecorder = FlightRecorder.getFlightRecorder();
-                        log.info(
-                                "JFR Harvester started using template \"{}\" with period {}",
-                                template,
-                                Duration.ofMillis(period));
+                        log.info("JFR Harvester started with period {}", Duration.ofMillis(period));
                         if (exitSettings.maxAge > 0) {
                             log.info(
                                     "On-stop uploads will contain approximately the most recent"
@@ -229,7 +225,7 @@ public class Harvester implements FlightRecorderListener {
                                                         recordings.remove(trackedRecording);
                                                         uploadDumpedFile(exitPath).get();
                                                         Files.deleteIfExists(exitPath);
-                                                        log.info("Deleted temp file {}", exitPath);
+                                                        log.trace("Deleted temp file {}", exitPath);
                                                     } catch (ExecutionException
                                                             | InterruptedException
                                                             | IOException e) {
@@ -281,7 +277,7 @@ public class Harvester implements FlightRecorderListener {
             Path path = Files.createTempFile(null, null);
             Files.write(path, new byte[0], StandardOpenOption.TRUNCATE_EXISTING);
             recording.setDestination(path);
-            log.info("{}({}) will dump to {}", recording.getName(), recording.getId(), path);
+            log.trace("{}({}) will dump to {}", recording.getName(), recording.getId(), path);
             this.recordings.add(recording);
             this.exitPaths.put(recording, path);
         } catch (IOException ioe) {
@@ -306,6 +302,7 @@ public class Harvester implements FlightRecorderListener {
                         handleNewRecording(recording);
                         this.sownRecording = Optional.of(recording);
                         recording.start();
+                        log.info("JFR Harvester started recording using template \"{}\"", template);
                     } catch (ParseException | IOException e) {
                         log.error("Unable to start recording", e);
                     }
@@ -343,13 +340,13 @@ public class Harvester implements FlightRecorderListener {
             Path exitPath = Files.createTempFile(null, null);
             Files.write(exitPath, new byte[0], StandardOpenOption.TRUNCATE_EXISTING);
             recording.dump(exitPath);
-            log.info("Dumping {}({}) to {}", recording.getName(), recording.getId(), exitPath);
+            log.trace("Dumping {}({}) to {}", recording.getName(), recording.getId(), exitPath);
             return client.upload(pushType, template, maxFiles, exitPath)
                     .thenRun(
                             () -> {
                                 try {
                                     Files.deleteIfExists(exitPath);
-                                    log.info("Deleted temp file {}", exitPath);
+                                    log.trace("Deleted temp file {}", exitPath);
                                 } catch (IOException ioe) {
                                     log.warn("Failed to clean up snapshot dump file", ioe);
                                 }
