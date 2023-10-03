@@ -228,6 +228,7 @@ public class Harvester implements FlightRecorderListener {
                                                         Path exitPath =
                                                                 exitPaths.remove(trackedRecording);
                                                         recordings.remove(trackedRecording);
+                                                        trackedRecording.dump(exitPath);
                                                         uploadDumpedFile(exitPath).get();
                                                         Files.deleteIfExists(exitPath);
                                                         log.trace("Deleted temp file {}", exitPath);
