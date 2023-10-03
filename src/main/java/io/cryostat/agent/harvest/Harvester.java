@@ -110,6 +110,7 @@ public class Harvester implements FlightRecorderListener {
                     if (running) {
                         return;
                     }
+                    this.running = true;
                     if (period <= 0) {
                         log.info("Harvester disabled, period {} < 0", period);
                         return;
@@ -168,7 +169,12 @@ public class Harvester implements FlightRecorderListener {
                         return;
                     }
                     startRecording(true);
-                    startPeriodic();
+                    if (this.task != null) {
+                        this.task.cancel(true);
+                    }
+                    this.task =
+                            workerPool.scheduleAtFixedRate(
+                                    this::uploadOngoing, period, period, TimeUnit.MILLISECONDS);
                 });
     }
 
@@ -210,6 +216,12 @@ public class Harvester implements FlightRecorderListener {
                                 case CLOSED:
                                     executor.submit(
                                             () -> {
+                                                if (sownRecording
+                                                        .map(Recording::getId)
+                                                        .map(id -> id == recording.getId())
+                                                        .orElse(false)) {
+                                                    safeCloseCurrentRecording();
+                                                }
                                                 if (running) {
                                                     try {
                                                         Path exitPath =
@@ -244,7 +256,7 @@ public class Harvester implements FlightRecorderListener {
         return CompletableFuture.supplyAsync(
                 () -> {
                     running = false;
-                    if (flightRecorder == null || period <= 0) {
+                    if (flightRecorder == null) {
                         return null;
                     }
                     try {
@@ -298,16 +310,6 @@ public class Harvester implements FlightRecorderListener {
                         log.error("Unable to start recording", e);
                     }
                 });
-    }
-
-    private void startPeriodic() {
-        if (this.task != null) {
-            this.task.cancel(true);
-        }
-        this.running = true;
-        this.task =
-                workerPool.scheduleAtFixedRate(
-                        this::uploadOngoing, period, period, TimeUnit.MILLISECONDS);
     }
 
     private void safeCloseCurrentRecording() {

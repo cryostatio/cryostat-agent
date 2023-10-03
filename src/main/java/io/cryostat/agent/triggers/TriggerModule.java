@@ -23,6 +23,7 @@ import javax.inject.Singleton;
 
 import io.cryostat.agent.ConfigModule;
 import io.cryostat.agent.FlightRecorderHelper;
+import io.cryostat.agent.harvest.Harvester;
 
 import dagger.Module;
 import dagger.Provides;
@@ -51,8 +52,9 @@ public abstract class TriggerModule {
             @Named(TRIGGER_SCHEDULER) ScheduledExecutorService scheduler,
             TriggerParser parser,
             FlightRecorderHelper helper,
+            Harvester harvester,
             @Named(ConfigModule.CRYOSTAT_AGENT_SMART_TRIGGER_EVALUATION_PERIOD_MS)
                     long evaluationPeriodMs) {
-        return new TriggerEvaluator(scheduler, parser, helper, evaluationPeriodMs);
+        return new TriggerEvaluator(scheduler, parser, helper, harvester, evaluationPeriodMs);
     }
 }

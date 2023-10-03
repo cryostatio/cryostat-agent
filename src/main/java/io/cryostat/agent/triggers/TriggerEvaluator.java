@@ -27,6 +27,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 import io.cryostat.agent.FlightRecorderHelper;
+import io.cryostat.agent.harvest.Harvester;
 import io.cryostat.agent.model.MBeanInfo;
 import io.cryostat.agent.triggers.SmartTrigger.TriggerState;
 
@@ -44,6 +45,7 @@ public class TriggerEvaluator {
     private final ScheduledExecutorService scheduler;
     private final TriggerParser parser;
     private final FlightRecorderHelper flightRecorderHelper;
+    private final Harvester harvester;
     private final long evaluationPeriodMs;
     private final ConcurrentLinkedQueue<SmartTrigger> triggers = new ConcurrentLinkedQueue<>();
     private Future<?> task;
@@ -53,10 +55,12 @@ public class TriggerEvaluator {
             ScheduledExecutorService scheduler,
             TriggerParser parser,
             FlightRecorderHelper flightRecorderHelper,
+            Harvester harvester,
             long evaluationPeriodMs) {
         this.scheduler = scheduler;
         this.parser = parser;
         this.flightRecorderHelper = flightRecorderHelper;
+        this.harvester = harvester;
         this.evaluationPeriodMs = evaluationPeriodMs;
     }
 
@@ -159,6 +163,7 @@ public class TriggerEvaluator {
                             String recordingName =
                                     String.format("cryostat-smart-trigger-%d", recording.getId());
                             recording.setName(recordingName);
+                            harvester.handleNewRecording(recording);
                             recording.start();
                             t.setState(TriggerState.COMPLETE);
                             log.info(
