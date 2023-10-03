@@ -199,6 +199,11 @@ public class Harvester implements FlightRecorderListener {
         getTrackedRecordingById(recording.getId())
                 .ifPresent(
                         trackedRecording -> {
+                            boolean isSownRecording =
+                                    sownRecording
+                                            .map(Recording::getId)
+                                            .map(id -> id == recording.getId())
+                                            .orElse(false);
                             switch (recording.getState()) {
                                 case NEW:
                                     break;
@@ -207,17 +212,15 @@ public class Harvester implements FlightRecorderListener {
                                 case RUNNING:
                                     break;
                                 case STOPPED:
-                                    recording
-                                            .close(); // we should get notified for the CLOSED state
+                                    if (isSownRecording) {
+                                        recording.close();
+                                    }
                                     // next
                                     break;
                                 case CLOSED:
                                     executor.submit(
                                             () -> {
-                                                if (sownRecording
-                                                        .map(Recording::getId)
-                                                        .map(id -> id == recording.getId())
-                                                        .orElse(false)) {
+                                                if (isSownRecording) {
                                                     safeCloseCurrentRecording();
                                                 }
                                                 if (running) {
