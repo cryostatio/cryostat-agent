@@ -385,9 +385,6 @@ public class Harvester implements FlightRecorderListener {
     }
 
     private Future<Void> uploadRecording(TemplatedRecording tr) throws IOException {
-        if (!exitPaths.containsKey(tr)) {
-            return CompletableFuture.failedFuture(new IllegalStateException());
-        }
         Path exitPath = exitPaths.get(tr);
         return client.upload(
                 PushType.EMERGENCY,
