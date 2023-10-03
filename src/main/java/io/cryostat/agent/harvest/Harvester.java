@@ -219,33 +219,28 @@ public class Harvester implements FlightRecorderListener {
                                 case STOPPED:
                                     try {
                                         tr.getRecording().dump(exitPaths.get(tr));
+                                        uploadRecording(tr).get();
                                     } catch (IOException e) {
                                         log.error("Failed to dump recording to file", e);
+                                    } catch (InterruptedException | ExecutionException e) {
+                                        log.warn("Could not upload exit dump file", e);
                                     }
                                     if (isSownRecording) {
-                                        recording.close();
+                                        safeCloseCurrentRecording();
                                     }
                                     // next
                                     break;
                                 case CLOSED:
                                     executor.submit(
                                             () -> {
-                                                if (isSownRecording) {
-                                                    safeCloseCurrentRecording();
-                                                }
                                                 if (running) {
                                                     try {
                                                         Path exitPath = exitPaths.remove(tr);
                                                         recordings.remove(tr);
-                                                        uploadRecording(tr).get();
                                                         Files.deleteIfExists(exitPath);
                                                         log.trace("Deleted temp file {}", exitPath);
-                                                    } catch (ExecutionException
-                                                            | InterruptedException
-                                                            | IOException e) {
-                                                        log.warn(
-                                                                "Could not upload exit dump file",
-                                                                e);
+                                                    } catch (IOException e) {
+                                                        log.warn("Could not delete temp file", e);
                                                     } finally {
                                                         startRecording(false);
                                                     }
