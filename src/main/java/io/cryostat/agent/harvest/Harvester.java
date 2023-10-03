@@ -381,7 +381,7 @@ public class Harvester implements FlightRecorderListener {
         Path exitPath = exitPaths.get(tr);
         return client.upload(
                 PushType.EMERGENCY,
-                Optional.of(tr.getConfiguration().getName()),
+                Optional.of(tr.getConfiguration().getName().toLowerCase()),
                 maxFiles,
                 exitPath);
     }

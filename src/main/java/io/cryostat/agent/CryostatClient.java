@@ -368,8 +368,7 @@ public class CryostatClient {
         Instant start = Instant.now();
         String timestamp = start.truncatedTo(ChronoUnit.SECONDS).toString().replaceAll("[-:]", "");
         String fileName =
-                template.map(t -> String.format("%s_%s_%s.jfr", appName, t, timestamp))
-                        .orElseGet(() -> String.format("%s_%s.jfr", appName, timestamp));
+                String.format("%s_%s_%s.jfr", appName, template.orElse("unknown"), timestamp);
         Map<String, String> labels =
                 new HashMap<>(Map.of("jvmId", jvmId, "pushType", pushType.name()));
         template.ifPresent(
