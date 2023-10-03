@@ -23,6 +23,7 @@ import javax.inject.Singleton;
 
 import io.cryostat.agent.ConfigModule;
 import io.cryostat.agent.CryostatClient;
+import io.cryostat.agent.FlightRecorderHelper;
 import io.cryostat.agent.Registration;
 import io.cryostat.agent.harvest.Harvester.RecordingSettings;
 
@@ -43,6 +44,7 @@ public abstract class HarvestModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_HARVESTER_MAX_AGE_MS) long maxAge,
             @Named(ConfigModule.CRYOSTAT_AGENT_HARVESTER_MAX_SIZE_B) long maxSize,
             CryostatClient client,
+            FlightRecorderHelper flightRecorderHelper,
             Registration registration) {
         RecordingSettings exitSettings = new RecordingSettings();
         exitSettings.maxAge = exitMaxAge;
@@ -65,6 +67,7 @@ public abstract class HarvestModule {
                 exitSettings,
                 periodicSettings,
                 client,
+                flightRecorderHelper,
                 registration);
     }
 }

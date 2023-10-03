@@ -159,12 +159,13 @@ public class TriggerEvaluator {
         flightRecorderHelper
                 .createRecording(t.getRecordingTemplateName())
                 .ifPresent(
-                        recording -> {
+                        tr -> {
                             String recordingName =
-                                    String.format("cryostat-smart-trigger-%d", recording.getId());
-                            recording.setName(recordingName);
-                            harvester.handleNewRecording(recording);
-                            recording.start();
+                                    String.format(
+                                            "cryostat-smart-trigger-%d", tr.getRecording().getId());
+                            tr.getRecording().setName(recordingName);
+                            harvester.handleNewRecording(tr);
+                            tr.getRecording().start();
                             t.setState(TriggerState.COMPLETE);
                             log.info(
                                     "Started recording \"{}\" using template \"{}\"",

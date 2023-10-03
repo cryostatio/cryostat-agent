@@ -19,7 +19,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.text.ParseException;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
@@ -34,6 +33,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.UnaryOperator;
 
 import io.cryostat.agent.CryostatClient;
+import io.cryostat.agent.FlightRecorderHelper;
+import io.cryostat.agent.FlightRecorderHelper.TemplatedRecording;
 import io.cryostat.agent.Registration;
 import io.cryostat.agent.util.StringUtils;
 
@@ -58,9 +59,10 @@ public class Harvester implements FlightRecorderListener {
     private final RecordingSettings exitSettings;
     private final RecordingSettings periodicSettings;
     private final CryostatClient client;
-    private final Set<Recording> recordings = ConcurrentHashMap.newKeySet();
-    private Optional<Recording> sownRecording = Optional.empty();
-    private final Map<Recording, Path> exitPaths = new ConcurrentHashMap<>();
+    private final FlightRecorderHelper flightRecorderHelper;
+    private final Set<TemplatedRecording> recordings = ConcurrentHashMap.newKeySet();
+    private Optional<TemplatedRecording> sownRecording = Optional.empty();
+    private final Map<TemplatedRecording, Path> exitPaths = new ConcurrentHashMap<>();
     private FlightRecorder flightRecorder;
     private Future<?> task;
     private boolean running;
@@ -75,6 +77,7 @@ public class Harvester implements FlightRecorderListener {
             RecordingSettings exitSettings,
             RecordingSettings periodicSettings,
             CryostatClient client,
+            FlightRecorderHelper flightRecorderHelper,
             Registration registration) {
         this.executor = executor;
         this.workerPool = workerPool;
@@ -84,6 +87,7 @@ public class Harvester implements FlightRecorderListener {
         this.exitSettings = exitSettings;
         this.periodicSettings = periodicSettings;
         this.client = client;
+        this.flightRecorderHelper = flightRecorderHelper;
 
         registration.addRegistrationListener(
                 evt -> {
@@ -198,9 +202,10 @@ public class Harvester implements FlightRecorderListener {
         log.info("{}({}) {}", recording.getName(), recording.getId(), recording.getState().name());
         getTrackedRecordingById(recording.getId())
                 .ifPresent(
-                        trackedRecording -> {
+                        tr -> {
                             boolean isSownRecording =
                                     sownRecording
+                                            .map(TemplatedRecording::getRecording)
                                             .map(Recording::getId)
                                             .map(id -> id == recording.getId())
                                             .orElse(false);
@@ -213,7 +218,7 @@ public class Harvester implements FlightRecorderListener {
                                     break;
                                 case STOPPED:
                                     try {
-                                        trackedRecording.dump(exitPaths.get(trackedRecording));
+                                        tr.getRecording().dump(exitPaths.get(tr));
                                     } catch (IOException e) {
                                         log.error("Failed to dump recording to file", e);
                                     }
@@ -230,10 +235,9 @@ public class Harvester implements FlightRecorderListener {
                                                 }
                                                 if (running) {
                                                     try {
-                                                        Path exitPath =
-                                                                exitPaths.remove(trackedRecording);
-                                                        recordings.remove(trackedRecording);
-                                                        uploadDumpedFile(exitPath).get();
+                                                        Path exitPath = exitPaths.remove(tr);
+                                                        recordings.remove(tr);
+                                                        uploadRecording(tr).get();
                                                         Files.deleteIfExists(exitPath);
                                                         log.trace("Deleted temp file {}", exitPath);
                                                     } catch (ExecutionException
@@ -279,8 +283,9 @@ public class Harvester implements FlightRecorderListener {
                 executor);
     }
 
-    public void handleNewRecording(Recording recording) {
+    public void handleNewRecording(TemplatedRecording tr) {
         try {
+            Recording recording = tr.getRecording();
             recording.setToDisk(true);
             recording.setDumpOnExit(true);
             recording = this.periodicSettings.apply(recording);
@@ -288,11 +293,11 @@ public class Harvester implements FlightRecorderListener {
             Files.write(path, new byte[0], StandardOpenOption.TRUNCATE_EXISTING);
             recording.setDestination(path);
             log.trace("{}({}) will dump to {}", recording.getName(), recording.getId(), path);
-            this.recordings.add(recording);
-            this.exitPaths.put(recording, path);
+            this.recordings.add(tr);
+            this.exitPaths.put(tr, path);
         } catch (IOException ioe) {
             log.error("Unable to handle recording", ioe);
-            recording.close();
+            tr.getRecording().close();
         }
     }
 
@@ -306,32 +311,35 @@ public class Harvester implements FlightRecorderListener {
                     } else if (sownRecording.isPresent()) {
                         return;
                     }
-                    Recording recording = null;
-                    try {
-                        Configuration config = Configuration.getConfiguration(template);
-                        recording = new Recording(config);
-                        recording.setName("cryostat-agent-harvester");
-                        handleNewRecording(recording);
-                        this.sownRecording = Optional.of(recording);
-                        recording.start();
-                        log.info("JFR Harvester started recording using template \"{}\"", template);
-                    } catch (ParseException | IOException e) {
-                        log.error("Unable to start recording", e);
-                    }
+                    flightRecorderHelper
+                            .createRecording(template)
+                            .ifPresent(
+                                    recording -> {
+                                        recording
+                                                .getRecording()
+                                                .setName("cryostat-agent-harvester");
+                                        handleNewRecording(recording);
+                                        this.sownRecording = Optional.of(recording);
+                                        recording.getRecording().start();
+                                        log.info(
+                                                "JFR Harvester started recording using template"
+                                                        + " \"{}\"",
+                                                template);
+                                    });
                 });
     }
 
     private void safeCloseCurrentRecording() {
-        sownRecording.ifPresent(Recording::close);
+        sownRecording.map(TemplatedRecording::getRecording).ifPresent(Recording::close);
         sownRecording = Optional.empty();
     }
 
-    private Optional<Recording> getTrackedRecordingById(long id) {
+    private Optional<TemplatedRecording> getTrackedRecordingById(long id) {
         if (id < 0) {
             return Optional.empty();
         }
-        for (Recording recording : this.recordings) {
-            if (id == recording.getId()) {
+        for (TemplatedRecording recording : this.recordings) {
+            if (id == recording.getRecording().getId()) {
                 return Optional.of(recording);
             }
         }
@@ -353,7 +361,13 @@ public class Harvester implements FlightRecorderListener {
             Files.write(exitPath, new byte[0], StandardOpenOption.TRUNCATE_EXISTING);
             recording.dump(exitPath);
             log.trace("Dumping {}({}) to {}", recording.getName(), recording.getId(), exitPath);
-            return client.upload(pushType, template, maxFiles, exitPath)
+            return client.upload(
+                            pushType,
+                            sownRecording
+                                    .map(TemplatedRecording::getConfiguration)
+                                    .map(Configuration::getName),
+                            maxFiles,
+                            exitPath)
                     .thenRun(
                             () -> {
                                 try {
@@ -370,8 +384,16 @@ public class Harvester implements FlightRecorderListener {
         }
     }
 
-    private Future<Void> uploadDumpedFile(Path exitPath) throws IOException {
-        return client.upload(PushType.EMERGENCY, template, maxFiles, exitPath);
+    private Future<Void> uploadRecording(TemplatedRecording tr) throws IOException {
+        if (!exitPaths.containsKey(tr)) {
+            return CompletableFuture.failedFuture(new IllegalStateException());
+        }
+        Path exitPath = exitPaths.get(tr);
+        return client.upload(
+                PushType.EMERGENCY,
+                Optional.of(tr.getConfiguration().getName()),
+                maxFiles,
+                exitPath);
     }
 
     public enum PushType {

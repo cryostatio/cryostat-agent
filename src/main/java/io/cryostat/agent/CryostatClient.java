@@ -27,9 +27,11 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
@@ -361,21 +363,17 @@ public class CryostatClient {
     }
 
     public CompletableFuture<Void> upload(
-            Harvester.PushType pushType, String template, int maxFiles, Path recording)
+            Harvester.PushType pushType, Optional<String> template, int maxFiles, Path recording)
             throws IOException {
         Instant start = Instant.now();
         String timestamp = start.truncatedTo(ChronoUnit.SECONDS).toString().replaceAll("[-:]", "");
-        String fileName = String.format("%s_%s_%s.jfr", appName, template, timestamp);
+        String fileName =
+                template.map(t -> String.format("%s_%s_%s.jfr", appName, t, timestamp))
+                        .orElseGet(() -> String.format("%s_%s.jfr", appName, timestamp));
         Map<String, String> labels =
-                Map.of(
-                        "jvmId",
-                        jvmId,
-                        "template.name",
-                        template,
-                        "template.type",
-                        "TARGET",
-                        "pushType",
-                        pushType.name());
+                new HashMap<>(Map.of("jvmId", jvmId, "pushType", pushType.name()));
+        template.ifPresent(
+                t -> labels.putAll(Map.of("template.name", t, "template.type", "TARGET")));
 
         HttpPost req = new HttpPost(baseUri.resolve("/api/beta/recordings/" + jvmId));
 

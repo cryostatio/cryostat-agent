@@ -32,7 +32,7 @@ public class FlightRecorderHelper {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
-    public Optional<Recording> createRecording(String templateNameOrLabel) {
+    public Optional<TemplatedRecording> createRecording(String templateNameOrLabel) {
         Optional<Configuration> opt = getTemplate(templateNameOrLabel);
         if (opt.isEmpty()) {
             log.error(
@@ -43,7 +43,7 @@ public class FlightRecorderHelper {
         Configuration configuration = opt.get();
         Recording recording = new Recording(configuration.getSettings());
         recording.setToDisk(true);
-        return Optional.of(recording);
+        return Optional.of(new TemplatedRecording(configuration, recording));
     }
 
     public Optional<Configuration> getTemplate(String nameOrLabel) {
@@ -66,6 +66,25 @@ public class FlightRecorderHelper {
         return FlightRecorder.getFlightRecorder().getRecordings().stream()
                 .map(RecordingInfo::new)
                 .collect(Collectors.toList());
+    }
+
+    @SuppressFBWarnings(value = {"EI_EXPOSE_REP", "EI_EXPOSE_REP2"})
+    public static class TemplatedRecording {
+        private final Configuration configuration;
+        private final Recording recording;
+
+        public TemplatedRecording(Configuration configuration, Recording recording) {
+            this.configuration = configuration;
+            this.recording = recording;
+        }
+
+        public Configuration getConfiguration() {
+            return configuration;
+        }
+
+        public Recording getRecording() {
+            return recording;
+        }
     }
 
     @SuppressFBWarnings(value = "URF_UNREAD_FIELD")
