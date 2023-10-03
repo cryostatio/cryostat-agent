@@ -289,7 +289,9 @@ public class Harvester implements FlightRecorderListener {
     private void startRecording(boolean restart) {
         executor.submit(
                 () -> {
-                    if (restart) {
+                    if (StringUtils.isBlank(template)) {
+                        return;
+                    } else if (restart) {
                         safeCloseCurrentRecording();
                     } else if (sownRecording.isPresent()) {
                         return;
