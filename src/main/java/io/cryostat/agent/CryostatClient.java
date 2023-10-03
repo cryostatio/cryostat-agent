@@ -27,7 +27,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -38,6 +37,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.function.Function;
 
+import io.cryostat.agent.FlightRecorderHelper.TemplatedRecording;
 import io.cryostat.agent.WebServer.Credentials;
 import io.cryostat.agent.harvest.Harvester;
 import io.cryostat.agent.model.DiscoveryNode;
@@ -49,6 +49,8 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+import jdk.jfr.Configuration;
+import jdk.jfr.Recording;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.input.CountingInputStream;
 import org.apache.http.HttpHeaders;
@@ -363,16 +365,39 @@ public class CryostatClient {
     }
 
     public CompletableFuture<Void> upload(
-            Harvester.PushType pushType, Optional<String> template, int maxFiles, Path recording)
+            Harvester.PushType pushType,
+            Optional<TemplatedRecording> opt,
+            int maxFiles,
+            Path recording)
             throws IOException {
         Instant start = Instant.now();
         String timestamp = start.truncatedTo(ChronoUnit.SECONDS).toString().replaceAll("[-:]", "");
+        String template =
+                opt.map(TemplatedRecording::getConfiguration)
+                        .map(Configuration::getName)
+                        .map(String::toLowerCase)
+                        .map(String::trim)
+                        .orElse("unknown");
         String fileName =
-                String.format("%s_%s_%s.jfr", appName, template.orElse("unknown"), timestamp);
+                String.format(
+                        "%s_%s_%s.jfr",
+                        appName
+                                + opt.map(TemplatedRecording::getRecording)
+                                        .map(Recording::getName)
+                                        .map(n -> "-" + n)
+                                        .orElse(""),
+                        template,
+                        timestamp);
         Map<String, String> labels =
-                new HashMap<>(Map.of("jvmId", jvmId, "pushType", pushType.name()));
-        template.ifPresent(
-                t -> labels.putAll(Map.of("template.name", t, "template.type", "TARGET")));
+                Map.of(
+                        "jvmId",
+                        jvmId,
+                        "pushType",
+                        pushType.name(),
+                        "template.name",
+                        template,
+                        "template.type",
+                        "TARGET");
 
         HttpPost req = new HttpPost(baseUri.resolve("/api/beta/recordings/" + jvmId));
 

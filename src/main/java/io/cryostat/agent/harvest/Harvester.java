@@ -39,7 +39,6 @@ import io.cryostat.agent.Registration;
 import io.cryostat.agent.util.StringUtils;
 
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
-import jdk.jfr.Configuration;
 import jdk.jfr.FlightRecorder;
 import jdk.jfr.FlightRecorderListener;
 import jdk.jfr.Recording;
@@ -354,13 +353,7 @@ public class Harvester implements FlightRecorderListener {
             Files.write(exitPath, new byte[0], StandardOpenOption.TRUNCATE_EXISTING);
             recording.dump(exitPath);
             log.trace("Dumping {}({}) to {}", recording.getName(), recording.getId(), exitPath);
-            return client.upload(
-                            pushType,
-                            sownRecording
-                                    .map(TemplatedRecording::getConfiguration)
-                                    .map(Configuration::getName),
-                            maxFiles,
-                            exitPath)
+            return client.upload(pushType, sownRecording, maxFiles, exitPath)
                     .thenRun(
                             () -> {
                                 try {
@@ -379,11 +372,7 @@ public class Harvester implements FlightRecorderListener {
 
     private Future<Void> uploadRecording(TemplatedRecording tr) throws IOException {
         Path exitPath = exitPaths.get(tr);
-        return client.upload(
-                PushType.EMERGENCY,
-                Optional.of(tr.getConfiguration().getName().toLowerCase()),
-                maxFiles,
-                exitPath);
+        return client.upload(PushType.EMERGENCY, Optional.of(tr), maxFiles, exitPath);
     }
 
     public enum PushType {
