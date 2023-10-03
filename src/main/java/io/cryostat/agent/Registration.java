@@ -36,12 +36,13 @@ import java.util.stream.Collectors;
 
 import io.cryostat.agent.model.DiscoveryNode;
 import io.cryostat.agent.model.PluginInfo;
+import io.cryostat.agent.util.StringUtils;
 
 import org.apache.http.client.utils.URIBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-class Registration {
+public class Registration {
 
     private static final String NODE_TYPE = "JVM";
 
@@ -186,7 +187,7 @@ class Registration {
         log.info("{} started", getClass().getName());
     }
 
-    void addRegistrationListener(Consumer<RegistrationEvent> listener) {
+    public void addRegistrationListener(Consumer<RegistrationEvent> listener) {
         this.listeners.add(listener);
     }
 
@@ -358,9 +359,9 @@ class Registration {
         executor.submit(() -> this.listeners.forEach(listener -> listener.accept(evt)));
     }
 
-    static class RegistrationEvent {
+    public static class RegistrationEvent {
 
-        enum State {
+        public enum State {
             UNREGISTERED,
             REGISTERED,
             PUBLISHED,
@@ -368,7 +369,7 @@ class Registration {
             REFRESHED,
         }
 
-        final State state;
+        public final State state;
 
         RegistrationEvent(State state) {
             this.state = state;

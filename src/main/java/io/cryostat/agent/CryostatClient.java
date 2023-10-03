@@ -37,6 +37,7 @@ import java.util.concurrent.Executor;
 import java.util.function.Function;
 
 import io.cryostat.agent.WebServer.Credentials;
+import io.cryostat.agent.harvest.Harvester;
 import io.cryostat.agent.model.DiscoveryNode;
 import io.cryostat.agent.model.PluginInfo;
 import io.cryostat.agent.model.RegistrationInfo;

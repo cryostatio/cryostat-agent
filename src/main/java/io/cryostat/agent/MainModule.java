@@ -34,7 +34,8 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 
-import io.cryostat.agent.Harvester.RecordingSettings;
+import io.cryostat.agent.harvest.Harvester;
+import io.cryostat.agent.harvest.Harvester.RecordingSettings;
 import io.cryostat.agent.remote.RemoteContext;
 import io.cryostat.agent.remote.RemoteModule;
 import io.cryostat.agent.triggers.TriggerEvaluator;

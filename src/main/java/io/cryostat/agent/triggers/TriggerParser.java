@@ -22,7 +22,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import io.cryostat.agent.FlightRecorderHelper;
-import io.cryostat.agent.StringUtils;
+import io.cryostat.agent.util.StringUtils;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

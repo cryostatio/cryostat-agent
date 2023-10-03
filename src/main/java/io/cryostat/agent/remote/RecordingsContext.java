@@ -44,7 +44,7 @@ import org.openjdk.jmc.rjmx.services.jfr.IFlightRecorderService;
 import org.openjdk.jmc.rjmx.services.jfr.IRecordingDescriptor;
 import org.openjdk.jmc.rjmx.services.jfr.IRecordingDescriptor.RecordingState;
 
-import io.cryostat.agent.StringUtils;
+import io.cryostat.agent.util.StringUtils;
 import io.cryostat.core.FlightRecorderException;
 import io.cryostat.core.net.JFRConnection;
 import io.cryostat.core.net.JFRConnectionToolkit;

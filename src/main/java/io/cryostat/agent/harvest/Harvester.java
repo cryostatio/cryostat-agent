@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.cryostat.agent;
+package io.cryostat.agent.harvest;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -31,6 +31,11 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.UnaryOperator;
 
+import io.cryostat.agent.CryostatClient;
+import io.cryostat.agent.Registration;
+import io.cryostat.agent.util.StringUtils;
+
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import jdk.jfr.Configuration;
 import jdk.jfr.FlightRecorder;
 import jdk.jfr.FlightRecorderListener;
@@ -39,7 +44,7 @@ import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-class Harvester implements FlightRecorderListener {
+public class Harvester implements FlightRecorderListener {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
@@ -57,7 +62,8 @@ class Harvester implements FlightRecorderListener {
     private Future<?> task;
     private boolean running;
 
-    Harvester(
+    @SuppressFBWarnings("EI_EXPOSE_REP2")
+    public Harvester(
             ScheduledExecutorService executor,
             ScheduledExecutorService workerPool,
             long period,
@@ -219,7 +225,7 @@ class Harvester implements FlightRecorderListener {
         }
     }
 
-    Future<Void> exitUpload() {
+    public Future<Void> exitUpload() {
         return CompletableFuture.supplyAsync(
                 () -> {
                     running = false;
@@ -321,15 +327,15 @@ class Harvester implements FlightRecorderListener {
         return client.upload(PushType.EMERGENCY, template, maxFiles, exitPath);
     }
 
-    enum PushType {
+    public enum PushType {
         SCHEDULED,
         ON_STOP,
         EMERGENCY,
     }
 
-    static class RecordingSettings implements UnaryOperator<Recording> {
-        long maxSize;
-        long maxAge;
+    public static class RecordingSettings implements UnaryOperator<Recording> {
+        public long maxSize;
+        public long maxAge;
 
         @Override
         public Recording apply(Recording r) {
