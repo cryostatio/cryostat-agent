@@ -52,11 +52,11 @@ public class TriggerEvaluator {
     public TriggerEvaluator(
             ScheduledExecutorService scheduler,
             TriggerParser parser,
-            FlightRecorderHelper flightRecorderModule,
+            FlightRecorderHelper flightRecorderHelper,
             long evaluationPeriodMs) {
         this.scheduler = scheduler;
         this.parser = parser;
-        this.flightRecorderHelper = flightRecorderModule;
+        this.flightRecorderHelper = flightRecorderHelper;
         this.evaluationPeriodMs = evaluationPeriodMs;
     }
 
@@ -109,8 +109,7 @@ public class TriggerEvaluator {
                         // met once
                         if (t.isSimple() && evaluateTriggerConstraint(t, t.getTargetDuration())) {
                             log.trace("Trigger {} satisfied, starting recording...", t);
-                            flightRecorderHelper.startRecording(t.getRecordingTemplateName());
-                            t.setState(TriggerState.COMPLETE);
+                            startRecording(t);
                         } else if (!t.isSimple()) {
                             if (evaluateTriggerConstraint(t, Duration.ZERO)) {
                                 // Condition was met, set the state accordingly
@@ -128,8 +127,7 @@ public class TriggerEvaluator {
                         // Condition was met at last check but duration hasn't passed
                         if (evaluateTriggerConstraint(t, Duration.ofMillis(difference))) {
                             log.trace("Trigger {} satisfied, completing...", t);
-                            t.setState(TriggerState.COMPLETE);
-                            flightRecorderHelper.startRecording(t.getRecordingTemplateName());
+                            startRecording(t);
                         } else if (evaluateTriggerConstraint(t, Duration.ZERO)) {
                             log.trace("Trigger {} satisfied, waiting for duration...", t);
                         } else {
@@ -151,6 +149,23 @@ public class TriggerEvaluator {
         } catch (Exception e) {
             log.error("Unexpected exception during evaluation", e);
         }
+    }
+
+    private void startRecording(SmartTrigger t) {
+        flightRecorderHelper
+                .createRecording(t.getRecordingTemplateName())
+                .ifPresent(
+                        recording -> {
+                            String recordingName =
+                                    String.format("cryostat-smart-trigger-%d", recording.getId());
+                            recording.setName(recordingName);
+                            recording.start();
+                            t.setState(TriggerState.COMPLETE);
+                            log.info(
+                                    "Started recording \"{}\" using template \"{}\"",
+                                    recordingName,
+                                    t.getRecordingTemplateName());
+                        });
     }
 
     private boolean evaluateTriggerConstraint(SmartTrigger trigger, Duration targetDuration) {
