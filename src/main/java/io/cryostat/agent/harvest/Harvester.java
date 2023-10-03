@@ -212,6 +212,11 @@ public class Harvester implements FlightRecorderListener {
                                 case RUNNING:
                                     break;
                                 case STOPPED:
+                                    try {
+                                        trackedRecording.dump(exitPaths.get(trackedRecording));
+                                    } catch (IOException e) {
+                                        log.error("Failed to dump recording to file", e);
+                                    }
                                     if (isSownRecording) {
                                         recording.close();
                                     }
@@ -228,7 +233,6 @@ public class Harvester implements FlightRecorderListener {
                                                         Path exitPath =
                                                                 exitPaths.remove(trackedRecording);
                                                         recordings.remove(trackedRecording);
-                                                        trackedRecording.dump(exitPath);
                                                         uploadDumpedFile(exitPath).get();
                                                         Files.deleteIfExists(exitPath);
                                                         log.trace("Deleted temp file {}", exitPath);
