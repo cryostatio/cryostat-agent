@@ -62,10 +62,18 @@ Continuous template:
 [ThreadCount>20&&TargetDuration>duration("10s")]~Continuous
 ```
 
-These must be passed as an argument to the cryostat agent, for example:
+These may be passed as an argument to the Cryostat Agent, for example:
 
 ```
 JAVA_OPTIONS="-javaagent:/deployments/app/cryostat-agent-${CRYOSTAT_AGENT_VERSION}.jar=[ProcessCpuLoad>0.2]~profile
+```
+
+or as a [configuration property](#configuration):
+
+```
+CRYOSTAT_AGENT_SMART_TRIGGER_DEFINITIONS="[ThreadCount>0&&TargetDuration>duration(\"1m\")]~default.jfc"
+
+-Dcryostat.agent.smart-trigger.definitions="[ThreadCount>0&&TargetDuration>duration(\"1m\")]~default.jfc"
 ```
 
 Multiple smart trigger definitions may be specified and separated by commas, for example:
@@ -117,6 +125,7 @@ and how it advertises itself to a Cryostat server instance. Required properties 
 - [ ] `cryostat.agent.harvester.exit.max-size-b` [`long`]: the JFR `maxsize` setting, specified in bytes, to apply to exit uploads as described above.
 - [ ] `cryostat.agent.harvester.max-age-ms` [`long`]: the JFR `maxage` setting, specified in milliseconds, to apply to periodic uploads during the application lifecycle. Defaults to `0`, which is interpreted as 1.5x the harvester period (`cryostat.agent.harvester.period-ms`).
 - [ ] `cryostat.agent.harvester.max-size-b` [`long`]: the JFR `maxsize` setting, specified in bytes, to apply to periodic uploads during the application lifecycle. Defaults to `0`, which means `unlimited`.
+- [ ] `cryostat.agent.smart-trigger.definitions` [`String[]`]: a comma-separated list of Smart Trigger definitions to load at startup. Defaults to the empty string: no Smart Triggers.
 - [ ] `cryostat.agent.smart-trigger.evaluation.period-ms` [`long`]: the length of time between Smart Trigger evaluations. Default `1000`.
 
 These properties can be set by JVM system properties or by environment variables. For example, the property
