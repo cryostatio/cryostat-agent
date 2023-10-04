@@ -71,12 +71,12 @@ JAVA_OPTIONS="-javaagent:/deployments/app/cryostat-agent-${CRYOSTAT_AGENT_VERSIO
 or as a [configuration property](#configuration):
 
 ```
-CRYOSTAT_AGENT_SMART_TRIGGER_DEFINITIONS="[ThreadCount>0&&TargetDuration>duration(\"1m\")]~default.jfc"
+CRYOSTAT_AGENT_SMART_TRIGGER_DEFINITIONS="[ProcessCpuLoad>0.2&&TargetDuration>duration(\"1m\")]~default.jfc"
 
--Dcryostat.agent.smart-trigger.definitions="[ThreadCount>0&&TargetDuration>duration(\"1m\")]~default.jfc"
+-Dcryostat.agent.smart-trigger.definitions="[ProcessCpuLoad>0.2&&TargetDuration>duration(\"1m\")]~default.jfc"
 ```
 
-Multiple smart trigger definitions may be specified and separated by commas, for example:
+Multiple Smart Trigger definitions may be specified and separated by commas, for example:
 
 ```
 [ProcessCpuLoad>0.2]~profile,[ThreadCount>30]~Continuous
