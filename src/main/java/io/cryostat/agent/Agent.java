@@ -28,6 +28,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import javax.inject.Named;
 import javax.inject.Singleton;
 
+import io.cryostat.agent.harvest.Harvester;
 import io.cryostat.agent.triggers.TriggerEvaluator;
 
 import dagger.Component;

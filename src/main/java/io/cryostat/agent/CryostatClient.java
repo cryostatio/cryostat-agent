@@ -30,13 +30,16 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.function.Function;
 
+import io.cryostat.agent.FlightRecorderHelper.TemplatedRecording;
 import io.cryostat.agent.WebServer.Credentials;
+import io.cryostat.agent.harvest.Harvester;
 import io.cryostat.agent.model.DiscoveryNode;
 import io.cryostat.agent.model.PluginInfo;
 import io.cryostat.agent.model.RegistrationInfo;
@@ -46,6 +49,8 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+import jdk.jfr.Configuration;
+import jdk.jfr.Recording;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.input.CountingInputStream;
 import org.apache.http.HttpHeaders;
@@ -360,21 +365,39 @@ public class CryostatClient {
     }
 
     public CompletableFuture<Void> upload(
-            Harvester.PushType pushType, String template, int maxFiles, Path recording)
+            Harvester.PushType pushType,
+            Optional<TemplatedRecording> opt,
+            int maxFiles,
+            Path recording)
             throws IOException {
         Instant start = Instant.now();
         String timestamp = start.truncatedTo(ChronoUnit.SECONDS).toString().replaceAll("[-:]", "");
-        String fileName = String.format("%s_%s_%s.jfr", appName, template, timestamp);
+        String template =
+                opt.map(TemplatedRecording::getConfiguration)
+                        .map(Configuration::getName)
+                        .map(String::toLowerCase)
+                        .map(String::trim)
+                        .orElse("unknown");
+        String fileName =
+                String.format(
+                        "%s_%s_%s.jfr",
+                        appName
+                                + opt.map(TemplatedRecording::getRecording)
+                                        .map(Recording::getName)
+                                        .map(n -> "-" + n)
+                                        .orElse(""),
+                        template,
+                        timestamp);
         Map<String, String> labels =
                 Map.of(
                         "jvmId",
                         jvmId,
+                        "pushType",
+                        pushType.name(),
                         "template.name",
                         template,
                         "template.type",
-                        "TARGET",
-                        "pushType",
-                        pushType.name());
+                        "TARGET");
 
         HttpPost req = new HttpPost(baseUri.resolve("/api/beta/recordings/" + jvmId));
 

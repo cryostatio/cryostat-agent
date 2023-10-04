@@ -15,63 +15,76 @@
  */
 package io.cryostat.agent;
 
-import java.lang.management.ManagementFactory;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+import jdk.jfr.Configuration;
 import jdk.jfr.FlightRecorder;
 import jdk.jfr.Recording;
-import jdk.management.jfr.ConfigurationInfo;
-import jdk.management.jfr.FlightRecorderMXBean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class FlightRecorderHelper {
 
-    private final FlightRecorderMXBean bean =
-            ManagementFactory.getPlatformMXBean(FlightRecorderMXBean.class);
     private final Logger log = LoggerFactory.getLogger(getClass());
 
-    // FIXME this is repeated logic shared with Harvester startRecording
-    public void startRecording(String templateNameOrLabel) {
-        getTemplate(templateNameOrLabel)
-                .ifPresentOrElse(
-                        c -> {
-                            long recordingId = bean.newRecording();
-                            bean.setPredefinedConfiguration(recordingId, c.getName());
-                            String recoringName =
-                                    String.format("cryostat-smart-trigger-%d", recordingId);
-                            bean.setRecordingOptions(
-                                    recordingId, Map.of("name", recoringName, "disk", "true"));
-                            bean.startRecording(recordingId);
-                            log.info(
-                                    "Started recording \"{}\" using template \"{}\"",
-                                    recoringName,
-                                    templateNameOrLabel);
-                        },
-                        () ->
-                                log.error(
-                                        "Cannot start recording with template named or labelled {}",
-                                        templateNameOrLabel));
+    public Optional<TemplatedRecording> createRecording(String templateNameOrLabel) {
+        Optional<Configuration> opt = getTemplate(templateNameOrLabel);
+        if (opt.isEmpty()) {
+            log.error(
+                    "Cannot start recording with template named or labelled {}",
+                    templateNameOrLabel);
+            return Optional.empty();
+        }
+        Configuration configuration = opt.get();
+        Recording recording = new Recording(configuration.getSettings());
+        recording.setToDisk(true);
+        return Optional.of(new TemplatedRecording(configuration, recording));
     }
 
-    public Optional<ConfigurationInfo> getTemplate(String nameOrLabel) {
-        return bean.getConfigurations().stream()
+    public Optional<Configuration> getTemplate(String nameOrLabel) {
+        Objects.requireNonNull(nameOrLabel);
+        return Configuration.getConfigurations().stream()
                 .filter(c -> c.getName().equals(nameOrLabel) || c.getLabel().equals(nameOrLabel))
                 .findFirst();
     }
 
     public boolean isValidTemplate(String nameOrLabel) {
+        Objects.requireNonNull(nameOrLabel);
         return getTemplate(nameOrLabel).isPresent();
     }
 
     public List<RecordingInfo> getRecordings() {
+        if (!FlightRecorder.isAvailable()) {
+            log.error("FlightRecorder is unavailable");
+            return List.of();
+        }
         return FlightRecorder.getFlightRecorder().getRecordings().stream()
                 .map(RecordingInfo::new)
                 .collect(Collectors.toList());
+    }
+
+    @SuppressFBWarnings(value = {"EI_EXPOSE_REP", "EI_EXPOSE_REP2"})
+    public static class TemplatedRecording {
+        private final Configuration configuration;
+        private final Recording recording;
+
+        public TemplatedRecording(Configuration configuration, Recording recording) {
+            this.configuration = configuration;
+            this.recording = recording;
+        }
+
+        public Configuration getConfiguration() {
+            return configuration;
+        }
+
+        public Recording getRecording() {
+            return recording;
+        }
     }
 
     @SuppressFBWarnings(value = "URF_UNREAD_FIELD")

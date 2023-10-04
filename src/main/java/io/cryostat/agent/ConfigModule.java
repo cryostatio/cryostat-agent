@@ -232,7 +232,7 @@ public abstract class ConfigModule {
     @Singleton
     @Named(CRYOSTAT_AGENT_HARVESTER_TEMPLATE)
     public static String provideCryostatAgentHarvesterTemplate(SmallRyeConfig config) {
-        return config.getValue(CRYOSTAT_AGENT_HARVESTER_TEMPLATE, String.class);
+        return config.getOptionalValue(CRYOSTAT_AGENT_HARVESTER_TEMPLATE, String.class).orElse("");
     }
 
     @Provides

@@ -27,6 +27,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 import io.cryostat.agent.FlightRecorderHelper;
+import io.cryostat.agent.harvest.Harvester;
 import io.cryostat.agent.model.MBeanInfo;
 import io.cryostat.agent.triggers.SmartTrigger.TriggerState;
 
@@ -44,6 +45,7 @@ public class TriggerEvaluator {
     private final ScheduledExecutorService scheduler;
     private final TriggerParser parser;
     private final FlightRecorderHelper flightRecorderHelper;
+    private final Harvester harvester;
     private final long evaluationPeriodMs;
     private final ConcurrentLinkedQueue<SmartTrigger> triggers = new ConcurrentLinkedQueue<>();
     private Future<?> task;
@@ -52,11 +54,13 @@ public class TriggerEvaluator {
     public TriggerEvaluator(
             ScheduledExecutorService scheduler,
             TriggerParser parser,
-            FlightRecorderHelper flightRecorderModule,
+            FlightRecorderHelper flightRecorderHelper,
+            Harvester harvester,
             long evaluationPeriodMs) {
         this.scheduler = scheduler;
         this.parser = parser;
-        this.flightRecorderHelper = flightRecorderModule;
+        this.flightRecorderHelper = flightRecorderHelper;
+        this.harvester = harvester;
         this.evaluationPeriodMs = evaluationPeriodMs;
     }
 
@@ -109,8 +113,7 @@ public class TriggerEvaluator {
                         // met once
                         if (t.isSimple() && evaluateTriggerConstraint(t, t.getTargetDuration())) {
                             log.trace("Trigger {} satisfied, starting recording...", t);
-                            flightRecorderHelper.startRecording(t.getRecordingTemplateName());
-                            t.setState(TriggerState.COMPLETE);
+                            startRecording(t);
                         } else if (!t.isSimple()) {
                             if (evaluateTriggerConstraint(t, Duration.ZERO)) {
                                 // Condition was met, set the state accordingly
@@ -128,8 +131,7 @@ public class TriggerEvaluator {
                         // Condition was met at last check but duration hasn't passed
                         if (evaluateTriggerConstraint(t, Duration.ofMillis(difference))) {
                             log.trace("Trigger {} satisfied, completing...", t);
-                            t.setState(TriggerState.COMPLETE);
-                            flightRecorderHelper.startRecording(t.getRecordingTemplateName());
+                            startRecording(t);
                         } else if (evaluateTriggerConstraint(t, Duration.ZERO)) {
                             log.trace("Trigger {} satisfied, waiting for duration...", t);
                         } else {
@@ -151,6 +153,25 @@ public class TriggerEvaluator {
         } catch (Exception e) {
             log.error("Unexpected exception during evaluation", e);
         }
+    }
+
+    private void startRecording(SmartTrigger t) {
+        flightRecorderHelper
+                .createRecording(t.getRecordingTemplateName())
+                .ifPresent(
+                        tr -> {
+                            String recordingName =
+                                    String.format(
+                                            "cryostat-smart-trigger-%d", tr.getRecording().getId());
+                            tr.getRecording().setName(recordingName);
+                            harvester.handleNewRecording(tr);
+                            tr.getRecording().start();
+                            t.setState(TriggerState.COMPLETE);
+                            log.info(
+                                    "Started recording \"{}\" using template \"{}\"",
+                                    recordingName,
+                                    t.getRecordingTemplateName());
+                        });
     }
 
     private boolean evaluateTriggerConstraint(SmartTrigger trigger, Duration targetDuration) {

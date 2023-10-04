@@ -31,9 +31,18 @@ JAVA_OPTIONS="-Dcom.sun.management.jmxremote.port=9091 -Dcom.sun.management.jmxr
 ```
 This assumes that the agent JAR has been included in the application image within `/deployments/app/`.
 
+## Harvester
+
+The various `cryostat.agent.harvester.*` properties may be used to configure `cryostat-agent` to start a new Flight
+Recording using a given event template on Agent initialization, and to periodically collect this recorded data and push
+it to the Agent's associated Cryostat server. The Agent will also attempt to push the tail end of this recording on JVM
+shutdown so that the cause of an unexpected JVM shutdown might be captured for later analysis.
+
 ## SMART TRIGGERS
 
-`cryostat-agent` supports smart triggers that listen to the values of the MBean Counters and can start recordings based on a set of constraints specified by the user.
+`cryostat-agent` supports smart triggers that listen to the values of the MBean Counters and can start recordings based
+on a set of constraints specified by the user.
+
 The general form of a smart trigger expression is as follows:
 
 ```
@@ -46,7 +55,8 @@ An example for listening to CPU Usage and starting a recording using the Profili
 [ProcessCpuLoad>0.2]~profile
 ```
 
-An example for watching for the Thread Count to exceed 20 for longer than 10 seconds and starting a recording using the Continuous template:
+An example for watching for the Thread Count to exceed 20 for longer than 10 seconds and starting a recording using the
+Continuous template:
 
 ```
 [ThreadCount>20&&TargetDuration>duration("10s")]~Continuous
@@ -64,7 +74,16 @@ Multiple smart trigger definitions may be specified and separated by commas, for
 [ProcessCpuLoad>0.2]~profile,[ThreadCount>30]~Continuous
 ```
 
-**NOTE**: Smart Triggers are evaluated on a polling basis. The poll period is configurable (see list below). This means that your conditions are subject to sampling biases.
+**NOTE**: Smart Triggers are evaluated on a polling basis. The poll period is configurable (see list below). This means
+that your conditions are subject to sampling biases.
+
+### Harvester Integration
+
+Any Flight Recordings created by Smart Trigger will also be tracked by the Harvester system. This data will be captured
+in a JFR Snapshot and pushed to the server on the Harvester's usual schedule. By defining Smart Triggers and a
+Harvester period without a Harvester template, you can achieve a setup where dynamically-started Flight Recordings
+begin when trigger conditions are met, and their data is then periodically captured until the recording is manually
+stopped or the host JVM shuts down.
 
 ## CONFIGURATION
 
@@ -90,8 +109,8 @@ and how it advertises itself to a Cryostat server instance. Required properties 
 - [ ] `cryostat.agent.registration.retry-ms` [`long`]: the duration in milliseconds between attempts to register with the Cryostat server. Default `5000`.
 - [ ] `cryostat.agent.exit.signals` [`[String]`]: a comma-separated list of signals that the agent should handle. When any of these signals is caught the agent initiates an orderly shutdown, deregistering from the Cryostat server and potentially uploading the latest harvested JFR data. Default `INT,TERM`.
 - [ ] `cryostat.agent.exit.deregistration.timeout-ms` [`long`]: the duration in milliseconds to wait for a response from the Cryostat server when attempting to deregister at shutdown time . Default `3000`.
-- [ ] `cryostat.agent.harvester.period-ms` [`long`]: the length of time between JFR collections and pushes by the harvester. This also controls the maximum age of data stored in the buffer for the harvester's managed Flight Recording. Every `period-ms` the harvester will upload a JFR binary file to the `cryostat.agent.baseuri` archives. Default `-1`, which indicates no harvesting will be performed.
-- [ ] `cryostat.agent.harvester.template` [`String`]: the name of the `.jfc` event template configuration to use for the harvester's managed Flight Recording. Default `default`, the continuous monitoring event template.
+- [ ] `cryostat.agent.harvester.period-ms` [`long`]: the length of time between JFR collections and pushes by the harvester. This also controls the maximum age of data stored in the buffer for the harvester's managed Flight Recording. Every `period-ms` the harvester will upload a JFR binary file to the `cryostat.agent.baseuri` archives. Default `-1`, which indicates no scheduled harvest uploading will be performed.
+- [ ] `cryostat.agent.harvester.template` [`String`]: the name of the `.jfc` event template configuration to use for the harvester's managed Flight Recording. Defaults to the empty string, so that no recording is started.
 - [ ] `cryostat.agent.harvester.max-files` [`String`]: the maximum number of pushed files that Cryostat will keep over the network from the agent. This is supplied to the harvester's push requests which instructs Cryostat to prune, in a FIFO manner, the oldest JFR files within the attached JVM target's storage, while the number of stored recordings is greater than this configuration's maximum file limit. Default `2147483647` (`Integer.MAX_VALUE`).
 - [ ] `cryostat.agent.harvester.upload.timeout-ms` [`long`]: the duration in milliseconds to wait for HTTP upload requests to the Cryostat server to complete and respond. Default `30000`.
 - [ ] `cryostat.agent.harvester.exit.max-age-ms` [`long`]: the JFR `maxage` setting, specified in milliseconds, to apply to recording data uploaded to the Cryostat server when the JVM this Agent instance is attached to exits. This ensures that tail-end data is captured between the last periodic push and the application exit. Exit uploads only occur when the application receives `SIGINT`/`SIGTERM` from the operating system or container platform.
