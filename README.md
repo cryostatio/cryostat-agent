@@ -46,8 +46,10 @@ on a set of constraints specified by the user.
 The general form of a smart trigger expression is as follows:
 
 ```
-[constraint1(&&/||)constraint2...constraintN]~recordingTemplate
+[constraint1(&&/||)constraint2...constraintN]~recordingTemplateNameOrLabel
 ```
+
+Either the filename or label XML tag of the `${templateName}.jfc` may be used to specify the event template to use. For example, the JDK distribution ships with a `default.jfc` file containing the top-level `<configuration label="Continuous">` element. This template may be specified in the Smart Trigger definition as any of `default.jfc`, `default`, or `Continuous`.
 
 An example for listening to CPU Usage and starting a recording using the Profiling template when it exceeds 0.2%:
 
