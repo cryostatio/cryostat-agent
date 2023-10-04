@@ -23,9 +23,10 @@ import java.util.regex.Pattern;
 
 public class SmartTrigger {
 
-    private static final String DURATION_PATTERN =
-            "(.+)(?:[&|]{2})(TargetDuration[<>=]+duration\\(['\"](\\d+[sSmMhH]+)['\"]\\))";
-    private static final Pattern durationPattern = Pattern.compile(DURATION_PATTERN);
+    private static final String DURATION_PATTERN_STR =
+            "(TargetDuration[<>=]+duration\\(['\"](\\d+[sSmMhH]+)['\"]\\))";
+    private static final String DEFINITION_PATTERN_STR = "(.+)(?:;)" + DURATION_PATTERN_STR;
+    private static final Pattern DEFINITION_PATTERN = Pattern.compile(DEFINITION_PATTERN_STR);
 
     public enum TriggerState {
         /* Newly Created or Condition not met. */
@@ -53,7 +54,7 @@ public class SmartTrigger {
         this.expression = expression;
         this.recordingTemplate = templateName;
         this.state = TriggerState.NEW;
-        Matcher m = durationPattern.matcher(expression);
+        Matcher m = DEFINITION_PATTERN.matcher(expression);
         if (m.matches()) {
             triggerCondition = m.group(1);
             durationConstraint = m.group(2).replaceAll("'", "\"");
