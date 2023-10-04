@@ -83,6 +83,8 @@ public abstract class ConfigModule {
     public static final String CRYOSTAT_AGENT_HARVESTER_MAX_SIZE_B =
             "cryostat.agent.harvester.max-size-b";
 
+    public static final String CRYOSTAT_AGENT_SMART_TRIGGER_DEFINITIONS =
+            "cryostat.agent.smart-trigger.definitions";
     public static final String CRYOSTAT_AGENT_SMART_TRIGGER_EVALUATION_PERIOD_MS =
             "cryostat.agent.smart-trigger.evaluation.period-ms";
 
@@ -289,6 +291,13 @@ public abstract class ConfigModule {
     @Named(CRYOSTAT_AGENT_EXIT_DEREGISTRATION_TIMEOUT_MS)
     public static long provideCryostatAgentExitDeregistrationTimeoutMs(SmallRyeConfig config) {
         return config.getValue(CRYOSTAT_AGENT_EXIT_DEREGISTRATION_TIMEOUT_MS, long.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_SMART_TRIGGER_DEFINITIONS)
+    public static List<String> provideCryostatSmartTriggerDefinitions(SmallRyeConfig config) {
+        return config.getValues(CRYOSTAT_AGENT_SMART_TRIGGER_DEFINITIONS, String.class);
     }
 
     @Provides
