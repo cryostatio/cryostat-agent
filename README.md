@@ -46,7 +46,7 @@ on a set of constraints specified by the user.
 The general form of a Smart Trigger expression is as follows:
 
 ```
-[constraint1(&&/||/==)constraint2...constraintN;durationConstraint]~recordingTemplateNameOrLabel
+[constraint1(&&/||)constraint2...constraintN;durationConstraint]~recordingTemplateNameOrLabel
 ```
 
 Either the filename or label XML tag of the `${templateName}.jfc` may be used to specify the event template to use. For
