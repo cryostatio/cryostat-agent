@@ -110,7 +110,11 @@ public class SmartTrigger {
     @Override
     public int hashCode() {
         return Objects.hash(
-                durationConstraint, triggerCondition, recordingTemplate, targetDuration);
+                rawExpression,
+                durationConstraint,
+                triggerCondition,
+                recordingTemplate,
+                targetDuration);
     }
 
     @Override
@@ -125,7 +129,8 @@ public class SmartTrigger {
             return false;
         }
         SmartTrigger other = (SmartTrigger) obj;
-        return Objects.equals(durationConstraint, other.durationConstraint)
+        return Objects.equals(rawExpression, other.rawExpression)
+                && Objects.equals(durationConstraint, other.durationConstraint)
                 && Objects.equals(triggerCondition, other.triggerCondition)
                 && Objects.equals(recordingTemplate, other.recordingTemplate)
                 && Objects.equals(targetDuration, other.targetDuration);
@@ -133,7 +138,9 @@ public class SmartTrigger {
 
     @Override
     public String toString() {
-        return "SmartTrigger [durationConstraint="
+        return "SmartTrigger [rawExpression="
+                + rawExpression
+                + ", durationConstraint="
                 + durationConstraint
                 + ", recordingTemplate="
                 + recordingTemplate
