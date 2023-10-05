@@ -197,6 +197,7 @@ public class TriggerEvaluator {
             Boolean conditionResult =
                     buildConditionScript(trigger, conditionVars)
                             .execute(Boolean.class, conditionVars);
+
             Boolean durationResult;
             Map<String, Object> durationVar = Map.of("TargetDuration", targetDuration);
             if (Duration.ZERO.equals(targetDuration)) {
@@ -206,6 +207,7 @@ public class TriggerEvaluator {
                         buildDurationScript(trigger, durationVar)
                                 .execute(Boolean.class, durationVar);
             }
+
             return Boolean.TRUE.equals(conditionResult) && Boolean.TRUE.equals(durationResult);
         } catch (Exception e) {
             log.error("Failed to create or execute script", e);
