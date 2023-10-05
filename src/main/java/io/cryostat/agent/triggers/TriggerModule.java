@@ -15,6 +15,7 @@
  */
 package io.cryostat.agent.triggers;
 
+import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 
@@ -50,11 +51,13 @@ public abstract class TriggerModule {
     @Singleton
     public static TriggerEvaluator provideTriggerEvaluatorFactory(
             @Named(TRIGGER_SCHEDULER) ScheduledExecutorService scheduler,
+            @Named(ConfigModule.CRYOSTAT_AGENT_SMART_TRIGGER_DEFINITIONS) List<String> definitions,
             TriggerParser parser,
             FlightRecorderHelper helper,
             Harvester harvester,
             @Named(ConfigModule.CRYOSTAT_AGENT_SMART_TRIGGER_EVALUATION_PERIOD_MS)
                     long evaluationPeriodMs) {
-        return new TriggerEvaluator(scheduler, parser, helper, harvester, evaluationPeriodMs);
+        return new TriggerEvaluator(
+                scheduler, definitions, parser, helper, harvester, evaluationPeriodMs);
     }
 }

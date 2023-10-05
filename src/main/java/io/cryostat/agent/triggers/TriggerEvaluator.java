@@ -17,6 +17,7 @@ package io.cryostat.agent.triggers;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -43,6 +44,7 @@ import org.slf4j.LoggerFactory;
 public class TriggerEvaluator {
 
     private final ScheduledExecutorService scheduler;
+    private final List<String> definitions;
     private final TriggerParser parser;
     private final FlightRecorderHelper flightRecorderHelper;
     private final Harvester harvester;
@@ -53,11 +55,13 @@ public class TriggerEvaluator {
 
     public TriggerEvaluator(
             ScheduledExecutorService scheduler,
+            List<String> definitions,
             TriggerParser parser,
             FlightRecorderHelper flightRecorderHelper,
             Harvester harvester,
             long evaluationPeriodMs) {
         this.scheduler = scheduler;
+        this.definitions = Collections.unmodifiableList(definitions);
         this.parser = parser;
         this.flightRecorderHelper = flightRecorderHelper;
         this.harvester = harvester;
@@ -67,6 +71,7 @@ public class TriggerEvaluator {
     public void start(String[] args) {
         this.stop();
         parser.parse(args).forEach(this::registerTrigger);
+        parser.parse(definitions.toArray(new String[0])).forEach(this::registerTrigger);
         this.start();
     }
 
