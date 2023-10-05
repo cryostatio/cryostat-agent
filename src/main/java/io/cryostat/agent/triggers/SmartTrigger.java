@@ -39,7 +39,7 @@ public class SmartTrigger {
         COMPLETE
     };
 
-    private final String expression;
+    private final String rawExpression;
     private final String durationConstraint;
     private final String triggerCondition;
     private final String recordingTemplate;
@@ -51,7 +51,7 @@ public class SmartTrigger {
     private volatile TriggerState state;
 
     public SmartTrigger(String expression, String templateName) {
-        this.expression = expression;
+        this.rawExpression = expression;
         this.recordingTemplate = templateName;
         this.state = TriggerState.NEW;
         Matcher m = DEFINITION_PATTERN.matcher(expression);
@@ -68,7 +68,7 @@ public class SmartTrigger {
     }
 
     public String getExpression() {
-        return expression;
+        return rawExpression;
     }
 
     public TriggerState getState() {
@@ -110,11 +110,7 @@ public class SmartTrigger {
     @Override
     public int hashCode() {
         return Objects.hash(
-                expression,
-                durationConstraint,
-                triggerCondition,
-                recordingTemplate,
-                targetDuration);
+                durationConstraint, triggerCondition, recordingTemplate, targetDuration);
     }
 
     @Override
@@ -129,8 +125,7 @@ public class SmartTrigger {
             return false;
         }
         SmartTrigger other = (SmartTrigger) obj;
-        return Objects.equals(expression, other.expression)
-                && Objects.equals(durationConstraint, other.durationConstraint)
+        return Objects.equals(durationConstraint, other.durationConstraint)
                 && Objects.equals(triggerCondition, other.triggerCondition)
                 && Objects.equals(recordingTemplate, other.recordingTemplate)
                 && Objects.equals(targetDuration, other.targetDuration);
@@ -140,8 +135,6 @@ public class SmartTrigger {
     public String toString() {
         return "SmartTrigger [durationConstraint="
                 + durationConstraint
-                + ", expression="
-                + expression
                 + ", recordingTemplate="
                 + recordingTemplate
                 + ", targetDuration="

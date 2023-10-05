@@ -74,7 +74,7 @@ converted into a `java.time.Duration` object representing the time threshold bef
 Smart Triggers may define more complex conditions that test multiple metrics:
 
 ```
-[(ProcessCpuLoad>0.5||SystemCpuLoad>0.25)&&HeapUsagePercent>0.1;TargetDuration>duration('1m')]~Continuous
+[(ProcessCpuLoad>0.5||SystemCpuLoad>0.25)&&HeapMemoryUsagePercent>0.1;TargetDuration>duration('1m')]~Continuous
 ```
 
 These may be passed as an argument to the Cryostat Agent, for example:

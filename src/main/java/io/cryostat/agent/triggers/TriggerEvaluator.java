@@ -173,9 +173,11 @@ public class TriggerEvaluator {
                             tr.getRecording().start();
                             t.setState(TriggerState.COMPLETE);
                             log.info(
-                                    "Started recording \"{}\" using template \"{}\"",
+                                    "Started recording \"{}\" using template \"{}\" due to trigger"
+                                            + " \"{}\"",
                                     recordingName,
-                                    t.getRecordingTemplateName());
+                                    t.getRecordingTemplateName(),
+                                    t.getExpression());
                         });
     }
 
@@ -183,15 +185,17 @@ public class TriggerEvaluator {
         try {
             Map<String, Object> scriptVars = new HashMap<>(new MBeanInfo().getSimplifiedMetrics());
             ScriptHost scriptHost = ScriptHost.newBuilder().build();
+            StringBuilder condition = new StringBuilder(trigger.getTriggerCondition());
+            if (!Duration.ZERO.equals(targetDuration)) {
+                condition.append("&&");
+                condition.append(trigger.getDurationConstraint());
+                scriptVars.put("TargetDuration", targetDuration);
+            }
             Script script =
                     scriptHost
-                            .buildScript(
-                                    Duration.ZERO.equals(targetDuration)
-                                            ? trigger.getTriggerCondition()
-                                            : trigger.getExpression())
+                            .buildScript(condition.toString())
                             .withDeclarations(buildDeclarations(scriptVars))
                             .build();
-            scriptVars.put("TargetDuration", targetDuration);
             log.trace("evaluating mbean map:\n{}", scriptVars);
             Boolean result = script.execute(Boolean.class, scriptVars);
             return Boolean.TRUE.equals(result);
@@ -209,17 +213,17 @@ public class TriggerEvaluator {
             log.trace("Declaring script var {} [{}]", key, parseType);
             decls.add(Decls.newVar(key, parseType));
         }
-        decls.add(Decls.newVar("TargetDuration", Decls.Duration));
         return decls;
     }
 
     private Type parseType(Object obj) {
         if (obj.getClass().equals(String.class)) return Decls.String;
-        else if (obj.getClass().equals(Double.class)) return Decls.Double;
-        else if (obj.getClass().equals(Integer.class)) return Decls.Int;
         else if (obj.getClass().equals(Boolean.class)) return Decls.Bool;
+        else if (obj.getClass().equals(Integer.class)) return Decls.Int;
         else if (obj.getClass().equals(Long.class))
             return Decls.newPrimitiveType(PrimitiveType.INT64);
+        else if (obj.getClass().equals(Double.class)) return Decls.Double;
+        else if (obj.getClass().equals(Duration.class)) return Decls.Duration;
         else
             // Default to String so we can still do some comparison
             return Decls.String;
