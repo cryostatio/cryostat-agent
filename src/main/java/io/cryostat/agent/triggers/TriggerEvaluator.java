@@ -47,6 +47,7 @@ public class TriggerEvaluator {
     private final ScheduledExecutorService scheduler;
     private final List<String> definitions;
     private final TriggerParser parser;
+    private final ScriptHost scriptHost;
     private final FlightRecorderHelper flightRecorderHelper;
     private final Harvester harvester;
     private final long evaluationPeriodMs;
@@ -68,6 +69,7 @@ public class TriggerEvaluator {
         this.scheduler = scheduler;
         this.definitions = Collections.unmodifiableList(definitions);
         this.parser = parser;
+        this.scriptHost = ScriptHost.newBuilder().build();
         this.flightRecorderHelper = flightRecorderHelper;
         this.harvester = harvester;
         this.evaluationPeriodMs = evaluationPeriodMs;
@@ -213,40 +215,24 @@ public class TriggerEvaluator {
 
     private Script buildConditionScript(SmartTrigger trigger, Map<String, Object> scriptVars) {
         return conditionScriptCache.computeIfAbsent(
-                trigger,
-                t -> {
-                    try {
-                        ScriptHost scriptHost = ScriptHost.newBuilder().build();
-                        Script script =
-                                scriptHost
-                                        .buildScript(trigger.getTriggerCondition())
-                                        .withDeclarations(buildDeclarations(scriptVars))
-                                        .build();
-                        return script;
-                    } catch (ScriptCreateException sce) {
-                        log.error("Failed to create condition script", sce);
-                        throw new RuntimeException(sce);
-                    }
-                });
+                trigger, t -> buildScript(t.getTriggerCondition(), scriptVars));
     }
 
     private Script buildDurationScript(SmartTrigger trigger, Map<String, Object> scriptVars) {
         return durationScriptCache.computeIfAbsent(
-                trigger,
-                t -> {
-                    try {
-                        ScriptHost scriptHost = ScriptHost.newBuilder().build();
-                        Script script =
-                                scriptHost
-                                        .buildScript(trigger.getDurationConstraint())
-                                        .withDeclarations(buildDeclarations(scriptVars))
-                                        .build();
-                        return script;
-                    } catch (ScriptCreateException sce) {
-                        log.error("Failed to create duration script", sce);
-                        throw new RuntimeException(sce);
-                    }
-                });
+                trigger, t -> buildScript(t.getDurationConstraint(), scriptVars));
+    }
+
+    private Script buildScript(String script, Map<String, Object> scriptVars) {
+        try {
+            return scriptHost
+                    .buildScript(script)
+                    .withDeclarations(buildDeclarations(scriptVars))
+                    .build();
+        } catch (ScriptCreateException sce) {
+            log.error("Failed to create script", sce);
+            throw new RuntimeException(sce);
+        }
     }
 
     private List<Decl> buildDeclarations(Map<String, Object> scriptVars) {
