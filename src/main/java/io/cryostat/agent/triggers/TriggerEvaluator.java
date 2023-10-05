@@ -19,9 +19,9 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
@@ -37,6 +37,7 @@ import com.google.api.expr.v1alpha1.Type;
 import com.google.api.expr.v1alpha1.Type.PrimitiveType;
 import org.projectnessie.cel.checker.Decls;
 import org.projectnessie.cel.tools.Script;
+import org.projectnessie.cel.tools.ScriptCreateException;
 import org.projectnessie.cel.tools.ScriptHost;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -49,6 +50,10 @@ public class TriggerEvaluator {
     private final FlightRecorderHelper flightRecorderHelper;
     private final Harvester harvester;
     private final long evaluationPeriodMs;
+    private final ConcurrentHashMap<SmartTrigger, Script> conditionScriptCache =
+            new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<SmartTrigger, Script> durationScriptCache =
+            new ConcurrentHashMap<>();
     private final ConcurrentLinkedQueue<SmartTrigger> triggers = new ConcurrentLinkedQueue<>();
     private Future<?> task;
     private final Logger log = LoggerFactory.getLogger(getClass());
@@ -112,6 +117,8 @@ public class TriggerEvaluator {
                         /* Trigger condition has been met, can remove it */
                         log.trace("Completed {} , removing", t);
                         triggers.remove(t);
+                        conditionScriptCache.remove(t);
+                        durationScriptCache.remove(t);
                         break;
                     case NEW:
                         // Simple Constraint, no duration specified so condition only needs to be
@@ -183,26 +190,63 @@ public class TriggerEvaluator {
 
     private boolean evaluateTriggerConstraint(SmartTrigger trigger, Duration targetDuration) {
         try {
-            Map<String, Object> scriptVars = new HashMap<>(new MBeanInfo().getSimplifiedMetrics());
-            ScriptHost scriptHost = ScriptHost.newBuilder().build();
-            StringBuilder condition = new StringBuilder(trigger.getTriggerCondition());
-            if (!Duration.ZERO.equals(targetDuration)) {
-                condition.append("&&");
-                condition.append(trigger.getDurationConstraint());
-                scriptVars.put("TargetDuration", targetDuration);
+            Map<String, Object> conditionVars = new MBeanInfo().getSimplifiedMetrics();
+            log.trace("evaluating mbean map:\n{}", conditionVars);
+            Boolean conditionResult =
+                    buildConditionScript(trigger, conditionVars)
+                            .execute(Boolean.class, conditionVars);
+            Boolean durationResult;
+            Map<String, Object> durationVar = Map.of("TargetDuration", targetDuration);
+            if (Duration.ZERO.equals(targetDuration)) {
+                durationResult = Boolean.TRUE;
+            } else {
+                durationResult =
+                        buildDurationScript(trigger, durationVar)
+                                .execute(Boolean.class, durationVar);
             }
-            Script script =
-                    scriptHost
-                            .buildScript(condition.toString())
-                            .withDeclarations(buildDeclarations(scriptVars))
-                            .build();
-            log.trace("evaluating mbean map:\n{}", scriptVars);
-            Boolean result = script.execute(Boolean.class, scriptVars);
-            return Boolean.TRUE.equals(result);
+            return Boolean.TRUE.equals(conditionResult) && Boolean.TRUE.equals(durationResult);
         } catch (Exception e) {
             log.error("Failed to create or execute script", e);
             return false;
         }
+    }
+
+    private Script buildConditionScript(SmartTrigger trigger, Map<String, Object> scriptVars) {
+        return conditionScriptCache.computeIfAbsent(
+                trigger,
+                t -> {
+                    try {
+                        ScriptHost scriptHost = ScriptHost.newBuilder().build();
+                        Script script =
+                                scriptHost
+                                        .buildScript(trigger.getTriggerCondition())
+                                        .withDeclarations(buildDeclarations(scriptVars))
+                                        .build();
+                        return script;
+                    } catch (ScriptCreateException sce) {
+                        log.error("Failed to create condition script", sce);
+                        throw new RuntimeException(sce);
+                    }
+                });
+    }
+
+    private Script buildDurationScript(SmartTrigger trigger, Map<String, Object> scriptVars) {
+        return durationScriptCache.computeIfAbsent(
+                trigger,
+                t -> {
+                    try {
+                        ScriptHost scriptHost = ScriptHost.newBuilder().build();
+                        Script script =
+                                scriptHost
+                                        .buildScript(trigger.getDurationConstraint())
+                                        .withDeclarations(buildDeclarations(scriptVars))
+                                        .build();
+                        return script;
+                    } catch (ScriptCreateException sce) {
+                        log.error("Failed to create duration script", sce);
+                        throw new RuntimeException(sce);
+                    }
+                });
     }
 
     private List<Decl> buildDeclarations(Map<String, Object> scriptVars) {

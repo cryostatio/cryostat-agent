@@ -45,12 +45,12 @@ import org.slf4j.LoggerFactory;
 public class MBeanInfo {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
-    private MBeanMetrics mBeanMetrics;
-    private Map<String, Object> simplifiedMetrics;
+    private final MBeanMetrics mBeanMetrics;
+    private final Map<String, Object> simplifiedMetrics;
 
     public MBeanInfo() {
         this.simplifiedMetrics = new HashMap<>();
-        mBeanMetrics =
+        this.mBeanMetrics =
                 new MBeanMetrics(
                         getRuntimeMetrics(),
                         getMemoryMetrics(),
@@ -64,7 +64,6 @@ public class MBeanInfo {
     }
 
     public Map<String, Object> getSimplifiedMetrics() {
-        // Map<String, Object> simplifiedMetrics = new HashMap<>();
         return Collections.unmodifiableMap(simplifiedMetrics);
     }
 
