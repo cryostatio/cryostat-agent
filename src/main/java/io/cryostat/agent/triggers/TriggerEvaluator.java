@@ -198,15 +198,12 @@ public class TriggerEvaluator {
                     buildConditionScript(trigger, conditionVars)
                             .execute(Boolean.class, conditionVars);
 
-            Boolean durationResult;
             Map<String, Object> durationVar = Map.of("TargetDuration", targetDuration);
-            if (Duration.ZERO.equals(targetDuration)) {
-                durationResult = Boolean.TRUE;
-            } else {
-                durationResult =
-                        buildDurationScript(trigger, durationVar)
-                                .execute(Boolean.class, durationVar);
-            }
+            Boolean durationResult =
+                    Duration.ZERO.equals(targetDuration)
+                            ? Boolean.TRUE
+                            : buildDurationScript(trigger, durationVar)
+                                    .execute(Boolean.class, durationVar);
 
             return Boolean.TRUE.equals(conditionResult) && Boolean.TRUE.equals(durationResult);
         } catch (Exception e) {
