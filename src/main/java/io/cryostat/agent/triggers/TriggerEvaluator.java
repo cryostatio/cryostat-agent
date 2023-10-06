@@ -19,9 +19,9 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
@@ -37,6 +37,7 @@ import com.google.api.expr.v1alpha1.Type;
 import com.google.api.expr.v1alpha1.Type.PrimitiveType;
 import org.projectnessie.cel.checker.Decls;
 import org.projectnessie.cel.tools.Script;
+import org.projectnessie.cel.tools.ScriptCreateException;
 import org.projectnessie.cel.tools.ScriptHost;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,9 +47,14 @@ public class TriggerEvaluator {
     private final ScheduledExecutorService scheduler;
     private final List<String> definitions;
     private final TriggerParser parser;
+    private final ScriptHost scriptHost;
     private final FlightRecorderHelper flightRecorderHelper;
     private final Harvester harvester;
     private final long evaluationPeriodMs;
+    private final ConcurrentHashMap<SmartTrigger, Script> conditionScriptCache =
+            new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<SmartTrigger, Script> durationScriptCache =
+            new ConcurrentHashMap<>();
     private final ConcurrentLinkedQueue<SmartTrigger> triggers = new ConcurrentLinkedQueue<>();
     private Future<?> task;
     private final Logger log = LoggerFactory.getLogger(getClass());
@@ -63,6 +69,7 @@ public class TriggerEvaluator {
         this.scheduler = scheduler;
         this.definitions = Collections.unmodifiableList(definitions);
         this.parser = parser;
+        this.scriptHost = ScriptHost.newBuilder().build();
         this.flightRecorderHelper = flightRecorderHelper;
         this.harvester = harvester;
         this.evaluationPeriodMs = evaluationPeriodMs;
@@ -112,6 +119,8 @@ public class TriggerEvaluator {
                         /* Trigger condition has been met, can remove it */
                         log.trace("Completed {} , removing", t);
                         triggers.remove(t);
+                        conditionScriptCache.remove(t);
+                        durationScriptCache.remove(t);
                         break;
                     case NEW:
                         // Simple Constraint, no duration specified so condition only needs to be
@@ -173,31 +182,55 @@ public class TriggerEvaluator {
                             tr.getRecording().start();
                             t.setState(TriggerState.COMPLETE);
                             log.info(
-                                    "Started recording \"{}\" using template \"{}\"",
+                                    "Started recording \"{}\" using template \"{}\" due to trigger"
+                                            + " \"{}\"",
                                     recordingName,
-                                    t.getRecordingTemplateName());
+                                    t.getRecordingTemplateName(),
+                                    t.getExpression());
                         });
     }
 
     private boolean evaluateTriggerConstraint(SmartTrigger trigger, Duration targetDuration) {
         try {
-            Map<String, Object> scriptVars = new HashMap<>(new MBeanInfo().getSimplifiedMetrics());
-            ScriptHost scriptHost = ScriptHost.newBuilder().build();
-            Script script =
-                    scriptHost
-                            .buildScript(
-                                    Duration.ZERO.equals(targetDuration)
-                                            ? trigger.getTriggerCondition()
-                                            : trigger.getExpression())
-                            .withDeclarations(buildDeclarations(scriptVars))
-                            .build();
-            scriptVars.put("TargetDuration", targetDuration);
-            log.trace("evaluating mbean map:\n{}", scriptVars);
-            Boolean result = script.execute(Boolean.class, scriptVars);
-            return Boolean.TRUE.equals(result);
+            Map<String, Object> conditionVars = new MBeanInfo().getSimplifiedMetrics();
+            log.trace("evaluating mbean map:\n{}", conditionVars);
+            Boolean conditionResult =
+                    buildConditionScript(trigger, conditionVars)
+                            .execute(Boolean.class, conditionVars);
+
+            Map<String, Object> durationVar = Map.of("TargetDuration", targetDuration);
+            Boolean durationResult =
+                    Duration.ZERO.equals(targetDuration)
+                            ? Boolean.TRUE
+                            : buildDurationScript(trigger, durationVar)
+                                    .execute(Boolean.class, durationVar);
+
+            return Boolean.TRUE.equals(conditionResult) && Boolean.TRUE.equals(durationResult);
         } catch (Exception e) {
             log.error("Failed to create or execute script", e);
             return false;
+        }
+    }
+
+    private Script buildConditionScript(SmartTrigger trigger, Map<String, Object> scriptVars) {
+        return conditionScriptCache.computeIfAbsent(
+                trigger, t -> buildScript(t.getTriggerCondition(), scriptVars));
+    }
+
+    private Script buildDurationScript(SmartTrigger trigger, Map<String, Object> scriptVars) {
+        return durationScriptCache.computeIfAbsent(
+                trigger, t -> buildScript(t.getDurationConstraint(), scriptVars));
+    }
+
+    private Script buildScript(String script, Map<String, Object> scriptVars) {
+        try {
+            return scriptHost
+                    .buildScript(script)
+                    .withDeclarations(buildDeclarations(scriptVars))
+                    .build();
+        } catch (ScriptCreateException sce) {
+            log.error("Failed to create script", sce);
+            throw new RuntimeException(sce);
         }
     }
 
@@ -209,17 +242,17 @@ public class TriggerEvaluator {
             log.trace("Declaring script var {} [{}]", key, parseType);
             decls.add(Decls.newVar(key, parseType));
         }
-        decls.add(Decls.newVar("TargetDuration", Decls.Duration));
         return decls;
     }
 
     private Type parseType(Object obj) {
         if (obj.getClass().equals(String.class)) return Decls.String;
-        else if (obj.getClass().equals(Double.class)) return Decls.Double;
-        else if (obj.getClass().equals(Integer.class)) return Decls.Int;
         else if (obj.getClass().equals(Boolean.class)) return Decls.Bool;
+        else if (obj.getClass().equals(Integer.class)) return Decls.Int;
         else if (obj.getClass().equals(Long.class))
             return Decls.newPrimitiveType(PrimitiveType.INT64);
+        else if (obj.getClass().equals(Double.class)) return Decls.Double;
+        else if (obj.getClass().equals(Duration.class)) return Decls.Duration;
         else
             // Default to String so we can still do some comparison
             return Decls.String;

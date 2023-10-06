@@ -40,16 +40,19 @@ shutdown so that the cause of an unexpected JVM shutdown might be captured for l
 
 ## SMART TRIGGERS
 
-`cryostat-agent` supports smart triggers that listen to the values of the MBean Counters and can start recordings based
+`cryostat-agent` supports Smart Triggers that listen to the values of the MBean Counters and can start recordings based
 on a set of constraints specified by the user.
 
-The general form of a smart trigger expression is as follows:
+The general form of a Smart Trigger expression is as follows:
 
 ```
-[constraint1(&&/||)constraint2...constraintN]~recordingTemplateNameOrLabel
+[constraint1(&&/||)constraint2...constraintN;durationConstraint]~recordingTemplateNameOrLabel
 ```
 
-Either the filename or label XML tag of the `${templateName}.jfc` may be used to specify the event template to use. For example, the JDK distribution ships with a `default.jfc` file containing the top-level `<configuration label="Continuous">` element. This template may be specified in the Smart Trigger definition as any of `default.jfc`, `default`, or `Continuous`.
+Either the filename or label XML tag of the `${templateName}.jfc` may be used to specify the event template to use. For
+example, the JDK distribution ships with a `default.jfc` file containing the top-level
+`<configuration label="Continuous">` element. This template may be specified in the Smart Trigger definition as any of
+`default.jfc`, `default`, or `Continuous`.
 
 An example for listening to CPU Usage and starting a recording using the Profiling template when it exceeds 0.2%:
 
@@ -61,7 +64,22 @@ An example for watching for the Thread Count to exceed 20 for longer than 10 sec
 Continuous template:
 
 ```
-[ThreadCount>20&&TargetDuration>duration("10s")]~Continuous
+[ThreadCount>20;TargetDuration>duration("10s")]~Continuous
+```
+
+The first part of the condition before the semicolon is a [Common Expression Language](https://github.com/google/cel-spec)
+expression for testing
+[various MBean metrics](https://github.com/cryostatio/cryostat-agent/blob/main/src/main/java/io/cryostat/agent/model/MBeanInfo.java)
+. The second part after the semicolon references a special variable, `TargetDuration`, which tracks the length of time
+that the first part of the condition has tested `true` for. This is converted to a `java.time.Duration` object and
+compared to `duration("10s")`, a special construct that is also converted into a `java.time.Duration` object
+representing the time threshold before this trigger activates. The `duration()` construct requires a `String` argument,
+which may be enclosed in single `'` or double `"` quotation marks.
+
+Smart Triggers may define more complex conditions that test multiple metrics:
+
+```
+[(ProcessCpuLoad>0.5||SystemCpuLoad>0.25)&&HeapMemoryUsagePercent>0.1;TargetDuration>duration('1m')]~Continuous
 ```
 
 These may be passed as an argument to the Cryostat Agent, for example:

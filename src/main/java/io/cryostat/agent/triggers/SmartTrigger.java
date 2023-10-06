@@ -23,9 +23,10 @@ import java.util.regex.Pattern;
 
 public class SmartTrigger {
 
-    private static final String DURATION_PATTERN =
-            "(.+)(?:[&|]{2})(TargetDuration[<>=]+duration\\(\"(\\d+[sSmMhH]+)\"\\))";
-    private static final Pattern durationPattern = Pattern.compile(DURATION_PATTERN);
+    private static final String DURATION_PATTERN_STR =
+            "(TargetDuration[<>=]+duration\\(['\"](\\d+[sSmMhH]+)['\"]\\))";
+    private static final String DEFINITION_PATTERN_STR = "(.+)(?:;)" + DURATION_PATTERN_STR;
+    private static final Pattern DEFINITION_PATTERN = Pattern.compile(DEFINITION_PATTERN_STR);
 
     public enum TriggerState {
         /* Newly Created or Condition not met. */
@@ -38,7 +39,7 @@ public class SmartTrigger {
         COMPLETE
     };
 
-    private final String expression;
+    private final String rawExpression;
     private final String durationConstraint;
     private final String triggerCondition;
     private final String recordingTemplate;
@@ -50,13 +51,13 @@ public class SmartTrigger {
     private volatile TriggerState state;
 
     public SmartTrigger(String expression, String templateName) {
-        this.expression = expression;
+        this.rawExpression = expression;
         this.recordingTemplate = templateName;
         this.state = TriggerState.NEW;
-        Matcher m = durationPattern.matcher(expression);
+        Matcher m = DEFINITION_PATTERN.matcher(expression);
         if (m.matches()) {
             triggerCondition = m.group(1);
-            durationConstraint = m.group(2);
+            durationConstraint = m.group(2).replaceAll("'", "\"");
             /* Duration.parse requires timestamps in ISO8601 Duration format */
             targetDuration = Duration.parse("PT" + m.group(3));
         } else {
@@ -67,7 +68,7 @@ public class SmartTrigger {
     }
 
     public String getExpression() {
-        return expression;
+        return rawExpression;
     }
 
     public TriggerState getState() {
@@ -109,7 +110,7 @@ public class SmartTrigger {
     @Override
     public int hashCode() {
         return Objects.hash(
-                expression,
+                rawExpression,
                 durationConstraint,
                 triggerCondition,
                 recordingTemplate,
@@ -128,7 +129,7 @@ public class SmartTrigger {
             return false;
         }
         SmartTrigger other = (SmartTrigger) obj;
-        return Objects.equals(expression, other.expression)
+        return Objects.equals(rawExpression, other.rawExpression)
                 && Objects.equals(durationConstraint, other.durationConstraint)
                 && Objects.equals(triggerCondition, other.triggerCondition)
                 && Objects.equals(recordingTemplate, other.recordingTemplate)
@@ -137,10 +138,10 @@ public class SmartTrigger {
 
     @Override
     public String toString() {
-        return "SmartTrigger [durationConstraint="
+        return "SmartTrigger [rawExpression="
+                + rawExpression
+                + ", durationConstraint="
                 + durationConstraint
-                + ", expression="
-                + expression
                 + ", recordingTemplate="
                 + recordingTemplate
                 + ", targetDuration="
