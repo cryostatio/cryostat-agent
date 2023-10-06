@@ -6,4 +6,5 @@
 build/
 target/
 bin/
+.mvn/
 dependency-reduced-pom.xml
