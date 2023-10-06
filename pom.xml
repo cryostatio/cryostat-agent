@@ -98,6 +98,13 @@
     <scope>compile</scope>
   </dependency>
   <dependency>
+    <groupId>org.slf4j</groupId>
+    <artifactId>slf4j-jdk14</artifactId>
+    <version>${org.slf4j.version}</version>
+    <scope>runtime</scope>
+    <optional>true</optional>
+  </dependency>
+  <dependency>
     <groupId>io.cryostat</groupId>
     <!-- This is only used for computing our own JVM's JVM ID - that part could be extracted out of -core -->
     <artifactId>cryostat-core</artifactId>
