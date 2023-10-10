@@ -59,10 +59,10 @@ import io.cryostat.core.templates.TemplateType;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
-import io.smallrye.config.SmallRyeConfig;
 import jdk.jfr.FlightRecorder;
 import jdk.jfr.Recording;
 import org.apache.http.HttpStatus;
+import org.eclipse.microprofile.config.Config;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -73,14 +73,14 @@ class RecordingsContext implements RemoteContext {
             Pattern.compile("^" + PATH + "(\\d+)$", Pattern.MULTILINE);
 
     private final Logger log = LoggerFactory.getLogger(getClass());
-    private final SmallRyeConfig config;
+    private final Config config;
     private final ObjectMapper mapper;
     private final JFRConnectionToolkit jfrConnectionToolkit;
     private final LocalStorageTemplateService localStorageTemplateService;
 
     @Inject
     RecordingsContext(
-            SmallRyeConfig config,
+            Config config,
             ObjectMapper mapper,
             JFRConnectionToolkit jfrConnectionToolkit,
             LocalStorageTemplateService localStorageTemplateService) {

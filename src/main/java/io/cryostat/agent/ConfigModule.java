@@ -27,7 +27,7 @@ import javax.inject.Singleton;
 
 import dagger.Module;
 import dagger.Provides;
-import io.smallrye.config.SmallRyeConfig;
+import org.eclipse.microprofile.config.Config;
 import org.eclipse.microprofile.config.ConfigProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -93,21 +93,21 @@ public abstract class ConfigModule {
 
     @Provides
     @Singleton
-    public static SmallRyeConfig provideConfig() {
-        return ConfigProvider.getConfig().unwrap(SmallRyeConfig.class);
+    public static Config provideConfig() {
+        return ConfigProvider.getConfig();
     }
 
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_BASEURI)
-    public static URI provideCryostatAgentBaseUri(SmallRyeConfig config) {
+    public static URI provideCryostatAgentBaseUri(Config config) {
         return config.getValue(CRYOSTAT_AGENT_BASEURI, URI.class);
     }
 
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_CALLBACK)
-    public static URI provideCryostatAgentCallback(SmallRyeConfig config) {
+    public static URI provideCryostatAgentCallback(Config config) {
         return config.getValue(CRYOSTAT_AGENT_CALLBACK, URI.class);
     }
 
@@ -115,63 +115,63 @@ public abstract class ConfigModule {
     @Singleton
     @Named(CRYOSTAT_AGENT_REALM)
     public static String provideCryostatAgentRealm(
-            SmallRyeConfig config, @Named(CRYOSTAT_AGENT_APP_NAME) String appName) {
+            Config config, @Named(CRYOSTAT_AGENT_APP_NAME) String appName) {
         return config.getOptionalValue(CRYOSTAT_AGENT_REALM, String.class).orElse(appName);
     }
 
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_AUTHORIZATION)
-    public static String provideCryostatAgentAuthorization(SmallRyeConfig config) {
+    public static String provideCryostatAgentAuthorization(Config config) {
         return config.getValue(CRYOSTAT_AGENT_AUTHORIZATION, String.class);
     }
 
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_WEBCLIENT_SSL_TRUST_ALL)
-    public static boolean provideCryostatAgentWebclientTrustAll(SmallRyeConfig config) {
+    public static boolean provideCryostatAgentWebclientTrustAll(Config config) {
         return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_SSL_TRUST_ALL, boolean.class);
     }
 
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_WEBCLIENT_SSL_VERIFY_HOSTNAME)
-    public static boolean provideCryostatAgentWebclientVerifyHostname(SmallRyeConfig config) {
+    public static boolean provideCryostatAgentWebclientVerifyHostname(Config config) {
         return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_SSL_VERIFY_HOSTNAME, boolean.class);
     }
 
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_WEBCLIENT_CONNECT_TIMEOUT_MS)
-    public static int provideCryostatAgentWebclientConnectTimeoutMs(SmallRyeConfig config) {
+    public static int provideCryostatAgentWebclientConnectTimeoutMs(Config config) {
         return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_CONNECT_TIMEOUT_MS, int.class);
     }
 
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_TIMEOUT_MS)
-    public static int provideCryostatAgentWebclientResponseTimeoutMs(SmallRyeConfig config) {
+    public static int provideCryostatAgentWebclientResponseTimeoutMs(Config config) {
         return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_TIMEOUT_MS, int.class);
     }
 
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_WEBSERVER_HOST)
-    public static String provideCryostatAgentWebserverHost(SmallRyeConfig config) {
+    public static String provideCryostatAgentWebserverHost(Config config) {
         return config.getValue(CRYOSTAT_AGENT_WEBSERVER_HOST, String.class);
     }
 
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_WEBSERVER_PORT)
-    public static int provideCryostatAgentWebserverPort(SmallRyeConfig config) {
+    public static int provideCryostatAgentWebserverPort(Config config) {
         return config.getValue(CRYOSTAT_AGENT_WEBSERVER_PORT, int.class);
     }
 
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_INSTANCE_ID)
-    public static String provideCryostatAgentInstanceId(SmallRyeConfig config) {
+    public static String provideCryostatAgentInstanceId(Config config) {
         return config.getOptionalValue(CRYOSTAT_AGENT_INSTANCE_ID, String.class)
                 .orElseGet(() -> UUID.randomUUID().toString());
     }
@@ -179,14 +179,14 @@ public abstract class ConfigModule {
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_APP_NAME)
-    public static String provideCryostatAgentAppName(SmallRyeConfig config) {
+    public static String provideCryostatAgentAppName(Config config) {
         return config.getValue(CRYOSTAT_AGENT_APP_NAME, String.class);
     }
 
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_HOSTNAME)
-    public static String provideCryostatAgentHostname(SmallRyeConfig config) {
+    public static String provideCryostatAgentHostname(Config config) {
         return config.getOptionalValue(CRYOSTAT_AGENT_HOSTNAME, String.class)
                 .orElseGet(
                         () -> {
@@ -202,7 +202,7 @@ public abstract class ConfigModule {
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_APP_JMX_PORT)
-    public static int provideCryostatAgentAppJmxPort(SmallRyeConfig config) {
+    public static int provideCryostatAgentAppJmxPort(Config config) {
         return config.getOptionalValue(CRYOSTAT_AGENT_APP_JMX_PORT, int.class)
                 .orElse(
                         Integer.valueOf(
@@ -212,91 +212,91 @@ public abstract class ConfigModule {
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_REGISTRATION_RETRY_MS)
-    public static int provideCryostatAgentRegistrationRetryMs(SmallRyeConfig config) {
+    public static int provideCryostatAgentRegistrationRetryMs(Config config) {
         return config.getValue(CRYOSTAT_AGENT_REGISTRATION_RETRY_MS, int.class);
     }
 
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_REGISTRATION_CHECK_MS)
-    public static int provideCryostatAgentRegistrationCheckMs(SmallRyeConfig config) {
+    public static int provideCryostatAgentRegistrationCheckMs(Config config) {
         return config.getValue(CRYOSTAT_AGENT_REGISTRATION_CHECK_MS, int.class);
     }
 
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_HARVESTER_PERIOD_MS)
-    public static long provideCryostatAgentHarvesterPeriod(SmallRyeConfig config) {
+    public static long provideCryostatAgentHarvesterPeriod(Config config) {
         return config.getValue(CRYOSTAT_AGENT_HARVESTER_PERIOD_MS, long.class);
     }
 
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_HARVESTER_TEMPLATE)
-    public static String provideCryostatAgentHarvesterTemplate(SmallRyeConfig config) {
+    public static String provideCryostatAgentHarvesterTemplate(Config config) {
         return config.getOptionalValue(CRYOSTAT_AGENT_HARVESTER_TEMPLATE, String.class).orElse("");
     }
 
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_HARVESTER_MAX_FILES)
-    public static int provideCryostatAgentHarvesterMaxFiles(SmallRyeConfig config) {
+    public static int provideCryostatAgentHarvesterMaxFiles(Config config) {
         return config.getValue(CRYOSTAT_AGENT_HARVESTER_MAX_FILES, int.class);
     }
 
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_HARVESTER_UPLOAD_TIMEOUT_MS)
-    public static long provideCryostatAgentHarvesterUploadTimeoutMs(SmallRyeConfig config) {
+    public static long provideCryostatAgentHarvesterUploadTimeoutMs(Config config) {
         return config.getValue(CRYOSTAT_AGENT_HARVESTER_UPLOAD_TIMEOUT_MS, long.class);
     }
 
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_HARVESTER_EXIT_MAX_AGE_MS)
-    public static long provideCryostatAgentHarvesterExitMaxAge(SmallRyeConfig config) {
+    public static long provideCryostatAgentHarvesterExitMaxAge(Config config) {
         return config.getValue(CRYOSTAT_AGENT_HARVESTER_EXIT_MAX_AGE_MS, long.class);
     }
 
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_HARVESTER_EXIT_MAX_SIZE_B)
-    public static long provideCryostatAgentHarvesterExitMaxSize(SmallRyeConfig config) {
+    public static long provideCryostatAgentHarvesterExitMaxSize(Config config) {
         return config.getValue(CRYOSTAT_AGENT_HARVESTER_EXIT_MAX_SIZE_B, long.class);
     }
 
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_HARVESTER_MAX_AGE_MS)
-    public static long provideCryostatAgentHarvesterMaxAge(SmallRyeConfig config) {
+    public static long provideCryostatAgentHarvesterMaxAge(Config config) {
         return config.getValue(CRYOSTAT_AGENT_HARVESTER_MAX_AGE_MS, long.class);
     }
 
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_HARVESTER_MAX_SIZE_B)
-    public static long provideCryostatAgentHarvesterMaxSize(SmallRyeConfig config) {
+    public static long provideCryostatAgentHarvesterMaxSize(Config config) {
         return config.getValue(CRYOSTAT_AGENT_HARVESTER_MAX_SIZE_B, long.class);
     }
 
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_EXIT_SIGNALS)
-    public static List<String> provideCryostatAgentExitSignals(SmallRyeConfig config) {
+    public static List<String> provideCryostatAgentExitSignals(Config config) {
         return Arrays.asList(config.getValue(CRYOSTAT_AGENT_EXIT_SIGNALS, String.class).split(","));
     }
 
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_EXIT_DEREGISTRATION_TIMEOUT_MS)
-    public static long provideCryostatAgentExitDeregistrationTimeoutMs(SmallRyeConfig config) {
+    public static long provideCryostatAgentExitDeregistrationTimeoutMs(Config config) {
         return config.getValue(CRYOSTAT_AGENT_EXIT_DEREGISTRATION_TIMEOUT_MS, long.class);
     }
 
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_SMART_TRIGGER_DEFINITIONS)
-    public static List<String> provideCryostatSmartTriggerDefinitions(SmallRyeConfig config) {
+    public static List<String> provideCryostatSmartTriggerDefinitions(Config config) {
         return config.getOptionalValues(CRYOSTAT_AGENT_SMART_TRIGGER_DEFINITIONS, String.class)
                 .orElse(List.of());
     }
@@ -304,7 +304,7 @@ public abstract class ConfigModule {
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_SMART_TRIGGER_EVALUATION_PERIOD_MS)
-    public static long provideCryostatSmartTriggerEvaluationPeriodMs(SmallRyeConfig config) {
+    public static long provideCryostatSmartTriggerEvaluationPeriodMs(Config config) {
         return config.getValue(CRYOSTAT_AGENT_SMART_TRIGGER_EVALUATION_PERIOD_MS, long.class);
     }
 }
