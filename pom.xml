@@ -109,6 +109,12 @@
     <!-- This is only used for computing our own JVM's JVM ID - that part could be extracted out of -core -->
     <artifactId>cryostat-core</artifactId>
     <version>${io.cryostat.core.version}</version>
+    <exclusions>
+      <exclusion>
+        <groupId>org.slf4j</groupId>
+        <artifactId>slf4j-api</artifactId>
+      </exclusion>
+    </exclusions>
   </dependency>
   <dependency>
     <groupId>org.projectnessie.cel</groupId>
