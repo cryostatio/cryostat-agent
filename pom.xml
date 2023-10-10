@@ -246,10 +246,18 @@
                 <pattern>org.slf4j</pattern>
                 <shadedPattern>${shade.prefix}.org.slf4j</shadedPattern>
               </relocation>
-              <!-- <relocation> -->
-              <!--   <pattern>io.smallrye.config</pattern> -->
-              <!--   <shadedPattern>${shade.prefix}.io.smallrye.config</shadedPattern> -->
-              <!-- </relocation> -->
+              <relocation>
+                <pattern>io.smallrye.config</pattern>
+                <shadedPattern>${shade.prefix}.io.smallrye.config</shadedPattern>
+              </relocation>
+              <relocation>
+                <pattern>org.eclipse.microprofile</pattern>
+                <shadedPattern>${shade.prefix}.org.eclipse.microprofile</shadedPattern>
+              </relocation>
+              <relocation>
+                <pattern>org.jboss</pattern>
+                <shadedPattern>${shade.prefix}.org.jboss</shadedPattern>
+              </relocation>
               <relocation>
                 <pattern>javax.annotations</pattern>
                 <shadedPattern>${shade.prefix}.javax.annotations</shadedPattern>
