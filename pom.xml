@@ -96,6 +96,14 @@
     <artifactId>slf4j-api</artifactId>
     <version>${org.slf4j.version}</version>
     <scope>compile</scope>
+    <optional>true</optional>
+  </dependency>
+  <!-- TODO remove this SLF4J provider. We should just depend on what SLF4J provider is available in the attached
+        application's classpath at runtime, if any. -->
+  <dependency>
+    <groupId>org.slf4j</groupId>
+    <artifactId>slf4j-simple</artifactId>
+    <version>${org.slf4j.version}</version>
   </dependency>
   <dependency>
     <groupId>org.slf4j</groupId>
