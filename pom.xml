@@ -247,6 +247,13 @@
                 <shadedPattern>${shade.prefix}.org.slf4j</shadedPattern>
               </relocation>
               <relocation>
+                <pattern>java.util.logging.Logger</pattern>
+                <shadedPattern>${shade.prefix}.ShadeLogger</shadedPattern>
+                <excludes>
+                  <exclude>${shade.prefix}.ShadeLogger</exclude>
+                </excludes>
+              </relocation>
+              <relocation>
                 <pattern>io.smallrye.config</pattern>
                 <shadedPattern>${shade.prefix}.io.smallrye.config</shadedPattern>
               </relocation>
