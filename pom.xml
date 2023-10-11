@@ -69,6 +69,7 @@
   <org.mockito.version>5.2.0</org.mockito.version>
   <org.jacoco.maven.plugin.version>0.8.10</org.jacoco.maven.plugin.version>
   <com.diffplug.spotless.maven.plugin.version>2.40.0</com.diffplug.spotless.maven.plugin.version>
+  <com.google.googlejavaformat.version>1.17.0</com.google.googlejavaformat.version>
   <org.jsoup.version>1.15.3</org.jsoup.version>
 
   <shade.prefix>io.cryostat.agent.shaded</shade.prefix>
@@ -366,7 +367,7 @@
       <configuration>
         <java>
           <googleJavaFormat>
-            <version>1.15.0</version>
+            <version>${com.google.googlejavaformat.version}</version>
             <style>AOSP</style>
             <reflowLongStrings>true</reflowLongStrings>
           </googleJavaFormat>
