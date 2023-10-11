@@ -406,10 +406,13 @@ class RecordingsContext implements RemoteContext {
     }
 
     private SerializableRecordingDescriptor startRecording(StartRecordingRequest req)
-            throws QuantityConversionException, ServiceNotAvailableException,
+            throws QuantityConversionException,
+                    ServiceNotAvailableException,
                     FlightRecorderException,
                     org.openjdk.jmc.rjmx.services.jfr.FlightRecorderException,
-                    InvalidEventTemplateException, InvalidXmlException, IOException,
+                    InvalidEventTemplateException,
+                    InvalidXmlException,
+                    IOException,
                     FlightRecorderException {
         Runnable cleanup = () -> {};
         try {
