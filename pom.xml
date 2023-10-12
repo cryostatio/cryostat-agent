@@ -61,7 +61,7 @@
   <org.slf4j.version>2.0.7</org.slf4j.version>
   <org.projectnessie.cel.bom.version>0.3.21</org.projectnessie.cel.bom.version>
 
-  <com.github.spotbugs.version>4.7.3</com.github.spotbugs.version>
+  <com.github.spotbugs.version>4.8.0</com.github.spotbugs.version>
   <com.github.spotbugs.plugin.version>4.7.3.6</com.github.spotbugs.plugin.version>
   <org.junit.jupiter.version>5.10.0</org.junit.jupiter.version>
   <org.hamcrest.version>2.2</org.hamcrest.version>
