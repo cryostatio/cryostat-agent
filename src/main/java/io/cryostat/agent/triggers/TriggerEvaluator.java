@@ -75,10 +75,10 @@ public class TriggerEvaluator {
         this.evaluationPeriodMs = evaluationPeriodMs;
     }
 
-    public void start(String[] args) {
+    public void start(String str) {
         this.stop();
-        parser.parse(args).forEach(this::registerTrigger);
-        parser.parse(definitions.toArray(new String[0])).forEach(this::registerTrigger);
+        parser.parse(str).forEach(this::registerTrigger);
+        parser.parse(String.join(",", definitions)).forEach(this::registerTrigger);
         this.start();
     }
 

@@ -17,15 +17,19 @@ package io.cryostat.agent;
 
 import java.lang.instrument.Instrumentation;
 import java.net.URI;
+import java.util.ArrayDeque;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Queue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 
 import javax.inject.Named;
 import javax.inject.Singleton;
@@ -35,6 +39,7 @@ import io.cryostat.agent.harvest.Harvester;
 import io.cryostat.agent.insights.InsightsAgentHelper;
 import io.cryostat.agent.model.PluginInfo;
 import io.cryostat.agent.triggers.TriggerEvaluator;
+import io.cryostat.agent.util.StringUtils;
 
 import dagger.Component;
 import org.slf4j.Logger;
@@ -42,7 +47,7 @@ import org.slf4j.LoggerFactory;
 import sun.misc.Signal;
 import sun.misc.SignalHandler;
 
-public class Agent {
+public class Agent implements Consumer<AgentArgs> {
 
     private static Logger log = LoggerFactory.getLogger(Agent.class);
     private static final AtomicBoolean needsCleanup = new AtomicBoolean(true);
@@ -50,6 +55,37 @@ public class Agent {
     private static InsightsAgentHelper insights;
 
     public static void main(String[] args) {
+        Agent agent = new Agent();
+        Thread t = new Thread(() -> agent.boot(args));
+        t.setDaemon(true);
+        t.setName("cryostat-agent-main");
+        t.start();
+    }
+
+    public static void agentmain(String args) {
+        String[] split = args == null ? new String[0] : args.split("\\s");
+        main(split);
+    }
+
+    public static void premain(String args) {
+        agentmain(args);
+    }
+
+    void boot(String[] args) {
+        Queue<String> q = new ArrayDeque<>(Arrays.asList(args));
+        AgentArgs aa = new AgentArgs();
+        // FIXME this should not be specified by ordering but instead by key-value pairing
+        aa.pid = q.poll();
+        aa.smartTriggers = q.poll();
+        if (StringUtils.isBlank(aa.pid)) {
+            aa.pid = "0";
+        }
+        accept(aa);
+    }
+
+    @Override
+    public void accept(AgentArgs args) {
+        log.info("Cryostat Agent starting: {}...", args);
         AgentExitHandler agentExitHandler = null;
         try {
             final Client client = DaggerAgent_Client.builder().build();
@@ -112,7 +148,7 @@ public class Agent {
                     });
             webServer.start();
             registration.start();
-            client.triggerEvaluator().start(args);
+            client.triggerEvaluator().start(args.smartTriggers);
             log.info("Startup complete");
         } catch (Exception e) {
             log.error(Agent.class.getSimpleName() + " startup failure", e);
