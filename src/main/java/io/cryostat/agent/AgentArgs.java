@@ -45,7 +45,7 @@ class AgentArgs {
         String pid = q.poll();
         String smartTriggers = q.poll();
         if (StringUtils.isBlank(pid)) {
-            pid = "0";
+            pid = Agent.AUTO_ATTACH_PID;
         }
         return new AgentArgs(pid, smartTriggers);
     }

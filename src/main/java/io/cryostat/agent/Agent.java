@@ -20,6 +20,7 @@ import java.lang.instrument.Instrumentation;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -30,6 +31,8 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 import javax.inject.Named;
 import javax.inject.Singleton;
@@ -55,6 +58,8 @@ public class Agent implements Consumer<String> {
 
     private static Logger log = LoggerFactory.getLogger(Agent.class);
     private static final AtomicBoolean needsCleanup = new AtomicBoolean(true);
+    private static final String ALL_PIDS = "*";
+    static final String AUTO_ATTACH_PID = "0";
 
     private static InsightsAgentHelper insights;
 
@@ -68,14 +73,18 @@ public class Agent implements Consumer<String> {
                     AgentLoadException,
                     URISyntaxException {
         log.trace("main");
+        log.info("Booting with args: {}", Arrays.asList(args));
         AgentArgs aa = AgentArgs.from(args);
-        long pid = getAttachPid(aa);
-        VirtualMachine vm = VirtualMachine.attach(String.valueOf(pid));
-        try {
-            vm.loadAgent(
-                    Path.of(selfJarLocation()).toAbsolutePath().toString(), aa.getSmartTriggers());
-        } finally {
-            vm.detach();
+        List<Long> pids = getAttachPid(aa);
+        for (long pid : pids) {
+            VirtualMachine vm = VirtualMachine.attach(String.valueOf(pid));
+            try {
+                vm.loadAgent(
+                        Path.of(selfJarLocation()).toAbsolutePath().toString(),
+                        aa.getSmartTriggers());
+            } finally {
+                vm.detach();
+            }
         }
     }
 
@@ -102,10 +111,13 @@ public class Agent implements Consumer<String> {
         t.start();
     }
 
-    private static long getAttachPid(AgentArgs aa) {
-        long pid = Long.parseLong(aa.getPid());
-        if (pid < 1) {
-            List<VirtualMachineDescriptor> vms = VirtualMachine.list();
+    private static List<Long> getAttachPid(AgentArgs aa) {
+        List<VirtualMachineDescriptor> vms = VirtualMachine.list();
+        Predicate<VirtualMachineDescriptor> vmFilter;
+        String pidSpec = aa.getPid();
+        if (pidSpec.equals(ALL_PIDS)) {
+            vmFilter = vmd -> true;
+        } else if (pidSpec.equals(AUTO_ATTACH_PID)) {
             if (vms.size() > 2) { // one of them is ourself
                 throw new IllegalStateException(
                         String.format(
@@ -120,15 +132,17 @@ public class Agent implements Consumer<String> {
                                 vms));
             }
             long ownId = ProcessHandle.current().pid();
-            return vms.stream()
-                    .filter(vmd -> !Objects.equals(String.valueOf(ownId), vmd.id()))
-                    .peek(vmd -> log.info("Attaching to VM: {} {}", vmd.displayName(), vmd.id()))
-                    .findFirst()
-                    .map(VirtualMachineDescriptor::id)
-                    .map(Integer::parseInt)
-                    .orElseThrow();
+            vmFilter = vmd -> !Objects.equals(String.valueOf(ownId), vmd.id());
+        } else {
+            Long.parseLong(pidSpec); // ensure that the request is a pid
+            vmFilter = vmd -> pidSpec.equals(vmd.id());
         }
-        return pid;
+        return vms.stream()
+                .filter(vmFilter)
+                .peek(vmd -> log.info("Attaching to VM: {} {}", vmd.displayName(), vmd.id()))
+                .map(VirtualMachineDescriptor::id)
+                .map(Long::parseLong)
+                .collect(Collectors.toList());
     }
 
     static URI selfJarLocation() throws URISyntaxException {
