@@ -54,7 +54,7 @@ import org.slf4j.LoggerFactory;
 import sun.misc.Signal;
 import sun.misc.SignalHandler;
 
-public class Agent implements Consumer<String> {
+public class Agent implements Consumer<AgentArgs> {
 
     private static Logger log = LoggerFactory.getLogger(Agent.class);
     private static final AtomicBoolean needsCleanup = new AtomicBoolean(true);
@@ -99,12 +99,13 @@ public class Agent implements Consumer<String> {
     public static void agentmain(String args, Instrumentation instrumentation) {
         log.trace("agentmain");
         insights = new InsightsAgentHelper(instrumentation);
+        AgentArgs aa = new AgentArgs(String.valueOf(ProcessHandle.current().pid()), args);
         Agent agent = new Agent();
         Thread t =
                 new Thread(
                         () -> {
                             log.info("Cryostat Agent starting...");
-                            agent.accept(args);
+                            agent.accept(aa);
                         });
         t.setDaemon(true);
         t.setName("cryostat-agent-main");
@@ -150,7 +151,7 @@ public class Agent implements Consumer<String> {
     }
 
     @Override
-    public void accept(String smartTriggers) {
+    public void accept(AgentArgs args) {
         log.info("Cryostat Agent starting...");
         AgentExitHandler agentExitHandler = null;
         try {
@@ -214,7 +215,7 @@ public class Agent implements Consumer<String> {
                     });
             webServer.start();
             registration.start();
-            client.triggerEvaluator().start(smartTriggers);
+            client.triggerEvaluator().start(args.getSmartTriggers());
             log.info("Startup complete");
         } catch (Exception e) {
             log.error(Agent.class.getSimpleName() + " startup failure", e);
