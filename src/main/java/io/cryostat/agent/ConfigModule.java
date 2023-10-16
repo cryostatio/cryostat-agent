@@ -17,7 +17,12 @@ package io.cryostat.agent;
 
 import java.net.InetAddress;
 import java.net.URI;
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.net.UnknownHostException;
+import java.security.AccessController;
+import java.security.PrivilegedActionException;
+import java.security.PrivilegedExceptionAction;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
@@ -99,7 +104,24 @@ public abstract class ConfigModule {
     @Provides
     @Singleton
     public static Config provideConfig() {
-        return ConfigProvider.getConfig();
+        // if we don't do this then the SmallRye Config loader may end up with a null classloader in
+        // the case that the Agent starts separately and is dynamically attached to a running VM,
+        // which results in an NPE. Here we try to detect and preempt that case and ensure that
+        // there is a reasonable classloader for the SmallRye config loader to use.
+        PrivilegedExceptionAction<ClassLoader> pea =
+                () -> {
+                    ClassLoader cl = Thread.currentThread().getContextClassLoader();
+                    if (cl != null) {
+                        return cl;
+                    }
+                    return new URLClassLoader(new URL[] {Agent.selfJarLocation().toURL()});
+                };
+        try {
+            ClassLoader cl = AccessController.doPrivileged(pea);
+            return ConfigProvider.getConfig(cl);
+        } catch (PrivilegedActionException pae) {
+            throw new RuntimeException(pae);
+        }
     }
 
     @Provides
