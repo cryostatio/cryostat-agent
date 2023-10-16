@@ -15,15 +15,15 @@
  */
 package io.cryostat.agent;
 
+import java.io.IOException;
 import java.lang.instrument.Instrumentation;
 import java.net.URI;
-import java.util.ArrayDeque;
-import java.util.Arrays;
+import java.net.URISyntaxException;
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Queue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
@@ -39,53 +39,105 @@ import io.cryostat.agent.harvest.Harvester;
 import io.cryostat.agent.insights.InsightsAgentHelper;
 import io.cryostat.agent.model.PluginInfo;
 import io.cryostat.agent.triggers.TriggerEvaluator;
-import io.cryostat.agent.util.StringUtils;
 
+import com.sun.tools.attach.AgentInitializationException;
+import com.sun.tools.attach.AgentLoadException;
+import com.sun.tools.attach.AttachNotSupportedException;
+import com.sun.tools.attach.VirtualMachine;
+import com.sun.tools.attach.VirtualMachineDescriptor;
 import dagger.Component;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import sun.misc.Signal;
 import sun.misc.SignalHandler;
 
-public class Agent implements Consumer<AgentArgs> {
+public class Agent implements Consumer<String> {
 
     private static Logger log = LoggerFactory.getLogger(Agent.class);
     private static final AtomicBoolean needsCleanup = new AtomicBoolean(true);
 
     private static InsightsAgentHelper insights;
 
-    public static void main(String[] args) {
+    // standalone entry point, Agent is started separately and should self-inject and dynamic attach
+    // to the host JVM application. After the agent is dynamically attached we should begin
+    // execution again in agentmain
+    public static void main(String[] args)
+            throws IOException,
+                    AttachNotSupportedException,
+                    AgentInitializationException,
+                    AgentLoadException,
+                    URISyntaxException {
+        log.trace("main");
+        AgentArgs aa = AgentArgs.from(args);
+        long pid = getAttachPid(aa);
+        VirtualMachine vm = VirtualMachine.attach(String.valueOf(pid));
+        try {
+            vm.loadAgent(
+                    Path.of(selfJarLocation()).toAbsolutePath().toString(), aa.getSmartTriggers());
+        } finally {
+            vm.detach();
+        }
+    }
+
+    // -javaagent entry point, Agent is starting before the host JVM application
+    public static void premain(String args, Instrumentation instrumentation) {
+        log.trace("premain");
+        agentmain(args, instrumentation);
+    }
+
+    // dynamic attach entry point, Agent is starting after being loaded and attached to a running
+    // JVM application
+    public static void agentmain(String args, Instrumentation instrumentation) {
+        log.trace("agentmain");
+        insights = new InsightsAgentHelper(instrumentation);
         Agent agent = new Agent();
-        Thread t = new Thread(() -> agent.boot(args));
+        Thread t =
+                new Thread(
+                        () -> {
+                            log.info("Cryostat Agent starting...");
+                            agent.accept(args);
+                        });
         t.setDaemon(true);
         t.setName("cryostat-agent-main");
         t.start();
     }
 
-    public static void agentmain(String args) {
-        String[] split = args == null ? new String[0] : args.split("\\s");
-        main(split);
-    }
-
-    public static void premain(String args) {
-        agentmain(args);
-    }
-
-    void boot(String[] args) {
-        Queue<String> q = new ArrayDeque<>(Arrays.asList(args));
-        AgentArgs aa = new AgentArgs();
-        // FIXME this should not be specified by ordering but instead by key-value pairing
-        aa.pid = q.poll();
-        aa.smartTriggers = q.poll();
-        if (StringUtils.isBlank(aa.pid)) {
-            aa.pid = "0";
+    private static long getAttachPid(AgentArgs aa) {
+        long pid = Long.parseLong(aa.getPid());
+        if (pid < 1) {
+            List<VirtualMachineDescriptor> vms = VirtualMachine.list();
+            if (vms.size() > 2) { // one of them is ourself
+                throw new IllegalStateException(
+                        String.format(
+                                "Too many available virtual machines. Auto-attach only progresses"
+                                        + " if there is one candidate. VMs: %s",
+                                vms));
+            } else if (vms.size() < 2) {
+                throw new IllegalStateException(
+                        String.format(
+                                "Too few available virtual machines. Auto-attach only progresses if"
+                                        + " there is one candidate. VMs: %s",
+                                vms));
+            }
+            long ownId = ProcessHandle.current().pid();
+            return vms.stream()
+                    .filter(vmd -> !Objects.equals(String.valueOf(ownId), vmd.id()))
+                    .peek(vmd -> log.info("Attaching to VM: {} {}", vmd.displayName(), vmd.id()))
+                    .findFirst()
+                    .map(VirtualMachineDescriptor::id)
+                    .map(Integer::parseInt)
+                    .orElseThrow();
         }
-        accept(aa);
+        return pid;
+    }
+
+    static URI selfJarLocation() throws URISyntaxException {
+        return Agent.class.getProtectionDomain().getCodeSource().getLocation().toURI();
     }
 
     @Override
-    public void accept(AgentArgs args) {
-        log.info("Cryostat Agent starting: {}...", args);
+    public void accept(String smartTriggers) {
+        log.info("Cryostat Agent starting...");
         AgentExitHandler agentExitHandler = null;
         try {
             final Client client = DaggerAgent_Client.builder().build();
@@ -148,7 +200,7 @@ public class Agent implements Consumer<AgentArgs> {
                     });
             webServer.start();
             registration.start();
-            client.triggerEvaluator().start(args.smartTriggers);
+            client.triggerEvaluator().start(smartTriggers);
             log.info("Startup complete");
         } catch (Exception e) {
             log.error(Agent.class.getSimpleName() + " startup failure", e);
@@ -178,23 +230,6 @@ public class Agent implements Consumer<AgentArgs> {
             }
         }
         return agentExitHandler;
-    }
-
-    public static void agentmain(String args, Instrumentation instrumentation) {
-        insights = new InsightsAgentHelper(instrumentation);
-        Thread t =
-                new Thread(
-                        () -> {
-                            log.info("Cryostat Agent starting...");
-                            main(args == null ? new String[0] : args.split("\\s"));
-                        });
-        t.setDaemon(true);
-        t.setName("cryostat-agent-main");
-        t.start();
-    }
-
-    public static void premain(String args, Instrumentation instrumentation) {
-        agentmain(args, instrumentation);
     }
 
     private static void setupInsightsIfEnabled(
