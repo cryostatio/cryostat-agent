@@ -56,6 +56,7 @@
   <org.apache.httpcomponents.httpclient.version>4.5.14</org.apache.httpcomponents.httpclient.version>
   <org.apache.httpcomponents.httpmime.version>${org.apache.httpcomponents.httpclient.version}</org.apache.httpcomponents.httpmime.version>
   <com.fasterxml.jackson.version>2.15.2</com.fasterxml.jackson.version>
+  <org.eclipse.microprofile.config.api.version>3.0.3</org.eclipse.microprofile.config.api.version>
   <javax.annotation.version>1.3.2</javax.annotation.version><!-- used by smallrye -->
   <io.smallrye.config.version>2.12.3</io.smallrye.config.version>
   <org.slf4j.version>2.0.7</org.slf4j.version>
@@ -68,7 +69,10 @@
   <org.mockito.version>5.2.0</org.mockito.version>
   <org.jacoco.maven.plugin.version>0.8.11</org.jacoco.maven.plugin.version>
   <com.diffplug.spotless.maven.plugin.version>2.40.0</com.diffplug.spotless.maven.plugin.version>
+  <com.google.googlejavaformat.version>1.17.0</com.google.googlejavaformat.version>
   <org.jsoup.version>1.15.3</org.jsoup.version>
+
+  <shade.prefix>io.cryostat.agent.shaded</shade.prefix>
 </properties>
 
 <dependencyManagement>
@@ -84,15 +88,43 @@
 </dependencyManagement>
 <dependencies>
   <dependency>
+    <groupId>com.google.dagger</groupId>
+    <artifactId>dagger</artifactId>
+    <version>${com.google.dagger.version}</version>
+    <scope>compile</scope>
+  </dependency>
+  <dependency>
+    <groupId>org.slf4j</groupId>
+    <artifactId>slf4j-api</artifactId>
+    <version>${org.slf4j.version}</version>
+    <scope>compile</scope>
+    <optional>true</optional>
+  </dependency>
+  <!-- TODO remove this SLF4J provider. We should just depend on what SLF4J provider is available in the attached
+        application's classpath at runtime, if any. -->
+  <dependency>
+    <groupId>org.slf4j</groupId>
+    <artifactId>slf4j-simple</artifactId>
+    <version>${org.slf4j.version}</version>
+  </dependency>
+  <dependency>
+    <groupId>org.slf4j</groupId>
+    <artifactId>jcl-over-slf4j</artifactId>
+    <version>${org.slf4j.version}</version>
+    <scope>runtime</scope>
+    <optional>true</optional>
+  </dependency>
+  <dependency>
     <groupId>io.cryostat</groupId>
     <!-- This is only used for computing our own JVM's JVM ID - that part could be extracted out of -core -->
     <artifactId>cryostat-core</artifactId>
     <version>${io.cryostat.core.version}</version>
-  </dependency>
-  <dependency>
-    <groupId>com.google.dagger</groupId>
-    <artifactId>dagger</artifactId>
-    <version>${com.google.dagger.version}</version>
+    <exclusions>
+      <exclusion>
+        <groupId>org.slf4j</groupId>
+        <artifactId>slf4j-api</artifactId>
+      </exclusion>
+    </exclusions>
   </dependency>
   <dependency>
     <groupId>org.projectnessie.cel</groupId>
@@ -124,14 +156,16 @@
     <version>${javax.annotation.version}</version>
   </dependency>
   <dependency>
+    <groupId>org.eclipse.microprofile.config</groupId>
+    <artifactId>microprofile-config-api</artifactId>
+    <version>${org.eclipse.microprofile.config.api.version}</version>
+    <scope>compile</scope>
+  </dependency>
+  <dependency>
     <groupId>io.smallrye.config</groupId>
     <artifactId>smallrye-config</artifactId>
     <version>${io.smallrye.config.version}</version>
-  </dependency>
-  <dependency>
-    <groupId>org.slf4j</groupId>
-    <artifactId>slf4j-jdk14</artifactId>
-    <version>${org.slf4j.version}</version>
+    <scope>runtime</scope>
   </dependency>
 
   <!-- test deps -->
@@ -168,6 +202,12 @@
 </dependencies>
 
 <build>
+  <resources>
+    <resource>
+      <directory>src/main/resources</directory>
+      <filtering>true</filtering>
+    </resource>
+  </resources>
   <plugins>
     <plugin>
       <groupId>org.apache.maven.plugins</groupId>
@@ -193,12 +233,70 @@
       <configuration></configuration>
       <executions>
         <execution>
+          <id>shade-jar-with-dependencies</id>
           <phase>package</phase>
           <goals>
             <goal>shade</goal>
           </goals>
           <configuration>
             <createDependencyReducedPom>false</createDependencyReducedPom>
+            <useDependencyReducedPomInJar>false</useDependencyReducedPomInJar>
+            <createSourcesJar>true</createSourcesJar>
+            <shadedArtifactAttached>true</shadedArtifactAttached>
+            <shadedClassifierName>shaded</shadedClassifierName>
+            <relocations>
+              <relocation>
+                <pattern>io.cryostat.core</pattern>
+                <shadedPattern>${shade.prefix}.io.cryostat.core</shadedPattern>
+              </relocation>
+              <relocation>
+                <pattern>org.projectnessie</pattern>
+                <shadedPattern>${shade.prefix}.org.projectnessie</shadedPattern>
+              </relocation>
+              <relocation>
+                <pattern>org.apache</pattern>
+                <shadedPattern>${shade.prefix}.org.apache.shaded</shadedPattern>
+              </relocation>
+              <relocation>
+                <pattern>org.slf4j</pattern>
+                <shadedPattern>${shade.prefix}.org.slf4j</shadedPattern>
+              </relocation>
+              <relocation>
+                <pattern>java.util.logging.Logger</pattern>
+                <shadedPattern>${shade.prefix}.ShadeLogger</shadedPattern>
+                <excludes>
+                  <exclude>${shade.prefix}.ShadeLogger</exclude>
+                </excludes>
+              </relocation>
+              <relocation>
+                <pattern>io.smallrye.config</pattern>
+                <shadedPattern>${shade.prefix}.io.smallrye.config</shadedPattern>
+              </relocation>
+              <relocation>
+                <pattern>org.eclipse.microprofile</pattern>
+                <shadedPattern>${shade.prefix}.org.eclipse.microprofile</shadedPattern>
+              </relocation>
+              <relocation>
+                <pattern>org.jboss</pattern>
+                <shadedPattern>${shade.prefix}.org.jboss</shadedPattern>
+              </relocation>
+              <relocation>
+                <pattern>javax.annotations</pattern>
+                <shadedPattern>${shade.prefix}.javax.annotations</shadedPattern>
+              </relocation>
+              <relocation>
+                <pattern>com.fasterxml.jackson</pattern>
+                <shadedPattern>${shade.prefix}.com.fasterxml.jackson</shadedPattern>
+              </relocation>
+            </relocations>
+            <transformers>
+              <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer" />
+              <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer" />
+              <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheLicenseResourceTransformer" />
+              <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheNoticeResourceTransformer">
+                  <addHeader>false</addHeader>
+              </transformer>
+            </transformers>
           </configuration>
         </execution>
       </executions>
@@ -269,7 +367,7 @@
       <configuration>
         <java>
           <googleJavaFormat>
-            <version>1.15.0</version>
+            <version>${com.google.googlejavaformat.version}</version>
             <style>AOSP</style>
             <reflowLongStrings>true</reflowLongStrings>
           </googleJavaFormat>
