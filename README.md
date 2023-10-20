@@ -124,6 +124,8 @@ These may be passed as an argument to the Cryostat Agent, for example:
 JAVA_OPTIONS="-javaagent:-Dcryostat.agent.baseuri=http://cryostat.local!/deployments/app/cryostat-agent-${CRYOSTAT_AGENT_VERSION}.jar=[ProcessCpuLoad>0.2]~profile
 ```
 
+(note the '!' separator between system properties overrides and Smart Triggers)
+
 or as a [configuration property](#configuration):
 
 ```
