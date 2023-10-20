@@ -61,11 +61,16 @@ $ java -jar /path/to/cryostat-agent.jar -Dcryostat.agent.baseuri=http://cryostat
 ```
 
 In this dynamic attachment mode, the agent [configuration](#configuration) options can be specified using the
-`-D`/`property` flag. [Smart triggers](#smart-triggers) can be specified using `--smartTrigger`. The optional PID is
-a positional argument and may be ignored or set to: `0` to request that the Agent launcher attempt to find exactly one
-candidate JVM application to dynamically attach to, exiting if zero or more than one applications are found; `*` to
-request that the Agent launch attempt to dynamically attach to every JVM application it finds; or a specific PID to
-request that the Agent attempt to dynamically attach only to that one PID.
+`-D`/`property` flag. These must be placed *after* the `-jar /path/to/cryostat-agent.jar` in order to be passed as
+arguments to the agent launcher - if they are passed *before* the `-jar` then they will be used by the `java` process
+as system properties on the agent launcher itself, rather than having them passed on to the injected instances.
+
+[Smart triggers](#smart-triggers) can be specified using `--smartTrigger`.
+
+The optional PID is a positional argument and may be ignored or set to: `0` to request that the Agent launcher attempt
+to find exactly one candidate JVM application to dynamically attach to, exiting if zero or more than one applications
+are found; `*` to request that the Agent launch attempt to dynamically attach to every JVM application it finds; or a
+specific PID to request that the Agent attempt to dynamically attach only to that one PID.
 
 ## Harvester
 
