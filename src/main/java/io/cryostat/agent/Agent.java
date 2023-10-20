@@ -119,9 +119,7 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
                     AgentLoadException,
                     URISyntaxException {
         log.trace("main");
-        // log.info("Booting with args: {}", Arrays.asList(args));
-        // AgentArgs aa = AgentArgs.from(args);
-        List<Long> pids = getAttachPid(pid);
+        List<String> pids = getAttachPid(pid);
         if (pids.isEmpty()) {
             throw new IllegalStateException("No candidate JVM PIDs");
         }
@@ -130,8 +128,8 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
                                 properties,
                                 String.join(",", smartTriggers != null ? smartTriggers : List.of()))
                         .toAgentMain();
-        for (long pid : pids) {
-            VirtualMachine vm = VirtualMachine.attach(String.valueOf(pid));
+        for (String pid : pids) {
+            VirtualMachine vm = VirtualMachine.attach(pid);
             log.info("Injecting agent into PID {}", pid);
             try {
                 vm.loadAgent(Path.of(selfJarLocation()).toAbsolutePath().toString(), agentmainArg);
@@ -166,7 +164,7 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
         t.start();
     }
 
-    private static List<Long> getAttachPid(String pidSpec) {
+    private static List<String> getAttachPid(String pidSpec) {
         List<VirtualMachineDescriptor> vms = VirtualMachine.list();
         Predicate<VirtualMachineDescriptor> vmFilter;
         if (ALL_PIDS.equals(pidSpec)) {
@@ -188,14 +186,12 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
             long ownId = ProcessHandle.current().pid();
             vmFilter = vmd -> !Objects.equals(String.valueOf(ownId), vmd.id());
         } else {
-            Long.parseLong(pidSpec); // ensure that the request is a pid
             vmFilter = vmd -> pidSpec.equals(vmd.id());
         }
         return vms.stream()
                 .filter(vmFilter)
                 .peek(vmd -> log.info("Attaching to VM: {} {}", vmd.displayName(), vmd.id()))
                 .map(VirtualMachineDescriptor::id)
-                .map(Long::parseLong)
                 .collect(Collectors.toList());
     }
 
