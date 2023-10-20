@@ -57,8 +57,9 @@ class AgentArgs {
                         Arrays.asList(props.split(",")).stream()
                                 .map(
                                         e -> {
-                                            String[] p = e.split("=");
-                                            return Pair.of(p[0], p[1]);
+                                            int idx = e.indexOf('=');
+                                            return Pair.of(
+                                                    e.substring(0, idx), e.substring(idx + 1));
                                         })
                                 .collect(
                                         Collectors.toMap(
