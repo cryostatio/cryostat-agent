@@ -128,6 +128,7 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
                                 properties,
                                 String.join(",", smartTriggers != null ? smartTriggers : List.of()))
                         .toAgentMain();
+        log.trace("agentmain arg: \"{}\"", agentmainArg);
         for (String pid : pids) {
             VirtualMachine vm = VirtualMachine.attach(pid);
             log.info("Injecting agent into PID {}", pid);
