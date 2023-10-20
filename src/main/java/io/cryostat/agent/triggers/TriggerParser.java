@@ -42,7 +42,6 @@ public class TriggerParser {
     public List<SmartTrigger> parse(String str) {
         List<SmartTrigger> triggers = new ArrayList<>();
         if (StringUtils.isBlank(str)) {
-            log.warn("arg was blank, no Triggers were defined");
             return triggers;
         }
 

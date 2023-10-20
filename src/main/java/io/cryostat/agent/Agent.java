@@ -20,11 +20,11 @@ import java.lang.instrument.Instrumentation;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.file.Path;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
@@ -51,10 +51,23 @@ import com.sun.tools.attach.VirtualMachineDescriptor;
 import dagger.Component;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import picocli.CommandLine;
+import picocli.CommandLine.Command;
+import picocli.CommandLine.IVersionProvider;
+import picocli.CommandLine.Option;
+import picocli.CommandLine.Parameters;
 import sun.misc.Signal;
 import sun.misc.SignalHandler;
 
-public class Agent implements Consumer<AgentArgs> {
+@Command(
+        name = "CryostatAgent",
+        mixinStandardHelpOptions = true,
+        showAtFileInUsageHelp = true,
+        versionProvider = Agent.VersionProvider.class,
+        description =
+                "Launcher for Cryostat Agent to self-inject and dynamically attach to workload"
+                        + " JVMs")
+public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
 
     private static Logger log = LoggerFactory.getLogger(Agent.class);
     private static final AtomicBoolean needsCleanup = new AtomicBoolean(true);
@@ -63,29 +76,70 @@ public class Agent implements Consumer<AgentArgs> {
 
     private static InsightsAgentHelper insights;
 
+    @Parameters(
+            index = "0",
+            defaultValue = "0",
+            arity = "0..1",
+            description =
+                    "The PID to attach to and attempt to self-inject the Cryostat Agent. If not"
+                        + " specified, the Agent will look to find exactly one candidate and attach"
+                        + " to that, failing if none or more than one are found. Otherwise, this"
+                        + " should be a process ID, or the '*' wildcard to request the Agent"
+                        + " attempt to attach to all discovered JVMs.")
+    private String pid;
+
+    @Option(
+            names = {"-D", "--property"},
+            description =
+                    "Optional property definitions to supply to the injected Agent copies to add or"
+                        + " override property definitions once the Agent is running in the workload"
+                        + " JVM. These should be specified as key=value pairs, ex."
+                        + " -Dcryostat.agent.baseuri=http://cryostat.service.local . May be"
+                        + " specified more than once.")
+    private Map<String, String> properties;
+
+    @Option(
+            names = "--smartTrigger",
+            description = "Smart Triggers definition. May be specified more than once.")
+    private List<String> smartTriggers;
+
     // standalone entry point, Agent is started separately and should self-inject and dynamic attach
     // to the host JVM application. After the agent is dynamically attached we should begin
     // execution again in agentmain
-    public static void main(String[] args)
+    public static void main(String[] args) {
+        int exitCode = new CommandLine(new Agent()).execute(args);
+        System.exit(exitCode);
+    }
+
+    @Override
+    public Integer call()
             throws IOException,
                     AttachNotSupportedException,
                     AgentInitializationException,
                     AgentLoadException,
                     URISyntaxException {
         log.trace("main");
-        log.info("Booting with args: {}", Arrays.asList(args));
-        AgentArgs aa = AgentArgs.from(args);
-        List<Long> pids = getAttachPid(aa);
+        // log.info("Booting with args: {}", Arrays.asList(args));
+        // AgentArgs aa = AgentArgs.from(args);
+        List<Long> pids = getAttachPid(pid);
+        if (pids.isEmpty()) {
+            throw new IllegalStateException("No candidate JVM PIDs");
+        }
+        String agentmainArg =
+                new AgentArgs(
+                                properties,
+                                String.join(",", smartTriggers != null ? smartTriggers : List.of()))
+                        .toAgentMain();
         for (long pid : pids) {
             VirtualMachine vm = VirtualMachine.attach(String.valueOf(pid));
+            log.info("Injecting agent into PID {}", pid);
             try {
-                vm.loadAgent(
-                        Path.of(selfJarLocation()).toAbsolutePath().toString(),
-                        aa.getSmartTriggers());
+                vm.loadAgent(Path.of(selfJarLocation()).toAbsolutePath().toString(), agentmainArg);
             } finally {
                 vm.detach();
             }
         }
+        return 0;
     }
 
     // -javaagent entry point, Agent is starting before the host JVM application
@@ -99,7 +153,7 @@ public class Agent implements Consumer<AgentArgs> {
     public static void agentmain(String args, Instrumentation instrumentation) {
         log.trace("agentmain");
         insights = new InsightsAgentHelper(instrumentation);
-        AgentArgs aa = new AgentArgs(String.valueOf(ProcessHandle.current().pid()), args);
+        AgentArgs aa = AgentArgs.from(args);
         Agent agent = new Agent();
         Thread t =
                 new Thread(
@@ -112,13 +166,12 @@ public class Agent implements Consumer<AgentArgs> {
         t.start();
     }
 
-    private static List<Long> getAttachPid(AgentArgs aa) {
+    private static List<Long> getAttachPid(String pidSpec) {
         List<VirtualMachineDescriptor> vms = VirtualMachine.list();
         Predicate<VirtualMachineDescriptor> vmFilter;
-        String pidSpec = aa.getPid();
-        if (pidSpec.equals(ALL_PIDS)) {
+        if (ALL_PIDS.equals(pidSpec)) {
             vmFilter = vmd -> true;
-        } else if (pidSpec.equals(AUTO_ATTACH_PID)) {
+        } else if (pidSpec == null || AUTO_ATTACH_PID.equals(pidSpec)) {
             if (vms.size() > 2) { // one of them is ourself
                 throw new IllegalStateException(
                         String.format(
@@ -153,6 +206,12 @@ public class Agent implements Consumer<AgentArgs> {
     @Override
     public void accept(AgentArgs args) {
         log.info("Cryostat Agent starting...");
+        args.getProperties()
+                .forEach(
+                        (k, v) -> {
+                            log.info("Set system property {} = {}", k, v);
+                            System.setProperty(k, v);
+                        });
         AgentExitHandler agentExitHandler = null;
         try {
             final Client client = DaggerAgent_Client.builder().build();
@@ -371,6 +430,14 @@ public class Agent implements Consumer<AgentArgs> {
             } catch (Exception e) {
                 log.warn("Exception during shutdown", e);
             }
+        }
+    }
+
+    static class VersionProvider implements IVersionProvider {
+
+        @Override
+        public String[] getVersion() throws Exception {
+            return new String[] {Agent.class.getPackage().getImplementationVersion()};
         }
     }
 }

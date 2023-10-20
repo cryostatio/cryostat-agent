@@ -16,42 +16,72 @@
 package io.cryostat.agent;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Queue;
+import java.util.stream.Collectors;
 
 import io.cryostat.agent.util.StringUtils;
 
+import org.apache.commons.lang3.tuple.Pair;
+
 class AgentArgs {
-    private final String pid;
-    // TODO refactor this and perform parsing earlier in execution
+    private final Map<String, String> properties;
     private final String smartTriggers;
 
-    public AgentArgs(String pid, String smartTriggers) {
-        this.pid = pid;
-        this.smartTriggers = smartTriggers;
+    public AgentArgs(Map<String, String> properties, String smartTriggers) {
+        this.properties = properties;
+        this.smartTriggers = StringUtils.defaultValue(smartTriggers, "");
     }
 
-    public String getPid() {
-        return pid;
+    public Map<String, String> getProperties() {
+        return properties;
     }
 
     public String getSmartTriggers() {
         return smartTriggers;
     }
 
-    public static AgentArgs from(String[] args) {
-        Queue<String> q = new ArrayDeque<>(Arrays.asList(args));
-        // FIXME this should not be specified by ordering but instead by key-value pairing
-        String pid = q.poll();
-        String smartTriggers = q.poll();
-        if (StringUtils.isBlank(pid)) {
-            pid = Agent.AUTO_ATTACH_PID;
+    public static AgentArgs from(String agentmainArg) {
+        Map<String, String> properties = new HashMap<>();
+        String smartTriggers = "";
+        if (StringUtils.isNotBlank(agentmainArg)) {
+            Queue<String> parts = new ArrayDeque<>(Arrays.asList(agentmainArg.split("!")));
+            String props = parts.poll();
+            if (StringUtils.isNotBlank(props)) {
+                properties =
+                        Arrays.asList(props.split(",")).stream()
+                                .map(
+                                        e -> {
+                                            String[] p = e.split("=");
+                                            return Pair.of(p[0], p[1]);
+                                        })
+                                .collect(
+                                        Collectors.toMap(
+                                                Pair<String, String>::getKey,
+                                                Pair<String, String>::getValue));
+            }
+            smartTriggers = parts.poll();
         }
-        return new AgentArgs(pid, smartTriggers);
+        return new AgentArgs(properties, smartTriggers);
     }
 
-    @Override
-    public String toString() {
-        return "AgentArgs [pid=" + pid + ", smartTriggers=" + smartTriggers + "]";
+    public String toAgentMain() {
+        List<String> parts = new ArrayList<>();
+        if (!properties.isEmpty()) {
+            parts.add(
+                    String.join(
+                            ",",
+                            properties.entrySet().stream()
+                                    .map(e -> String.format("%s=%s", e.getKey(), e.getValue()))
+                                    .collect(Collectors.toList())));
+        }
+        if (StringUtils.isNotBlank(smartTriggers)) {
+            parts.add(smartTriggers);
+        }
+        return String.join("!", parts);
     }
 }
