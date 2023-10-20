@@ -29,6 +29,7 @@ import io.cryostat.agent.util.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 
 class AgentArgs {
+    private static final String DELIMITER = "!";
     private final Map<String, String> properties;
     private final String smartTriggers;
 
@@ -49,7 +50,7 @@ class AgentArgs {
         Map<String, String> properties = new HashMap<>();
         String smartTriggers = "";
         if (StringUtils.isNotBlank(agentmainArg)) {
-            Queue<String> parts = new ArrayDeque<>(Arrays.asList(agentmainArg.split("!")));
+            Queue<String> parts = new ArrayDeque<>(Arrays.asList(agentmainArg.split(DELIMITER)));
             String props = parts.poll();
             if (StringUtils.isNotBlank(props)) {
                 properties =
@@ -82,6 +83,6 @@ class AgentArgs {
         if (StringUtils.isNotBlank(smartTriggers)) {
             parts.add(smartTriggers);
         }
-        return String.join("!", parts);
+        return String.join(DELIMITER, parts);
     }
 }
