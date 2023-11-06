@@ -21,9 +21,13 @@ import java.net.UnknownHostException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 import javax.inject.Named;
 import javax.inject.Singleton;
+
+import io.cryostat.agent.util.StringUtils;
 
 import dagger.Module;
 import dagger.Provides;
@@ -38,6 +42,7 @@ public abstract class ConfigModule {
     private static final Logger log = LoggerFactory.getLogger(ConfigModule.class);
 
     public static final String CRYOSTAT_AGENT_INSTANCE_ID = "cryostat.agent.instance-id";
+    public static final String CRYOSTAT_AGENT_BASEURI_RANGE = "cryostat.agent.baseuri-range";
     public static final String CRYOSTAT_AGENT_BASEURI = "cryostat.agent.baseuri";
     public static final String CRYOSTAT_AGENT_CALLBACK = "cryostat.agent.callback";
     public static final String CRYOSTAT_AGENT_REALM = "cryostat.agent.realm";
@@ -95,6 +100,12 @@ public abstract class ConfigModule {
     @Singleton
     public static Config provideConfig() {
         return ConfigProvider.getConfig();
+    }
+
+    @Provides
+    @Named(CRYOSTAT_AGENT_BASEURI_RANGE)
+    public static URIRange provideUriRange(Config config) {
+        return URIRange.fromString(config.getValue(CRYOSTAT_AGENT_BASEURI_RANGE, String.class));
     }
 
     @Provides
@@ -306,5 +317,68 @@ public abstract class ConfigModule {
     @Named(CRYOSTAT_AGENT_SMART_TRIGGER_EVALUATION_PERIOD_MS)
     public static long provideCryostatSmartTriggerEvaluationPeriodMs(Config config) {
         return config.getValue(CRYOSTAT_AGENT_SMART_TRIGGER_EVALUATION_PERIOD_MS, long.class);
+    }
+
+    public enum URIRange {
+        LOOPBACK(u -> check(u, u2 -> true, InetAddress::isLoopbackAddress)),
+        LINK_LOCAL(
+                u ->
+                        check(
+                                u,
+                                u2 -> StringUtils.isNotBlank(u2.getHost()),
+                                InetAddress::isLinkLocalAddress)),
+        SITE_LOCAL(
+                u ->
+                        check(
+                                u,
+                                u2 -> StringUtils.isNotBlank(u2.getHost()),
+                                InetAddress::isSiteLocalAddress)),
+        DNS_LOCAL(
+                u ->
+                        StringUtils.isNotBlank(u.getHost())
+                                && (u.getHost().endsWith(".local")
+                                        || u.getHost().endsWith(".localhost"))),
+        PUBLIC(u -> true),
+        ;
+
+        private URIRange(Predicate<URI> fn) {
+            this.fn = fn;
+        }
+
+        private final Predicate<URI> fn;
+
+        private static boolean check(URI uri, Predicate<URI> f1, Predicate<InetAddress> f2) {
+            try {
+                return f1.test(uri) && f2.test(InetAddress.getByName(uri.getHost()));
+            } catch (UnknownHostException uhe) {
+                log.error("Failed to resolve host", uhe);
+                return false;
+            }
+        }
+
+        private boolean test(URI uri) {
+            return fn.test(uri);
+        }
+
+        public boolean validate(URI uri) {
+            List<URIRange> ranges =
+                    List.of(URIRange.values()).stream()
+                            .filter(r -> r.ordinal() <= this.ordinal())
+                            .collect(Collectors.toList());
+            boolean match = false;
+            for (URIRange range : ranges) {
+                match |= range.test(uri);
+            }
+            return match;
+        }
+
+        public static URIRange fromString(String s) {
+            for (URIRange r : URIRange.values()) {
+                if (r.name().equalsIgnoreCase(s)) {
+                    return r;
+                }
+            }
+            return SITE_LOCAL;
+        }
     }
 }
