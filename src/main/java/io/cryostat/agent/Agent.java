@@ -15,6 +15,7 @@
  */
 package io.cryostat.agent;
 
+import java.net.URI;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,6 +29,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import javax.inject.Named;
 import javax.inject.Singleton;
 
+import io.cryostat.agent.ConfigModule.URIRange;
 import io.cryostat.agent.harvest.Harvester;
 import io.cryostat.agent.triggers.TriggerEvaluator;
 
@@ -46,6 +48,17 @@ public class Agent {
         AgentExitHandler agentExitHandler = null;
         try {
             final Client client = DaggerAgent_Client.builder().build();
+
+            URI baseUri = client.baseUri();
+            URIRange uriRange = client.uriRange();
+            if (!uriRange.validate(baseUri)) {
+                throw new IllegalArgumentException(
+                        String.format(
+                                "cryostat.agent.baseuri of \"%s\" is unacceptable with URI range"
+                                        + " \"%s\"",
+                                baseUri, uriRange));
+            }
+
             Registration registration = client.registration();
             Harvester harvester = client.harvester();
             WebServer webServer = client.webServer();
@@ -141,6 +154,12 @@ public class Agent {
     @Singleton
     @Component(modules = {MainModule.class})
     interface Client {
+        @Named(ConfigModule.CRYOSTAT_AGENT_BASEURI)
+        URI baseUri();
+
+        @Named(ConfigModule.CRYOSTAT_AGENT_BASEURI_RANGE)
+        URIRange uriRange();
+
         WebServer webServer();
 
         Registration registration();
