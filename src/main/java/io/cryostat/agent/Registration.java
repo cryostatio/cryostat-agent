@@ -211,9 +211,6 @@ public class Registration {
                                                     this.pluginInfo.isInitialized();
                                             this.pluginInfo.copyFrom(plugin);
                                             log.info("Registered as {}", this.pluginInfo.getId());
-                                            // FIXME remove this before merge
-                                            log.info(
-                                                    "Plugin env map: {}", this.pluginInfo.getEnv());
                                             if (previouslyRegistered) {
                                                 notify(RegistrationEvent.State.REFRESHED);
                                             } else {

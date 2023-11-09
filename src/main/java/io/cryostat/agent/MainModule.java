@@ -314,11 +314,4 @@ public abstract class MainModule {
             FileSystem fs, Environment env) {
         return new LocalStorageTemplateService(fs, env);
     }
-
-    @Provides
-    @Singleton
-    public static InsightsAgentHelper provideInsightsAgentHelper(
-            @Named(ConfigModule.CRYOSTAT_AGENT_APP_NAME) String appName) {
-        return new InsightsAgentHelper(appName);
-    }
 }
