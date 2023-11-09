@@ -15,23 +15,28 @@
  */
 package io.cryostat.agent.model;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
 
 public class PluginInfo {
 
     private String id;
     private String token;
+    private Map<String, String> env = new HashMap<>();
 
     public PluginInfo() {}
 
-    public PluginInfo(String id, String token) {
+    public PluginInfo(String id, String token, Map<String, String> env) {
         this.id = id;
         this.token = token;
+        this.env.putAll(env);
     }
 
     public void copyFrom(PluginInfo o) {
         setId(o.getId());
         setToken(o.getToken());
+        setEnv(o.getEnv());
     }
 
     public void clear() {
@@ -50,6 +55,10 @@ public class PluginInfo {
         return token;
     }
 
+    public Map<String, String> getEnv() {
+        return new HashMap<>(env);
+    }
+
     public void setId(String id) {
         this.id = id;
     }
@@ -58,9 +67,14 @@ public class PluginInfo {
         this.token = token;
     }
 
+    public void setEnv(Map<String, String> env) {
+        this.env.clear();
+        this.env.putAll(env);
+    }
+
     @Override
     public int hashCode() {
-        return Objects.hash(id, token);
+        return Objects.hash(id, token, env);
     }
 
     @Override
@@ -75,6 +89,8 @@ public class PluginInfo {
             return false;
         }
         PluginInfo other = (PluginInfo) obj;
-        return Objects.equals(id, other.id) && Objects.equals(token, other.token);
+        return Objects.equals(id, other.id)
+                && Objects.equals(token, other.token)
+                && Objects.equals(env, other.env);
     }
 }
