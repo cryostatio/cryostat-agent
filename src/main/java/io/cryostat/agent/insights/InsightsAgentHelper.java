@@ -96,7 +96,7 @@ public class InsightsAgentHelper {
         instrumentation.addTransformer(noticer);
     }
 
-    private static class SLF4JWrapper implements InsightsLogger {
+    static class SLF4JWrapper implements InsightsLogger {
 
         private final Logger delegate;
 
