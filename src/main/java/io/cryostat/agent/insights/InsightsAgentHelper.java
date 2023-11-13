@@ -36,6 +36,7 @@ import com.redhat.insights.http.InsightsHttpClient;
 import com.redhat.insights.jars.JarInfo;
 import com.redhat.insights.logging.InsightsLogger;
 import com.redhat.insights.tls.PEMSupport;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.eclipse.microprofile.config.Config;
 import org.eclipse.microprofile.config.ConfigProvider;
 import org.slf4j.Logger;
@@ -49,7 +50,9 @@ public class InsightsAgentHelper {
             new SLF4JWrapper(LoggerFactory.getLogger(InsightsAgentHelper.class));
     private static final BlockingQueue<JarInfo> jarsToSend = new LinkedBlockingQueue<>();
 
+    @SuppressFBWarnings("EI_EXPOSE_REP2")
     private final Instrumentation instrumentation;
+
     private final Config config;
 
     public InsightsAgentHelper(Instrumentation instrumentation) {
