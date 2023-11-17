@@ -41,7 +41,7 @@ public class TriggerParser {
 
     public List<SmartTrigger> parse(String[] args) {
         List<SmartTrigger> triggers = new ArrayList<>();
-        if (args.length < 1) {
+        if (args == null || args.length < 1) {
             log.trace("Agent args were empty, no Triggers were defined");
             return triggers;
         }
