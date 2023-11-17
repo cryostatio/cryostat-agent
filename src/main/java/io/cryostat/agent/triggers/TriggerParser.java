@@ -53,7 +53,7 @@ public class TriggerParser {
 
         String[] expressions = triggerDefinitions.split(",");
         for (String s : expressions) {
-            s = s.strip();
+            s = s.replaceAll("\\s", "");
             Matcher m = EXPRESSION_PATTERN.matcher(s);
             if (m.matches()) {
                 String constraintString = m.group(1);

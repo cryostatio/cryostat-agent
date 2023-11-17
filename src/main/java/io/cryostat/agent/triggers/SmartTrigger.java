@@ -56,10 +56,10 @@ public class SmartTrigger {
         this.state = TriggerState.NEW;
         Matcher m = DEFINITION_PATTERN.matcher(expression);
         if (m.matches()) {
-            triggerCondition = m.group(1).strip();
-            durationConstraint = m.group(2).replaceAll("'", "\"").strip();
+            triggerCondition = m.group(1).replaceAll("\\s", "");
+            durationConstraint = m.group(2).replaceAll("'", "\"").replaceAll("\\s", "");
             /* Duration.parse requires timestamps in ISO8601 Duration format */
-            targetDuration = Duration.parse("PT" + m.group(3).strip());
+            targetDuration = Duration.parse("PT" + m.group(3).replaceAll("\\s", ""));
         } else {
             triggerCondition = expression;
             durationConstraint = "";

@@ -114,13 +114,13 @@ class TriggerParserTest {
 
         MatcherAssert.assertThat(
                 trigger.getExpression(),
-                Matchers.equalTo("ProcessCpuLoad > 0.2 ; TargetDuration > duration(\"30s\")"));
+                Matchers.equalTo("ProcessCpuLoad>0.2;TargetDuration>duration(\"30s\")"));
         MatcherAssert.assertThat(trigger.getRecordingTemplateName(), Matchers.equalTo("profile"));
         MatcherAssert.assertThat(
                 trigger.getDurationConstraint(),
-                Matchers.equalTo("TargetDuration > duration(\"30s\")"));
+                Matchers.equalTo("TargetDuration>duration(\"30s\")"));
         MatcherAssert.assertThat(
-                trigger.getTriggerCondition(), Matchers.equalTo("ProcessCpuLoad > 0.2"));
+                trigger.getTriggerCondition(), Matchers.equalTo("ProcessCpuLoad>0.2"));
         MatcherAssert.assertThat(trigger.getState(), Matchers.equalTo(TriggerState.NEW));
         MatcherAssert.assertThat(
                 trigger.getTargetDuration(), Matchers.equalTo(Duration.ofSeconds(30)));
@@ -143,7 +143,7 @@ class TriggerParserTest {
         SmartTrigger trigger1 = out.get(0);
         MatcherAssert.assertThat(
                 trigger1.getExpression(),
-                Matchers.equalTo("ProcessCpuLoad>0.2 ; TargetDuration>duration(\"30s\")"));
+                Matchers.equalTo("ProcessCpuLoad>0.2;TargetDuration>duration(\"30s\")"));
         MatcherAssert.assertThat(trigger1.getRecordingTemplateName(), Matchers.equalTo("profile"));
         MatcherAssert.assertThat(
                 trigger1.getDurationConstraint(),
@@ -159,17 +159,15 @@ class TriggerParserTest {
         MatcherAssert.assertThat(
                 trigger2.getExpression(),
                 Matchers.equalTo(
-                        "(HeapMemoryUsagePercent > 50 && NonHeapMemoryUsage > 1) || SystemCpuLoad >"
-                                + " 4 ; TargetDuration > duration(\"2m\")"));
+                        "(HeapMemoryUsagePercent>50&&NonHeapMemoryUsage>1)||SystemCpuLoad>4;TargetDuration>duration(\"2m\")"));
         MatcherAssert.assertThat(trigger2.getRecordingTemplateName(), Matchers.equalTo("default"));
         MatcherAssert.assertThat(
                 trigger2.getDurationConstraint(),
-                Matchers.equalTo("TargetDuration > duration(\"2m\")"));
+                Matchers.equalTo("TargetDuration>duration(\"2m\")"));
         MatcherAssert.assertThat(
                 trigger2.getTriggerCondition(),
                 Matchers.equalTo(
-                        "(HeapMemoryUsagePercent > 50 && NonHeapMemoryUsage > 1) || SystemCpuLoad >"
-                                + " 4"));
+                        "(HeapMemoryUsagePercent>50&&NonHeapMemoryUsage>1)||SystemCpuLoad>4"));
         MatcherAssert.assertThat(trigger2.getState(), Matchers.equalTo(TriggerState.NEW));
         MatcherAssert.assertThat(
                 trigger2.getTargetDuration(), Matchers.equalTo(Duration.ofMinutes(2)));
@@ -194,7 +192,7 @@ class TriggerParserTest {
         SmartTrigger trigger1 = out.get(0);
         MatcherAssert.assertThat(
                 trigger1.getExpression(),
-                Matchers.equalTo("ProcessCpuLoad>0.2 ; TargetDuration>duration(\"30s\")"));
+                Matchers.equalTo("ProcessCpuLoad>0.2;TargetDuration>duration(\"30s\")"));
         MatcherAssert.assertThat(trigger1.getRecordingTemplateName(), Matchers.equalTo("profile"));
         MatcherAssert.assertThat(
                 trigger1.getDurationConstraint(),
