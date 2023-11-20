@@ -44,7 +44,7 @@
   <org.apache.maven.plugins.resources.version>3.3.0</org.apache.maven.plugins.resources.version>
   <org.apache.maven.plugins.assembly.version>3.4.2</org.apache.maven.plugins.assembly.version>
   <com.mycila.license.maven.plugin.version>4.3</com.mycila.license.maven.plugin.version>
-  <org.owasp.dependency.check.version>8.4.2</org.owasp.dependency.check.version>
+  <org.owasp.dependency.check.version>8.4.3</org.owasp.dependency.check.version>
 
   <!-- Use a separate property for dependency alignment purposes. -->
   <com.google.dagger.version>2.47</com.google.dagger.version>
@@ -62,8 +62,8 @@
   <org.slf4j.version>2.0.7</org.slf4j.version>
   <org.projectnessie.cel.bom.version>0.3.21</org.projectnessie.cel.bom.version>
 
-  <com.github.spotbugs.version>4.8.0</com.github.spotbugs.version>
-  <com.github.spotbugs.plugin.version>4.7.3.6</com.github.spotbugs.plugin.version>
+  <com.github.spotbugs.version>4.8.1</com.github.spotbugs.version>
+  <com.github.spotbugs.plugin.version>4.8.1.0</com.github.spotbugs.plugin.version>
   <org.junit.jupiter.version>5.10.1</org.junit.jupiter.version>
   <org.hamcrest.version>2.2</org.hamcrest.version>
   <org.mockito.version>5.2.0</org.mockito.version>
