@@ -15,12 +15,20 @@
  */
 package io.cryostat.agent;
 
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.security.KeyManagementException;
+import java.security.KeyStore;
+import java.security.KeyStoreException;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.security.UnrecoverableKeyException;
+import java.security.cert.CertificateException;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -33,14 +41,21 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.stream.Collectors;
 import java.util.zip.DeflaterOutputStream;
 
+import javax.net.ssl.KeyManagerFactory;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLEngine;
+
 import io.cryostat.agent.remote.RemoteContext;
+import io.cryostat.core.sys.FileSystem;
 
 import com.sun.net.httpserver.BasicAuthenticator;
 import com.sun.net.httpserver.Filter;
 import com.sun.net.httpserver.HttpContext;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
-import com.sun.net.httpserver.HttpServer;
+import com.sun.net.httpserver.HttpsConfigurator;
+import com.sun.net.httpserver.HttpsParameters;
+import com.sun.net.httpserver.HttpsServer;
 import dagger.Lazy;
 import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
@@ -58,8 +73,9 @@ class WebServer {
     private final Credentials credentials;
     private final URI callback;
     private final Lazy<Registration> registration;
-    private HttpServer http;
+    private HttpsServer https;
     private volatile int credentialId = -1;
+    private final FileSystem fs;
 
     private final AgentAuthenticator agentAuthenticator;
     private final RequestLoggingFilter requestLoggingFilter;
@@ -75,7 +91,8 @@ class WebServer {
             String user,
             int passLength,
             URI callback,
-            Lazy<Registration> registration) {
+            Lazy<Registration> registration,
+            FileSystem fs) {
         this.remoteContexts = remoteContexts;
         this.cryostat = cryostat;
         this.executor = executor;
@@ -84,19 +101,61 @@ class WebServer {
         this.credentials = new Credentials(digest, user, passLength);
         this.callback = callback;
         this.registration = registration;
+        this.fs = fs;
 
         this.agentAuthenticator = new AgentAuthenticator();
         this.requestLoggingFilter = new RequestLoggingFilter();
         this.compressionFilter = new CompressionFilter();
     }
 
-    void start() throws IOException {
-        if (this.http != null) {
+    void start() throws IOException, NoSuchAlgorithmException{
+        if (this.https != null) {
             stop();
         }
 
-        this.http = HttpServer.create(new InetSocketAddress(host, port), 0);
-        this.http.setExecutor(executor);
+        try {
+            // initialize new HTTPS server
+            this.https = HttpsServer.create(new InetSocketAddress(host, port), 0);
+            SSLContext sslContext = SSLContext.getInstance("TLS");
+
+            // initialize keystore
+            FileInputStream passwordFile = new FileInputStream("keystore.pass");
+            char[] password = new String(passwordFile.readAllBytes()).toCharArray();
+            passwordFile.close();
+            KeyStore ks = KeyStore.getInstance("JKS");
+            FileInputStream fis = new FileInputStream("cryostat-keystore.p12");
+            ks.load(fis, password);
+            
+            // set up key manager factory
+            KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+            kmf.init(ks, password);
+
+            // set up trust manager factory
+            // TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+            // tmf.init(ks);
+
+            // set up HTTPS context
+            sslContext.init(kmf.getKeyManagers(), null, null);
+            this.https.setHttpsConfigurator(new HttpsConfigurator(sslContext) {
+                public void configure(HttpsParameters params) {
+                    try {
+                        SSLContext context = getSSLContext();
+                        SSLEngine engine = context.createSSLEngine();
+                        params.setNeedClientAuth(false);
+                        params.setCipherSuites(engine.getEnabledCipherSuites());
+                        params.setProtocols((engine.getEnabledProtocols()));
+                        params.setSSLParameters(context.getDefaultSSLParameters());
+                    } catch (Exception e) {
+                        log.error("Failed to configure the HTTPS parameters", e);
+                    }
+                }
+            });
+        } catch (KeyStoreException 
+                | CertificateException 
+                | UnrecoverableKeyException 
+                | KeyManagementException e) {
+            log.error("Failed to set up HTTPS server", e);
+        }
 
         Set<RemoteContext> mergedContexts = new HashSet<>(remoteContexts.get());
         mergedContexts.add(new PingContext(registration));
@@ -104,19 +163,27 @@ class WebServer {
                 .filter(RemoteContext::available)
                 .forEach(
                         rc -> {
-                            HttpContext ctx = this.http.createContext(rc.path(), wrap(rc::handle));
+                            HttpContext ctx = this.https.createContext(rc.path(), wrap(rc::handle));
                             ctx.setAuthenticator(agentAuthenticator);
                             ctx.getFilters().add(requestLoggingFilter);
                             ctx.getFilters().add(compressionFilter);
                         });
+        this.https.setExecutor(executor);
+        this.https.start();
+    }
 
-        this.http.start();
+    Path discoverCertPath() {
+        Path home = fs.pathOf(System.getProperty("user.home", "/"));
+        if (fs.exists(home.resolve("cryostat-cert.pem"))) {
+            return home.resolve("cryostat-cert.pem");
+        }
+        return null;
     }
 
     void stop() {
-        if (this.http != null) {
-            this.http.stop(0);
-            this.http = null;
+        if (this.https != null) {
+            this.https.stop(0);
+            this.https = null;
         }
     }
 

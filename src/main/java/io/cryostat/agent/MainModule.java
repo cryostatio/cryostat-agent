@@ -42,6 +42,7 @@ import io.cryostat.agent.remote.RemoteModule;
 import io.cryostat.agent.triggers.TriggerModule;
 import io.cryostat.core.JvmIdentifier;
 import io.cryostat.core.net.IDException;
+import io.cryostat.core.sys.FileSystem;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -103,7 +104,8 @@ public abstract class MainModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_CREDENTIALS_USER) String user,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_CREDENTIALS_PASS_LENGTH) int passLength,
             @Named(ConfigModule.CRYOSTAT_AGENT_CALLBACK) URI callback,
-            Lazy<Registration> registration) {
+            Lazy<Registration> registration,
+            FileSystem fs) {
         return new WebServer(
                 remoteContexts,
                 cryostat,
@@ -114,7 +116,8 @@ public abstract class MainModule {
                 user,
                 passLength,
                 callback,
-                registration);
+                registration,
+                fs);
     }
 
     @Provides
