@@ -94,9 +94,10 @@ public abstract class MainModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_HOST) String host,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_PORT) int port,
             @Named(ConfigModule.CRYOSTAT_AGENT_CALLBACK) URI callback,
-            Lazy<Registration> registration) {
+            Lazy<Registration> registration,
+            FileSystem fs) {
         return new WebServer(
-                remoteContexts, cryostat, executor, host, port, callback, registration);
+                remoteContexts, cryostat, executor, host, port, callback, registration, fs);
     }
 
     @Provides
