@@ -61,6 +61,7 @@
   <io.smallrye.config.version>2.12.3</io.smallrye.config.version>
   <org.slf4j.version>2.0.7</org.slf4j.version>
   <org.projectnessie.cel.bom.version>0.3.21</org.projectnessie.cel.bom.version>
+  <com.redhat.insights.agent.version>0.9.0</com.redhat.insights.agent.version>
 
   <com.github.spotbugs.version>4.8.1</com.github.spotbugs.version>
   <com.github.spotbugs.plugin.version>4.8.1.0</com.github.spotbugs.plugin.version>
@@ -166,6 +167,18 @@
     <artifactId>smallrye-config</artifactId>
     <version>${io.smallrye.config.version}</version>
     <scope>runtime</scope>
+  </dependency>
+  <dependency>
+    <groupId>com.redhat.insights</groupId>
+    <artifactId>runtimes-agent</artifactId>
+    <version>${com.redhat.insights.agent.version}</version>
+    <classifier>shaded</classifier>
+    <exclusions>
+      <exclusion>
+        <groupId>jdk.tools</groupId>
+        <artifactId>jdk.tools</artifactId>
+      </exclusion>
+    </exclusions>
   </dependency>
 
   <!-- test deps -->

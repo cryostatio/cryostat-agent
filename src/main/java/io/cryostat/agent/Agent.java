@@ -15,6 +15,7 @@
  */
 package io.cryostat.agent;
 
+import java.lang.instrument.Instrumentation;
 import java.net.URI;
 import java.util.HashMap;
 import java.util.List;
@@ -31,6 +32,8 @@ import javax.inject.Singleton;
 
 import io.cryostat.agent.ConfigModule.URIRange;
 import io.cryostat.agent.harvest.Harvester;
+import io.cryostat.agent.insights.InsightsAgentHelper;
+import io.cryostat.agent.model.PluginInfo;
 import io.cryostat.agent.triggers.TriggerEvaluator;
 
 import dagger.Component;
@@ -43,6 +46,8 @@ public class Agent {
 
     private static Logger log = LoggerFactory.getLogger(Agent.class);
     private static final AtomicBoolean needsCleanup = new AtomicBoolean(true);
+
+    private static InsightsAgentHelper insights;
 
     public static void main(String[] args) {
         AgentExitHandler agentExitHandler = null;
@@ -90,6 +95,10 @@ public class Agent {
                     evt -> {
                         switch (evt.state) {
                             case REGISTERED:
+                                log.info("Registration state: {}", evt.state);
+                                // If Red Hat Insights support is enabled, set it up
+                                setupInsightsIfEnabled(insights, registration.getPluginInfo());
+                                break;
                             case UNREGISTERED:
                             case REFRESHING:
                             case REFRESHED:
@@ -135,7 +144,8 @@ public class Agent {
         return agentExitHandler;
     }
 
-    public static void agentmain(String args) {
+    public static void agentmain(String args, Instrumentation instrumentation) {
+        insights = new InsightsAgentHelper(instrumentation);
         Thread t =
                 new Thread(
                         () -> {
@@ -147,8 +157,20 @@ public class Agent {
         t.start();
     }
 
-    public static void premain(String args) {
-        agentmain(args);
+    public static void premain(String args, Instrumentation instrumentation) {
+        agentmain(args, instrumentation);
+    }
+
+    private static void setupInsightsIfEnabled(
+            InsightsAgentHelper insights, PluginInfo pluginInfo) {
+        if (insights != null && insights.isInsightsEnabled(pluginInfo)) {
+            try {
+                insights.runInsightsAgent(pluginInfo);
+                log.info("Started Red Hat Insights client");
+            } catch (Throwable e) {
+                log.error("Unable to start Red Hat Insights client", e);
+            }
+        }
     }
 
     @Singleton
