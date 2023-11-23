@@ -31,12 +31,12 @@ import io.cryostat.agent.ConfigModule;
 import io.cryostat.agent.insights.InsightsAgentHelper.SLF4JWrapper;
 import io.cryostat.agent.model.PluginInfo;
 
-import com.redhat.insights.InsightsReportController;
 import com.redhat.insights.agent.AgentBasicReport;
 import com.redhat.insights.agent.AgentConfiguration;
 import com.redhat.insights.agent.ClassNoticer;
 import com.redhat.insights.agent.InsightsAgentHttpClient;
-import com.redhat.insights.http.InsightsHttpClient;
+import com.redhat.insights.agent.shaded.InsightsReportController;
+import com.redhat.insights.agent.shaded.http.InsightsHttpClient;
 import org.eclipse.microprofile.config.Config;
 import org.eclipse.microprofile.config.ConfigProvider;
 import org.junit.jupiter.api.AfterEach;
@@ -121,6 +121,8 @@ public class InsightsAgentHelperTest {
         Assertions.assertEquals(
                 "http://insights-proxy.example.com:8080", agentConfig.getUploadBaseURL());
         Assertions.assertEquals(Optional.of("dummy"), agentConfig.getMaybeAuthToken());
+        Assertions.assertEquals(true, agentConfig.isOCP());
+        Assertions.assertEquals(false, agentConfig.shouldDefer());
 
         controllerStatic.verify(
                 () ->

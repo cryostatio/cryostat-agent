@@ -26,16 +26,16 @@ import java.util.function.Supplier;
 import io.cryostat.agent.ConfigModule;
 import io.cryostat.agent.model.PluginInfo;
 
-import com.redhat.insights.InsightsReport;
-import com.redhat.insights.InsightsReportController;
 import com.redhat.insights.agent.AgentBasicReport;
 import com.redhat.insights.agent.AgentConfiguration;
 import com.redhat.insights.agent.ClassNoticer;
 import com.redhat.insights.agent.InsightsAgentHttpClient;
-import com.redhat.insights.http.InsightsHttpClient;
-import com.redhat.insights.jars.JarInfo;
-import com.redhat.insights.logging.InsightsLogger;
-import com.redhat.insights.tls.PEMSupport;
+import com.redhat.insights.agent.shaded.InsightsReportController;
+import com.redhat.insights.agent.shaded.http.InsightsHttpClient;
+import com.redhat.insights.agent.shaded.jars.JarInfo;
+import com.redhat.insights.agent.shaded.logging.InsightsLogger;
+import com.redhat.insights.agent.shaded.reports.InsightsReport;
+import com.redhat.insights.agent.shaded.tls.PEMSupport;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.eclipse.microprofile.config.Config;
 import org.eclipse.microprofile.config.ConfigProvider;
@@ -76,6 +76,11 @@ public class InsightsAgentHelper {
         Map<String, String> out = new HashMap<>();
         out.put("name", appName);
         out.put("base_url", server);
+        out.put("is_ocp", "true");
+        // If the user's application already contains Insights support,
+        // use this agent instead as it has the proper configuration
+        // for OpenShift.
+        out.put("should_defer", "false");
         // Will be replaced by the Insights Proxy
         out.put("token", "dummy");
         AgentConfiguration config = new AgentConfiguration(out);
