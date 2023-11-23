@@ -39,12 +39,12 @@
   <org.apache.maven.plugins.surefire.version>2.22.2</org.apache.maven.plugins.surefire.version>
   <org.apache.maven.plugins.failsafe.version>${org.apache.maven.plugins.surefire.version}</org.apache.maven.plugins.failsafe.version>
   <org.apache.maven.plugins.site.version>3.12.1</org.apache.maven.plugins.site.version>
-  <org.apache.maven.plugins.info.reports.version>3.4.5</org.apache.maven.plugins.info.reports.version>
+  <org.apache.maven.plugins.info.reports.version>3.5.0</org.apache.maven.plugins.info.reports.version>
   <org.apache.maven.plugins.clean.version>3.2.0</org.apache.maven.plugins.clean.version>
   <org.apache.maven.plugins.resources.version>3.3.0</org.apache.maven.plugins.resources.version>
   <org.apache.maven.plugins.assembly.version>3.4.2</org.apache.maven.plugins.assembly.version>
   <com.mycila.license.maven.plugin.version>4.3</com.mycila.license.maven.plugin.version>
-  <org.owasp.dependency.check.version>8.4.3</org.owasp.dependency.check.version>
+  <org.owasp.dependency.check.version>9.0.0</org.owasp.dependency.check.version>
 
   <!-- Use a separate property for dependency alignment purposes. -->
   <com.google.dagger.version>2.47</com.google.dagger.version>
