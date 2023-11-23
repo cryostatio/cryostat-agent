@@ -274,6 +274,18 @@
     <resource>
       <directory>src/main/resources</directory>
       <filtering>true</filtering>
+      <excludes>
+          <exclude>**/*.p12</exclude>
+          <exclude>**/*.cer</exclude>
+      </excludes>
+    </resource>
+    <resource>
+      <directory>src/main/resources</directory>
+      <filtering>false</filtering>
+      <includes>
+          <include>**/*.p12</include>
+          <include>**/*.cer</include>
+      </includes>
     </resource>
   </resources>
   <plugins>

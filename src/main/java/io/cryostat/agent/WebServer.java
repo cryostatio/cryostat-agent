@@ -15,8 +15,8 @@
  */
 package io.cryostat.agent;
 
-import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -28,7 +28,9 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.security.UnrecoverableKeyException;
+import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
+import java.security.cert.CertificateFactory;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -44,6 +46,7 @@ import java.util.zip.DeflaterOutputStream;
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
+import javax.net.ssl.TrustManagerFactory;
 
 import io.cryostat.agent.remote.RemoteContext;
 import io.cryostat.core.sys.FileSystem;
@@ -57,6 +60,7 @@ import com.sun.net.httpserver.HttpsConfigurator;
 import com.sun.net.httpserver.HttpsParameters;
 import com.sun.net.httpserver.HttpsServer;
 import dagger.Lazy;
+import org.apache.commons.io.IOUtils;
 import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -119,57 +123,79 @@ class WebServer {
             SSLContext sslContext = SSLContext.getInstance("TLS");
 
             // initialize keystore
-            FileInputStream passwordFile = new FileInputStream("keystore.pass");
-            char[] password = new String(passwordFile.readAllBytes()).toCharArray();
-            passwordFile.close();
-            KeyStore ks = KeyStore.getInstance("JKS");
-            FileInputStream fis = new FileInputStream("cryostat-keystore.p12");
-            ks.load(fis, password);
-            
+            InputStream pass = this.getClass().getResourceAsStream("/certs/keystore.pass");
+            String password = IOUtils.toString(pass, StandardCharsets.US_ASCII);
+            password = password.substring(0, password.length() - 1);
+            pass.close();
+            KeyStore ks = KeyStore.getInstance("PKCS12");
+            InputStream keystore =
+                    this.getClass().getResourceAsStream("/certs/cryostat-keystore.p12");
+            ks.load(keystore, password.toCharArray());
+            if (keystore != null) {
+                keystore.close();
+            }
+
+            // set up certificate factory
+            InputStream certFile = this.getClass().getResourceAsStream("/certs/server.cer");
+            CertificateFactory cf = CertificateFactory.getInstance("X.509");
+            Certificate cert = cf.generateCertificate(certFile);
+            ks.setCertificateEntry("serverCert", cert);
+            certFile.close();
+
             // set up key manager factory
-            KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
-            kmf.init(ks, password);
+            KeyManagerFactory kmf =
+                    KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+            kmf.init(ks, password.toCharArray());
 
             // set up trust manager factory
-            // TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-            // tmf.init(ks);
+            TrustManagerFactory tmf =
+                    TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+            tmf.init(ks);
 
             // set up HTTPS context
-            sslContext.init(kmf.getKeyManagers(), null, null);
-            this.https.setHttpsConfigurator(new HttpsConfigurator(sslContext) {
-                public void configure(HttpsParameters params) {
-                    try {
-                        SSLContext context = getSSLContext();
-                        SSLEngine engine = context.createSSLEngine();
-                        params.setNeedClientAuth(false);
-                        params.setCipherSuites(engine.getEnabledCipherSuites());
-                        params.setProtocols((engine.getEnabledProtocols()));
-                        params.setSSLParameters(context.getDefaultSSLParameters());
-                    } catch (Exception e) {
-                        log.error("Failed to configure the HTTPS parameters", e);
-                    }
-                }
-            });
-        } catch (KeyStoreException 
-                | CertificateException 
-                | UnrecoverableKeyException 
-                | KeyManagementException e) {
+            sslContext.init(kmf.getKeyManagers(), tmf.getTrustManagers(), null);
+            this.https.setHttpsConfigurator(
+                    new HttpsConfigurator(sslContext) {
+                        public void configure(HttpsParameters params) {
+                            try {
+                                SSLContext context = getSSLContext();
+                                SSLEngine engine = context.createSSLEngine();
+                                params.setNeedClientAuth(false);
+                                params.setCipherSuites(engine.getEnabledCipherSuites());
+                                params.setProtocols((engine.getEnabledProtocols()));
+                                params.setSSLParameters(context.getDefaultSSLParameters());
+                            } catch (Exception e) {
+                                log.error(
+                                        "Failed to configure the HTTPS context and parameters", e);
+                            }
+                        }
+                    });
+
+            Set<RemoteContext> mergedContexts = new HashSet<>(remoteContexts.get());
+            mergedContexts.add(new PingContext(registration));
+            mergedContexts.stream()
+                    .filter(RemoteContext::available)
+                    .forEach(
+                            rc -> {
+                                HttpContext ctx =
+                                        this.https.createContext(rc.path(), wrap(rc::handle));
+                                ctx.setAuthenticator(agentAuthenticator);
+                                ctx.getFilters().add(requestLoggingFilter);
+                                ctx.getFilters().add(compressionFilter);
+                            });
+            this.https.setExecutor(executor);
+            this.https.start();
+
+            log.info("HERE WE ARE");
+
+        } catch (KeyStoreException
+                | CertificateException
+                | UnrecoverableKeyException
+                | KeyManagementException
+                | IOException
+                | NoSuchAlgorithmException e) {
             log.error("Failed to set up HTTPS server", e);
         }
-
-        Set<RemoteContext> mergedContexts = new HashSet<>(remoteContexts.get());
-        mergedContexts.add(new PingContext(registration));
-        mergedContexts.stream()
-                .filter(RemoteContext::available)
-                .forEach(
-                        rc -> {
-                            HttpContext ctx = this.https.createContext(rc.path(), wrap(rc::handle));
-                            ctx.setAuthenticator(agentAuthenticator);
-                            ctx.getFilters().add(requestLoggingFilter);
-                            ctx.getFilters().add(compressionFilter);
-                        });
-        this.https.setExecutor(executor);
-        this.https.start();
     }
 
     Path discoverCertPath() {
