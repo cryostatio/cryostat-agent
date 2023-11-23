@@ -268,6 +268,12 @@ public abstract class MainModule {
 
     @Provides
     @Singleton
+    public static FileSystem provideFileSystem() {
+        return new FileSystem();
+    }
+
+    @Provides
+    @Singleton
     @Named(JVM_ID)
     public static String provideJvmId() {
         try {
