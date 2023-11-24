@@ -61,6 +61,7 @@
   <io.smallrye.config.version>2.12.3</io.smallrye.config.version>
   <org.slf4j.version>2.0.7</org.slf4j.version>
   <org.projectnessie.cel.bom.version>0.4.3</org.projectnessie.cel.bom.version>
+  <com.google.protobuf-java.version>3.22.3</com.google.protobuf-java.version>
   <com.redhat.insights.agent.version>0.9.0</com.redhat.insights.agent.version>
 
   <com.github.spotbugs.version>4.8.1</com.github.spotbugs.version>
@@ -84,6 +85,12 @@
       <version>${org.projectnessie.cel.bom.version}</version>
       <type>pom</type>
       <scope>import</scope>
+      <exclusions>
+        <exclusion>
+          <groupId>com.google.protobuf</groupId>
+          <artifactId>protobuf-java</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
   </dependencies>
 </dependencyManagement>
@@ -130,6 +137,12 @@
   <dependency>
     <groupId>org.projectnessie.cel</groupId>
     <artifactId>cel-tools</artifactId>
+  </dependency>
+  <!-- FIXME this is a forced version override of the protobuf required by projectnessie -->
+  <dependency>
+    <groupId>com.google.protobuf</groupId>
+    <artifactId>protobuf-java</artifactId>
+    <version>${com.google.protobuf-java.version}</version>
   </dependency>
   <dependency>
     <groupId>commons-io</groupId>
