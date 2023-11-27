@@ -105,6 +105,20 @@ public class InsightsAgentHelperTest {
     }
 
     @Test
+    void testInsightsOptingOut() {
+        when(config.getOptionalValue("rht.insights.java.opt-out", boolean.class))
+                .thenReturn(Optional.of(true));
+        Assertions.assertFalse(helper.isInsightsEnabled(pluginInfo));
+    }
+
+    @Test
+    void testInsightsNotOptingOut() {
+        when(config.getOptionalValue("rht.insights.java.opt-out", boolean.class))
+                .thenReturn(Optional.of(false));
+        Assertions.assertTrue(helper.isInsightsEnabled(pluginInfo));
+    }
+
+    @Test
     void testRunInsightsAgent() {
         when(config.getValue(ConfigModule.CRYOSTAT_AGENT_APP_NAME, String.class))
                 .thenReturn("test");
