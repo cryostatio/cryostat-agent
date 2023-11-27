@@ -148,6 +148,7 @@ and how it advertises itself to a Cryostat server instance. Required properties 
 - [ ] `cryostat.agent.harvester.max-size-b` [`long`]: the JFR `maxsize` setting, specified in bytes, to apply to periodic uploads during the application lifecycle. Defaults to `0`, which means `unlimited`.
 - [ ] `cryostat.agent.smart-trigger.definitions` [`String[]`]: a comma-separated list of Smart Trigger definitions to load at startup. Defaults to the empty string: no Smart Triggers.
 - [ ] `cryostat.agent.smart-trigger.evaluation.period-ms` [`long`]: the length of time between Smart Trigger evaluations. Default `1000`.
+- [ ] `rht.insights.java.opt-out` [`boolean`]: for the Red Hat build of Cryostat, set this to true to disable data collection for Red Hat Insights. Defaults to `false`. Red Hat Insights data collection is always disabled for community builds of Cryostat.
 
 These properties can be set by JVM system properties or by environment variables. For example, the property
 `cryostat.agent.baseuri` can be set using `-Dcryostat.agent.baseuri=https://mycryostat.example.com:1234/` or
