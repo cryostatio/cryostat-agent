@@ -41,7 +41,7 @@ public class TriggerParser {
 
     public List<SmartTrigger> parse(String[] args) {
         List<SmartTrigger> triggers = new ArrayList<>();
-        if (args.length < 1) {
+        if (args == null || args.length < 1) {
             log.trace("Agent args were empty, no Triggers were defined");
             return triggers;
         }
@@ -53,6 +53,7 @@ public class TriggerParser {
 
         String[] expressions = triggerDefinitions.split(",");
         for (String s : expressions) {
+            s = s.replaceAll("\\s", "");
             Matcher m = EXPRESSION_PATTERN.matcher(s);
             if (m.matches()) {
                 String constraintString = m.group(1);
