@@ -15,7 +15,24 @@ Plugin as an attachable JVM agent that can be included in a target application t
 location to Cryostat.
 
 ## REQUIREMENTS
-Build Requirements:
+
+### Run Requirements
+- JDK11+
+- a Cryostat server instance
+
+The Cryostat project follows [semantic versioning](https://semver.org/). Generally, each Cryostat Agent minor version
+is developed to and compatible with a specific Cryostat server minor release version. Other version combinations
+outside of this matrix may work but are neither tested nor supported. If you run into any issues, please check if there
+is an available version upgrade and ensure both your Agent and server match this version matrix.
+
+| Cryostat Release | Server version | Agent version |
+|-----------------:|---------------:|--------------:|
+| < 2.3.0          | ≤ v2.2.1       | N/A           |
+| 2.3.0            | v2.3.0         | v0.2.0        |
+| 2.3.1            | v2.3.1         | v0.2.3        |
+| 2.4.0            | v2.4.0         | v0.3.0        |
+
+### Build Requirements
 - Git
 - JDK11+
 - Maven 3+
