@@ -45,6 +45,7 @@ import org.slf4j.LoggerFactory;
 public class InsightsAgentHelper {
 
     private static final String INSIGHTS_SVC = "INSIGHTS_SVC";
+    static final String RHT_INSIGHTS_JAVA_OPT_OUT = "rht.insights.java.opt-out";
 
     private static final InsightsLogger log =
             new SLF4JWrapper(LoggerFactory.getLogger(InsightsAgentHelper.class));
@@ -61,7 +62,10 @@ public class InsightsAgentHelper {
     }
 
     public boolean isInsightsEnabled(PluginInfo pluginInfo) {
-        return pluginInfo.getEnv().containsKey(INSIGHTS_SVC);
+        // Check if the user has opted out
+        boolean optingOut =
+                config.getOptionalValue(RHT_INSIGHTS_JAVA_OPT_OUT, boolean.class).orElse(false);
+        return pluginInfo.getEnv().containsKey(INSIGHTS_SVC) && !optingOut;
     }
 
     public void runInsightsAgent(PluginInfo pluginInfo) {
