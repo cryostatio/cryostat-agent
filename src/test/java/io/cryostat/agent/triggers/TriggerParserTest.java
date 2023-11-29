@@ -101,6 +101,30 @@ class TriggerParserTest {
     }
 
     @Test
+    void testSingleComplexTriggerSingleQuoted() {
+        Mockito.when(helper.isValidTemplate(Mockito.anyString())).thenReturn(true);
+        String[] in = new String[] {"[ProcessCpuLoad>0.2;TargetDuration>duration('30s')]~profile"};
+        List<SmartTrigger> out = parser.parse(in);
+
+        MatcherAssert.assertThat(out, Matchers.hasSize(1));
+        SmartTrigger trigger = out.get(0);
+
+        MatcherAssert.assertThat(
+                trigger.getExpression(),
+                Matchers.equalTo("ProcessCpuLoad>0.2;TargetDuration>duration('30s')"));
+        MatcherAssert.assertThat(trigger.getRecordingTemplateName(), Matchers.equalTo("profile"));
+        MatcherAssert.assertThat(
+                trigger.getDurationConstraint(),
+                Matchers.equalTo("TargetDuration>duration(\"30s\")"));
+        MatcherAssert.assertThat(
+                trigger.getTriggerCondition(), Matchers.equalTo("ProcessCpuLoad>0.2"));
+        MatcherAssert.assertThat(trigger.getState(), Matchers.equalTo(TriggerState.NEW));
+        MatcherAssert.assertThat(
+                trigger.getTargetDuration(), Matchers.equalTo(Duration.ofSeconds(30)));
+        MatcherAssert.assertThat(trigger.getTimeConditionFirstMet(), Matchers.nullValue());
+    }
+
+    @Test
     void testSingleComplexTriggerWithWhitespace() {
         Mockito.when(helper.isValidTemplate(Mockito.anyString())).thenReturn(true);
         String[] in =
