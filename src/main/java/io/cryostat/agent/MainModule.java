@@ -37,7 +37,6 @@ import io.cryostat.agent.remote.RemoteContext;
 import io.cryostat.agent.remote.RemoteModule;
 import io.cryostat.agent.triggers.TriggerModule;
 import io.cryostat.core.JvmIdentifier;
-import io.cryostat.core.sys.Environment;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -234,12 +233,6 @@ public abstract class MainModule {
     @Singleton
     public static FlightRecorderHelper provideFlightRecorderHelper() {
         return new FlightRecorderHelper();
-    }
-
-    @Provides
-    @Singleton
-    public static Environment provideEnvironment() {
-        return new Environment();
     }
 
     @Provides
