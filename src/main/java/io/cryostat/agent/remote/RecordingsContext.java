@@ -366,7 +366,7 @@ class RecordingsContext implements RemoteContext {
         }
         recording.setName(req.name);
         recording.setToDisk(true);
-        recording.setDuration(Duration.ofMillis(req.duration));
+        recording.setDuration(req.duration > 0 ? Duration.ofMillis(req.duration) : null);
         recording.setMaxSize(req.maxSize);
         recording.setMaxAge(Duration.ofMillis(req.maxAge));
         recording.start();
