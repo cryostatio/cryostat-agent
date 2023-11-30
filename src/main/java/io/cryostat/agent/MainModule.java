@@ -38,7 +38,7 @@ import io.cryostat.agent.harvest.HarvestModule;
 import io.cryostat.agent.remote.RemoteContext;
 import io.cryostat.agent.remote.RemoteModule;
 import io.cryostat.agent.triggers.TriggerModule;
-import io.cryostat.core.net.JFRConnection;
+import io.cryostat.core.JvmIdentifier;
 import io.cryostat.core.net.JFRConnectionToolkit;
 import io.cryostat.core.sys.Environment;
 import io.cryostat.core.sys.FileSystem;
@@ -295,17 +295,8 @@ public abstract class MainModule {
     @Provides
     @Singleton
     @Named(JVM_ID)
-    public static String provideJvmId(JFRConnectionToolkit tk) {
-        Logger log = LoggerFactory.getLogger(JFRConnectionToolkit.class);
-        try {
-            try (JFRConnection connection = tk.connect(tk.createServiceURL("localhost", 0))) {
-                String id = connection.getJvmId();
-                log.info("Computed self JVM ID: {}", id);
-                return id;
-            }
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+    public static String provideJvmId() {
+        return new JvmIdentifier().getHash();
     }
 
     @Provides
