@@ -304,7 +304,7 @@ public class Harvester implements FlightRecorderListener {
                         return;
                     }
                     flightRecorderHelper
-                            .createRecording(template)
+                            .createRecordingWithPredefinedTemplate(template)
                             .ifPresent(
                                     recording -> {
                                         recording
