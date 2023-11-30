@@ -286,8 +286,10 @@ class RecordingsContext implements RemoteContext {
                         return;
                 }
             }
-            if (shouldStop && !recording.stop()) {
-                sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
+            if (shouldStop) {
+                if (!recording.stop()) {
+                    sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
+                }
             }
 
             try (OutputStream response = exchange.getResponseBody()) {
