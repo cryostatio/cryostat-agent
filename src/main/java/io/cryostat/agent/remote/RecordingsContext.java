@@ -74,7 +74,7 @@ class RecordingsContext implements RemoteContext {
     }
 
     @Override
-    public void handle(HttpExchange exchange) throws IOException {
+    public synchronized void handle(HttpExchange exchange) throws IOException {
         try {
             String mtd = exchange.getRequestMethod();
             if (!ensureMethodAccepted(exchange)) {
