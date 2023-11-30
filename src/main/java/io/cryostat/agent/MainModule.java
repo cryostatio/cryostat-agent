@@ -15,9 +15,7 @@
  */
 package io.cryostat.agent;
 
-import java.io.IOException;
 import java.net.URI;
-import java.nio.file.Path;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
@@ -39,11 +37,7 @@ import io.cryostat.agent.remote.RemoteContext;
 import io.cryostat.agent.remote.RemoteModule;
 import io.cryostat.agent.triggers.TriggerModule;
 import io.cryostat.core.JvmIdentifier;
-import io.cryostat.core.net.JFRConnectionToolkit;
 import io.cryostat.core.sys.Environment;
-import io.cryostat.core.sys.FileSystem;
-import io.cryostat.core.templates.LocalStorageTemplateService;
-import io.cryostat.core.tui.ClientWriter;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -244,52 +238,8 @@ public abstract class MainModule {
 
     @Provides
     @Singleton
-    public static FileSystem provideFileSystem() {
-        return new FileSystem();
-    }
-
-    @Provides
-    @Singleton
-    @Named(TEMPLATES_PATH)
-    public static Path provideTemplatesTmpPath(FileSystem fs) {
-        try {
-            return fs.createTempDirectory(null);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    @Provides
-    @Singleton
-    public static Environment provideEnvironment(@Named(TEMPLATES_PATH) Path templatesTmp) {
-        return new Environment() {
-            @Override
-            public String getEnv(String key) {
-                if (LocalStorageTemplateService.TEMPLATE_PATH.equals(key)) {
-                    return templatesTmp.toString();
-                }
-                return super.getEnv(key);
-            }
-        };
-    }
-
-    @Provides
-    @Singleton
-    public static ClientWriter provideClientWriter() {
-        Logger log = LoggerFactory.getLogger(JFRConnectionToolkit.class);
-        return new ClientWriter() {
-            @Override
-            public void print(String msg) {
-                log.info(msg);
-            }
-        };
-    }
-
-    @Provides
-    @Singleton
-    public static JFRConnectionToolkit provideJfrConnectionToolkit(
-            ClientWriter cw, FileSystem fs, Environment env) {
-        return new JFRConnectionToolkit(cw, fs, env);
+    public static Environment provideEnvironment() {
+        return new Environment();
     }
 
     @Provides
@@ -297,12 +247,5 @@ public abstract class MainModule {
     @Named(JVM_ID)
     public static String provideJvmId() {
         return new JvmIdentifier().getHash();
-    }
-
-    @Provides
-    @Singleton
-    public static LocalStorageTemplateService provideLocalStorageTemplateService(
-            FileSystem fs, Environment env) {
-        return new LocalStorageTemplateService(fs, env);
     }
 }
