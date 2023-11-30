@@ -350,7 +350,6 @@ class RecordingsContext implements RemoteContext {
     private SerializableRecording startRecording(StartRecordingRequest req)
             throws InvalidEventTemplateException {
         Recording recording;
-
         if (req.requestsCustomTemplate()) {
             try {
                 recording = flightRecorder.createRecordingWithCustomTemplate(req.template);
@@ -370,6 +369,7 @@ class RecordingsContext implements RemoteContext {
         recording.setDuration(Duration.ofMillis(req.duration));
         recording.setMaxSize(req.maxSize);
         recording.setMaxAge(Duration.ofMillis(req.maxAge));
+        recording.start();
         return new SerializableRecording(recording);
     }
 
