@@ -37,6 +37,7 @@ import io.cryostat.agent.remote.RemoteContext;
 import io.cryostat.agent.remote.RemoteModule;
 import io.cryostat.agent.triggers.TriggerModule;
 import io.cryostat.core.JvmIdentifier;
+import io.cryostat.core.net.IDException;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -239,6 +240,10 @@ public abstract class MainModule {
     @Singleton
     @Named(JVM_ID)
     public static String provideJvmId() {
-        return new JvmIdentifier().getHash();
+        try {
+            return JvmIdentifier.getLocal().getHash();
+        } catch (IDException e) {
+            throw new RuntimeException(e);
+        }
     }
 }
