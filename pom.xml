@@ -392,12 +392,6 @@
       </executions>
       <configuration>
         <java>
-          <!-- explicitly specify these directories so that target/generated-sources/ created
-          by Dagger aren't checked for formatting. <excludes> doesn't seem to work as expected. -->
-          <includes>
-            <include>src/main/java/**/*.java</include>
-            <include>src/test/java/**/*.java</include>
-          </includes>
           <googleJavaFormat>
             <version>${com.google.googlejavaformat.version}</version>
             <style>AOSP</style>
