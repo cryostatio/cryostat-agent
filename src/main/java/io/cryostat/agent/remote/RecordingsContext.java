@@ -36,6 +36,7 @@ import javax.inject.Inject;
 
 import io.cryostat.agent.FlightRecorderHelper;
 import io.cryostat.agent.util.StringUtils;
+import io.cryostat.core.serialization.SerializableRecordingDescriptor;
 import io.cryostat.core.templates.MutableTemplateService.InvalidEventTemplateException;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -127,9 +128,9 @@ class RecordingsContext implements RemoteContext {
 
     private void handleGetList(HttpExchange exchange) {
         try (OutputStream response = exchange.getResponseBody()) {
-            List<SerializableRecording> recordings =
+            List<SerializableRecordingDescriptor> recordings =
                     flightRecorder.getRecordings().stream()
-                            .map(SerializableRecording::new)
+                            .map(SerializableRecordingDescriptor::new)
                             .collect(Collectors.toList());
             exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
             mapper.writeValue(response, recordings);
@@ -182,10 +183,10 @@ class RecordingsContext implements RemoteContext {
             StartRecordingRequest req = mapper.readValue(body, StartRecordingRequest.class);
             if (req.requestSnapshot()) {
                 try {
-                    SerializableRecording snapshot =
+                    SerializableRecordingDescriptor snapshot =
                             flightRecorder
                                     .createSnapshot()
-                                    .map(SerializableRecording::new)
+                                    .map(SerializableRecordingDescriptor::new)
                                     .orElse(null);
                     if (snapshot == null) {
                         exchange.sendResponseHeaders(
@@ -208,7 +209,7 @@ class RecordingsContext implements RemoteContext {
                 exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
                 return;
             }
-            SerializableRecording recording = startRecording(req);
+            SerializableRecordingDescriptor recording = startRecording(req);
             exchange.sendResponseHeaders(HttpStatus.SC_CREATED, BODY_LENGTH_UNKNOWN);
             try (OutputStream response = exchange.getResponseBody()) {
                 mapper.writeValue(response, recording);
@@ -301,7 +302,7 @@ class RecordingsContext implements RemoteContext {
                             response,
                             flightRecorder
                                     .getRecording(recordingId)
-                                    .map(SerializableRecording::new)
+                                    .map(SerializableRecordingDescriptor::new)
                                     .get());
                 }
             }
@@ -347,7 +348,7 @@ class RecordingsContext implements RemoteContext {
         return passed;
     }
 
-    private SerializableRecording startRecording(StartRecordingRequest req)
+    private SerializableRecordingDescriptor startRecording(StartRecordingRequest req)
             throws InvalidEventTemplateException {
         Recording recording;
         if (req.requestsCustomTemplate()) {
@@ -370,7 +371,7 @@ class RecordingsContext implements RemoteContext {
         recording.setMaxSize(req.maxSize);
         recording.setMaxAge(Duration.ofMillis(req.maxAge));
         recording.start();
-        return new SerializableRecording(recording);
+        return new SerializableRecordingDescriptor(recording);
     }
 
     static class StartRecordingRequest {
