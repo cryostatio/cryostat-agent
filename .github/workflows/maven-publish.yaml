@@ -21,21 +21,19 @@ jobs:
       with:
         step: restore
     - name: Set up JDK 11
-      uses: actions/setup-java@v3
+      uses: actions/setup-java@v2
       with:
         java-version: '11'
-        distribution: 'adopt'
-        server-id: github # Value of the distributionManagement/repository/id field of the pom.xml
-        settings-path: ${{ github.workspace }} # location for the settings.xml file
-
-    - name: Build with Maven
-      run: mvn -B -U package -s $GITHUB_WORKSPACE/settings.xml --file pom.xml
-
+        distribution: 'temurin'
+    - name: maven-settings
+      uses: s4u/maven-settings-action@v2
+      with:
+        servers: '[{"id": "github", "username": "dummy", "password": "${env.GITHUB_TOKEN}"}]'
+        githubServer: false
     - name: Publish to GitHub Packages Apache Maven
-      run: mvn deploy -s $GITHUB_WORKSPACE/settings.xml
+      run: mvn -B -U deploy
       env:
         GITHUB_TOKEN: ${{ github.token }}
-
     - uses: skjolber/maven-cache-github-action@v1
       with:
         step: save
