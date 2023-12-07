@@ -50,11 +50,7 @@
   <com.google.dagger.version>2.47</com.google.dagger.version>
   <com.google.dagger.compiler.version>${com.google.dagger.version}</com.google.dagger.compiler.version>
 
-<<<<<<< HEAD
-  <io.cryostat.core.version>2.24.0</io.cryostat.core.version>
-=======
   <io.cryostat.core.version>2.25.1</io.cryostat.core.version>
->>>>>>> 370884e (build(deps): bump io.cryostat:cryostat-core from 2.25.0 to 2.25.1 (#293))
 
   <org.apache.commons.io.version>2.13.0</org.apache.commons.io.version>
   <org.apache.httpcomponents.httpclient.version>4.5.14</org.apache.httpcomponents.httpclient.version>
