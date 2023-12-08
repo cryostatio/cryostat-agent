@@ -61,7 +61,7 @@
   <io.smallrye.config.version>2.12.3</io.smallrye.config.version>
   <org.slf4j.version>2.0.7</org.slf4j.version>
   <org.projectnessie.cel.bom.version>0.3.21</org.projectnessie.cel.bom.version>
-  <com.redhat.insights.agent.version>0.9.0</com.redhat.insights.agent.version>
+  <com.redhat.insights.agent.version>0.9.1</com.redhat.insights.agent.version>
 
   <com.github.spotbugs.version>4.7.3</com.github.spotbugs.version>
   <com.github.spotbugs.plugin.version>4.7.3.6</com.github.spotbugs.plugin.version>
