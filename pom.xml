@@ -44,13 +44,13 @@
   <org.apache.maven.plugins.resources.version>3.3.0</org.apache.maven.plugins.resources.version>
   <org.apache.maven.plugins.assembly.version>3.4.2</org.apache.maven.plugins.assembly.version>
   <com.mycila.license.maven.plugin.version>4.3</com.mycila.license.maven.plugin.version>
-  <org.owasp.dependency.check.version>9.0.1</org.owasp.dependency.check.version>
+  <org.owasp.dependency.check.version>9.0.4</org.owasp.dependency.check.version>
 
   <!-- Use a separate property for dependency alignment purposes. -->
-  <com.google.dagger.version>2.47</com.google.dagger.version>
+  <com.google.dagger.version>2.49</com.google.dagger.version>
   <com.google.dagger.compiler.version>${com.google.dagger.version}</com.google.dagger.compiler.version>
 
-  <io.cryostat.core.version>2.24.0</io.cryostat.core.version>
+  <io.cryostat.core.version>2.25.1</io.cryostat.core.version>
 
   <org.apache.commons.io.version>2.13.0</org.apache.commons.io.version>
   <org.apache.httpcomponents.httpclient.version>4.5.14</org.apache.httpcomponents.httpclient.version>
@@ -70,7 +70,7 @@
   <org.hamcrest.version>2.2</org.hamcrest.version>
   <org.mockito.version>5.2.0</org.mockito.version>
   <org.jacoco.maven.plugin.version>0.8.11</org.jacoco.maven.plugin.version>
-  <com.diffplug.spotless.maven.plugin.version>2.41.0</com.diffplug.spotless.maven.plugin.version>
+  <com.diffplug.spotless.maven.plugin.version>2.41.1</com.diffplug.spotless.maven.plugin.version>
   <com.google.googlejavaformat.version>1.17.0</com.google.googlejavaformat.version>
   <org.jsoup.version>1.15.3</org.jsoup.version>
 
@@ -79,6 +79,13 @@
 
 <dependencyManagement>
   <dependencies>
+    <dependency>
+      <groupId>com.fasterxml.jackson</groupId>
+      <artifactId>jackson-bom</artifactId>
+      <version>${com.fasterxml.jackson.version}</version>
+      <type>pom</type>
+      <scope>import</scope>
+    </dependency>
     <dependency>
       <groupId>org.projectnessie.cel</groupId>
       <artifactId>cel-bom</artifactId>
@@ -162,7 +169,6 @@
   <dependency>
     <groupId>com.fasterxml.jackson.core</groupId>
     <artifactId>jackson-databind</artifactId>
-    <version>${com.fasterxml.jackson.version}</version>
   </dependency>
   <dependency>
     <groupId>javax.annotation</groupId>
@@ -392,12 +398,6 @@
       </executions>
       <configuration>
         <java>
-          <!-- explicitly specify these directories so that target/generated-sources/ created
-          by Dagger aren't checked for formatting. <excludes> doesn't seem to work as expected. -->
-          <includes>
-            <include>src/main/java/**/*.java</include>
-            <include>src/test/java/**/*.java</include>
-          </includes>
           <googleJavaFormat>
             <version>${com.google.googlejavaformat.version}</version>
             <style>AOSP</style>
