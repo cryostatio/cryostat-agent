@@ -28,13 +28,13 @@ import java.util.Optional;
 import java.util.function.Supplier;
 
 import io.cryostat.agent.ConfigModule;
-import io.cryostat.agent.insights.InsightsAgentHelper.SLF4JWrapper;
 import io.cryostat.agent.model.PluginInfo;
 
 import com.redhat.insights.agent.AgentBasicReport;
 import com.redhat.insights.agent.AgentConfiguration;
 import com.redhat.insights.agent.ClassNoticer;
 import com.redhat.insights.agent.InsightsAgentHttpClient;
+import com.redhat.insights.agent.SLF4JLogger;
 import com.redhat.insights.agent.shaded.InsightsReportController;
 import com.redhat.insights.agent.shaded.http.InsightsHttpClient;
 import org.eclipse.microprofile.config.Config;
@@ -72,7 +72,7 @@ public class InsightsAgentHelperTest {
         providerStatic.when(() -> ConfigProvider.getConfig()).thenReturn(config);
 
         reportStatic = Mockito.mockStatic(AgentBasicReport.class);
-        reportStatic.when(() -> AgentBasicReport.of(any(), any())).thenReturn(report);
+        reportStatic.when(() -> AgentBasicReport.of(any())).thenReturn(report);
 
         controllerStatic = Mockito.mockStatic(InsightsReportController.class);
         controllerStatic
@@ -127,8 +127,7 @@ public class InsightsAgentHelperTest {
 
         verify(instrumentation).addTransformer(any(ClassNoticer.class));
 
-        reportStatic.verify(
-                () -> AgentBasicReport.of(any(SLF4JWrapper.class), configCaptor.capture()));
+        reportStatic.verify(() -> AgentBasicReport.of(configCaptor.capture()));
 
         AgentConfiguration agentConfig = configCaptor.getValue();
         Assertions.assertEquals("test", agentConfig.getIdentificationName());
@@ -141,7 +140,7 @@ public class InsightsAgentHelperTest {
         controllerStatic.verify(
                 () ->
                         InsightsReportController.of(
-                                any(SLF4JWrapper.class),
+                                any(SLF4JLogger.class),
                                 eq(agentConfig),
                                 eq(report),
                                 clientSupplierCaptor.capture(),

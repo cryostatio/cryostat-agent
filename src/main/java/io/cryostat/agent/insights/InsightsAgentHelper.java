@@ -30,6 +30,7 @@ import com.redhat.insights.agent.AgentBasicReport;
 import com.redhat.insights.agent.AgentConfiguration;
 import com.redhat.insights.agent.ClassNoticer;
 import com.redhat.insights.agent.InsightsAgentHttpClient;
+import com.redhat.insights.agent.SLF4JLogger;
 import com.redhat.insights.agent.shaded.InsightsReportController;
 import com.redhat.insights.agent.shaded.http.InsightsHttpClient;
 import com.redhat.insights.agent.shaded.jars.JarInfo;
@@ -39,17 +40,14 @@ import com.redhat.insights.agent.shaded.tls.PEMSupport;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.eclipse.microprofile.config.Config;
 import org.eclipse.microprofile.config.ConfigProvider;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public class InsightsAgentHelper {
 
     private static final String INSIGHTS_SVC = "INSIGHTS_SVC";
     static final String RHT_INSIGHTS_JAVA_OPT_OUT = "rht.insights.java.opt-out";
 
-    private static final InsightsLogger log =
-            new SLF4JWrapper(LoggerFactory.getLogger(InsightsAgentHelper.class));
     private static final BlockingQueue<JarInfo> jarsToSend = new LinkedBlockingQueue<>();
+    private static final InsightsLogger log = new SLF4JLogger(InsightsAgentHelper.class);
 
     @SuppressFBWarnings("EI_EXPOSE_REP2")
     private final Instrumentation instrumentation;
@@ -89,11 +87,11 @@ public class InsightsAgentHelper {
         out.put("token", "dummy");
         AgentConfiguration config = new AgentConfiguration(out);
 
-        final InsightsReport simpleReport = AgentBasicReport.of(log, config);
+        final InsightsReport simpleReport = AgentBasicReport.of(config);
         final PEMSupport pem = new PEMSupport(log, config);
 
         final Supplier<InsightsHttpClient> httpClientSupplier =
-                () -> new InsightsAgentHttpClient(log, config, () -> pem.createTLSContext());
+                () -> new InsightsAgentHttpClient(config, () -> pem.createTLSContext());
         final InsightsReportController controller =
                 InsightsReportController.of(
                         log, config, simpleReport, httpClientSupplier, jarsToSend);
@@ -101,51 +99,7 @@ public class InsightsAgentHelper {
     }
 
     private static void instrument(Instrumentation instrumentation) {
-        ClassNoticer noticer = new ClassNoticer(log, jarsToSend);
+        ClassNoticer noticer = new ClassNoticer(jarsToSend);
         instrumentation.addTransformer(noticer);
-    }
-
-    static class SLF4JWrapper implements InsightsLogger {
-
-        private final Logger delegate;
-
-        SLF4JWrapper(Logger delegate) {
-            this.delegate = delegate;
-        }
-
-        @Override
-        public void debug(String message) {
-            delegate.debug(message);
-        }
-
-        @Override
-        public void debug(String message, Throwable err) {
-            delegate.debug(message, err);
-        }
-
-        @Override
-        public void error(String message) {
-            delegate.error(message);
-        }
-
-        @Override
-        public void error(String message, Throwable err) {
-            delegate.error(message, err);
-        }
-
-        @Override
-        public void info(String message) {
-            delegate.info(message);
-        }
-
-        @Override
-        public void warning(String message) {
-            delegate.warn(message);
-        }
-
-        @Override
-        public void warning(String message, Throwable err) {
-            delegate.warn(message, err);
-        }
     }
 }
