@@ -65,7 +65,6 @@ public abstract class MainModule {
     // one for outbound HTTP requests, one for incoming HTTP requests, and one as a general worker
     private static final int NUM_WORKER_THREADS = 3;
     private static final String JVM_ID = "JVM_ID";
-    private static final String TEMPLATES_PATH = "TEMPLATES_PATH";
 
     @Provides
     @Singleton
