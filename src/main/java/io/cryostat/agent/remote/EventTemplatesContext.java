@@ -17,7 +17,6 @@ package io.cryostat.agent.remote;
 
 import java.io.IOException;
 import java.io.OutputStream;
-import java.lang.management.ManagementFactory;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -25,8 +24,7 @@ import javax.inject.Inject;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
-import jdk.management.jfr.ConfigurationInfo;
-import jdk.management.jfr.FlightRecorderMXBean;
+import jdk.jfr.Configuration;
 import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -53,11 +51,9 @@ class EventTemplatesContext implements RemoteContext {
             switch (mtd) {
                 case "GET":
                     try {
-                        FlightRecorderMXBean bean =
-                                ManagementFactory.getPlatformMXBean(FlightRecorderMXBean.class);
                         List<String> xmlTexts =
-                                bean.getConfigurations().stream()
-                                        .map(ConfigurationInfo::getContents)
+                                Configuration.getConfigurations().stream()
+                                        .map(Configuration::getContents)
                                         .collect(Collectors.toList());
                         exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
                         try (OutputStream response = exchange.getResponseBody()) {

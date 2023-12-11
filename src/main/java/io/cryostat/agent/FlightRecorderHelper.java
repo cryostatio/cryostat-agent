@@ -15,10 +15,14 @@
  */
 package io.cryostat.agent;
 
+import java.io.IOException;
+import java.io.StringReader;
+import java.text.ParseException;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
@@ -32,7 +36,25 @@ public class FlightRecorderHelper {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
-    public Optional<TemplatedRecording> createRecording(String templateNameOrLabel) {
+    public Optional<Recording> createSnapshot() {
+        Recording snapshot = FlightRecorder.getFlightRecorder().takeSnapshot();
+        if (snapshot.getSize() == 0) {
+            log.warn("No active recordings");
+            snapshot.close();
+            return Optional.empty();
+        }
+        return Optional.of(snapshot);
+    }
+
+    public Recording createRecordingWithCustomTemplate(String template)
+            throws IOException, ParseException {
+        Recording recording = new Recording(Configuration.create(new StringReader(template)));
+        recording.setToDisk(true);
+        return recording;
+    }
+
+    public Optional<TemplatedRecording> createRecordingWithPredefinedTemplate(
+            String templateNameOrLabel) {
         Optional<Configuration> opt = getTemplate(templateNameOrLabel);
         if (opt.isEmpty()) {
             log.error(
@@ -58,14 +80,22 @@ public class FlightRecorderHelper {
         return getTemplate(nameOrLabel).isPresent();
     }
 
-    public List<RecordingInfo> getRecordings() {
+    public List<Recording> getRecordings() {
+        return getRecordings(r -> true);
+    }
+
+    public List<Recording> getRecordings(Predicate<Recording> predicate) {
         if (!FlightRecorder.isAvailable()) {
             log.error("FlightRecorder is unavailable");
             return List.of();
         }
         return FlightRecorder.getFlightRecorder().getRecordings().stream()
-                .map(RecordingInfo::new)
+                .filter(predicate)
                 .collect(Collectors.toList());
+    }
+
+    public Optional<Recording> getRecording(long id) {
+        return getRecordings(r -> r.getId() == id).stream().findFirst();
     }
 
     @SuppressFBWarnings(value = {"EI_EXPOSE_REP", "EI_EXPOSE_REP2"})
