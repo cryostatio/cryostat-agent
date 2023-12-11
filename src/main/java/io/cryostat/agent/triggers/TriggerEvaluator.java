@@ -171,7 +171,7 @@ public class TriggerEvaluator {
 
     private void startRecording(SmartTrigger t) {
         flightRecorderHelper
-                .createRecording(t.getRecordingTemplateName())
+                .createRecordingWithPredefinedTemplate(t.getRecordingTemplateName())
                 .ifPresent(
                         tr -> {
                             String recordingName =
