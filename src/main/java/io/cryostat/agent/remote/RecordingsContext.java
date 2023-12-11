@@ -16,50 +16,32 @@
 package io.cryostat.agent.remote;
 
 import java.io.BufferedInputStream;
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.nio.charset.StandardCharsets;
+import java.text.ParseException;
+import java.time.Duration;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.Set;
-import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import javax.inject.Inject;
 
-import org.openjdk.jmc.common.unit.IConstrainedMap;
-import org.openjdk.jmc.common.unit.QuantityConversionException;
-import org.openjdk.jmc.common.unit.UnitLookup;
-import org.openjdk.jmc.flightrecorder.configuration.events.EventOptionID;
-import org.openjdk.jmc.flightrecorder.configuration.recording.RecordingOptionsBuilder;
-import org.openjdk.jmc.rjmx.ServiceNotAvailableException;
-import org.openjdk.jmc.rjmx.services.jfr.IFlightRecorderService;
-import org.openjdk.jmc.rjmx.services.jfr.IRecordingDescriptor;
-import org.openjdk.jmc.rjmx.services.jfr.IRecordingDescriptor.RecordingState;
-
+import io.cryostat.agent.FlightRecorderHelper;
 import io.cryostat.agent.util.StringUtils;
-import io.cryostat.core.FlightRecorderException;
-import io.cryostat.core.net.JFRConnection;
-import io.cryostat.core.net.JFRConnectionToolkit;
 import io.cryostat.core.serialization.SerializableRecordingDescriptor;
-import io.cryostat.core.templates.LocalStorageTemplateService;
 import io.cryostat.core.templates.MutableTemplateService.InvalidEventTemplateException;
-import io.cryostat.core.templates.MutableTemplateService.InvalidXmlException;
-import io.cryostat.core.templates.RemoteTemplateService;
-import io.cryostat.core.templates.Template;
-import io.cryostat.core.templates.TemplateType;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
-import jdk.jfr.FlightRecorder;
 import jdk.jfr.Recording;
 import org.apache.http.HttpStatus;
 import org.eclipse.microprofile.config.Config;
@@ -75,19 +57,13 @@ class RecordingsContext implements RemoteContext {
     private final Logger log = LoggerFactory.getLogger(getClass());
     private final Config config;
     private final ObjectMapper mapper;
-    private final JFRConnectionToolkit jfrConnectionToolkit;
-    private final LocalStorageTemplateService localStorageTemplateService;
+    private final FlightRecorderHelper flightRecorder;
 
     @Inject
-    RecordingsContext(
-            Config config,
-            ObjectMapper mapper,
-            JFRConnectionToolkit jfrConnectionToolkit,
-            LocalStorageTemplateService localStorageTemplateService) {
+    RecordingsContext(Config config, ObjectMapper mapper, FlightRecorderHelper flightRecorder) {
         this.config = config;
         this.mapper = mapper;
-        this.jfrConnectionToolkit = jfrConnectionToolkit;
-        this.localStorageTemplateService = localStorageTemplateService;
+        this.flightRecorder = flightRecorder;
     }
 
     @Override
@@ -152,7 +128,10 @@ class RecordingsContext implements RemoteContext {
 
     private void handleGetList(HttpExchange exchange) {
         try (OutputStream response = exchange.getResponseBody()) {
-            List<SerializableRecordingDescriptor> recordings = getRecordings();
+            List<SerializableRecordingDescriptor> recordings =
+                    flightRecorder.getRecordings().stream()
+                            .map(SerializableRecordingDescriptor::new)
+                            .collect(Collectors.toList());
             exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
             mapper.writeValue(response, recordings);
         } catch (Exception e) {
@@ -160,10 +139,9 @@ class RecordingsContext implements RemoteContext {
         }
     }
 
-    private void handleGetRecording(HttpExchange exchange, long id) {
-        FlightRecorder.getFlightRecorder().getRecordings().stream()
-                .filter(r -> r.getId() == id)
-                .findFirst()
+    private void handleGetRecording(HttpExchange exchange, long recordingId) {
+        flightRecorder
+                .getRecording(recordingId)
                 .ifPresentOrElse(
                         r -> {
                             Recording copy = r.copy(true);
@@ -205,7 +183,11 @@ class RecordingsContext implements RemoteContext {
             StartRecordingRequest req = mapper.readValue(body, StartRecordingRequest.class);
             if (req.requestSnapshot()) {
                 try {
-                    SerializableRecordingDescriptor snapshot = startSnapshot(req, exchange);
+                    SerializableRecordingDescriptor snapshot =
+                            flightRecorder
+                                    .createSnapshot()
+                                    .map(SerializableRecordingDescriptor::new)
+                                    .orElse(null);
                     if (snapshot == null) {
                         exchange.sendResponseHeaders(
                                 HttpStatus.SC_SERVICE_UNAVAILABLE, BODY_LENGTH_NONE);
@@ -223,6 +205,7 @@ class RecordingsContext implements RemoteContext {
                 return;
             }
             if (!req.isValid()) {
+                log.warn("Invalid recording start request: {}", req);
                 exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
                 return;
             }
@@ -231,146 +214,112 @@ class RecordingsContext implements RemoteContext {
             try (OutputStream response = exchange.getResponseBody()) {
                 mapper.writeValue(response, recording);
             }
-        } catch (QuantityConversionException
-                | ServiceNotAvailableException
-                | FlightRecorderException
-                | org.openjdk.jmc.rjmx.services.jfr.FlightRecorderException
-                | InvalidXmlException
-                | IOException e) {
+        } catch (IOException e) {
             log.error("Failed to start recording", e);
             exchange.sendResponseHeaders(HttpStatus.SC_INTERNAL_SERVER_ERROR, BODY_LENGTH_NONE);
         } catch (InvalidEventTemplateException e) {
+            log.warn("Invalid custom event template", e);
             exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
         }
     }
 
-    private void handleStopOrUpdate(HttpExchange exchange, long id) throws IOException {
+    private void handleStopOrUpdate(HttpExchange exchange, long recordingId) throws IOException {
         try {
-            JFRConnection conn =
-                    jfrConnectionToolkit.connect(
-                            jfrConnectionToolkit.createServiceURL("localhost", 0));
-            IFlightRecorderService svc = conn.getService();
-            IRecordingDescriptor dsc =
-                    svc.getAvailableRecordings().stream()
-                            .filter(r -> r.getId() == id)
-                            .findFirst()
-                            .get();
-            RecordingOptionsBuilder builder =
-                    new RecordingOptionsBuilder(conn.getService())
-                            .name(dsc.getName())
-                            .maxSize(dsc.getMaxSize())
-                            .maxAge(dsc.getMaxAge())
-                            .toDisk(dsc.getToDisk());
-            if (!RecordingState.STOPPED.equals(dsc.getState())) {
-                // we should apply this default, but if this key is present when the recording is
-                // stopped then updating the recording options will throw, even if we are re-setting
-                // the same duration
-                builder = builder.duration(dsc.getDuration());
-            }
-
             boolean shouldStop = false;
             InputStream body = exchange.getRequestBody();
             JsonNode jsonMap = mapper.readTree(body);
             Iterator<Entry<String, JsonNode>> fields = jsonMap.fields();
 
+            Optional<Recording> recordingOpt = flightRecorder.getRecording(recordingId);
+            if (recordingOpt.isEmpty()) {
+                sendHeader(exchange, HttpStatus.SC_NOT_FOUND);
+                return;
+            }
+            Recording recording = recordingOpt.get();
             while (fields.hasNext()) {
                 Map.Entry<String, JsonNode> field = fields.next();
-
                 switch (field.getKey()) {
                     case "state":
                         if ("stopped".equalsIgnoreCase(field.getValue().textValue())) {
                             shouldStop = true;
                             break;
                         }
-                        exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
+                        sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
                         return;
                     case "name":
                         if (!StringUtils.isBlank(field.getValue().textValue())) {
-                            builder = builder.name(field.getValue().textValue());
+                            recording.setName(field.getValue().textValue());
                             break;
                         }
-                        exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
+                        sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
                         return;
                     case "duration":
                         if (field.getValue().canConvertToLong()) {
-                            builder = builder.duration(field.getValue().longValue());
+                            recording.setDuration(Duration.ofMillis(field.getValue().longValue()));
                             break;
                         }
-                        exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
+                        sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
                         return;
                     case "maxSize":
                         if (field.getValue().canConvertToLong()) {
-                            builder = builder.maxSize(field.getValue().longValue());
+                            recording.setMaxSize(field.getValue().longValue());
                             break;
                         }
-                        exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
+                        sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
                         return;
                     case "maxAge":
                         if (field.getValue().canConvertToLong()) {
-                            builder = builder.maxAge(field.getValue().longValue());
+                            recording.setMaxAge(Duration.ofMillis(field.getValue().longValue()));
                             break;
                         }
-                        exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
+                        sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
                         return;
                     case "toDisk":
                         if (field.getValue().isBoolean()) {
-                            builder = builder.toDisk(field.getValue().booleanValue());
+                            recording.setToDisk(field.getValue().booleanValue());
                             break;
                         }
-                        exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
+                        sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
                         return;
                     default:
                         log.warn("Unknown recording option {}", field.getKey());
-                        exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
+                        sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
                         return;
                 }
             }
-            svc.updateRecordingOptions(dsc, builder.build());
             if (shouldStop) {
-                svc.stop(dsc);
+                if (!recording.stop()) {
+                    sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
+                }
             }
 
             try (OutputStream response = exchange.getResponseBody()) {
                 if (response == null) {
-                    exchange.sendResponseHeaders(HttpStatus.SC_NO_CONTENT, BODY_LENGTH_NONE);
+                    sendHeader(exchange, HttpStatus.SC_NO_CONTENT);
                 } else {
                     exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
-                    mapper.writeValue(response, dsc);
+                    mapper.writeValue(
+                            response,
+                            flightRecorder
+                                    .getRecording(recordingId)
+                                    .map(SerializableRecordingDescriptor::new)
+                                    .get());
                 }
             }
-        } catch (ServiceNotAvailableException
-                | org.openjdk.jmc.rjmx.services.jfr.FlightRecorderException
-                | QuantityConversionException e) {
+        } catch (Exception e) {
             log.error("Failed to update recording", e);
-            exchange.sendResponseHeaders(HttpStatus.SC_INTERNAL_SERVER_ERROR, BODY_LENGTH_NONE);
+            sendHeader(exchange, HttpStatus.SC_INTERNAL_SERVER_ERROR);
         } finally {
             exchange.close();
         }
     }
 
-    private void handleDelete(HttpExchange exchange, long id) throws IOException {
-        invokeOnRecording(
-                exchange,
-                id,
-                r -> {
-                    r.close();
-                    sendHeader(exchange, HttpStatus.SC_NO_CONTENT);
-                });
-    }
-
-    private Optional<Recording> getRecordingById(long id) {
-        return FlightRecorder.getFlightRecorder().getRecordings().stream()
-                .filter(r -> r.getId() == id)
-                .findFirst();
-    }
-
-    private void invokeOnRecording(HttpExchange exchange, long id, Consumer<Recording> consumer) {
-        Optional<Recording> opt = getRecordingById(id);
-        if (!opt.isPresent()) {
-            sendHeader(exchange, HttpStatus.SC_NOT_FOUND);
-        }
+    private void handleDelete(HttpExchange exchange, long recordingId) throws IOException {
         try {
-            consumer.accept(opt.get());
+            flightRecorder.getRecording(recordingId).orElseThrow().close();
+            sendHeader(exchange, HttpStatus.SC_NO_CONTENT);
+        } catch (NoSuchElementException e) {
+            sendHeader(exchange, HttpStatus.SC_NOT_FOUND);
         } catch (Exception e) {
             log.error("Operation failed", e);
             sendHeader(exchange, HttpStatus.SC_INTERNAL_SERVER_ERROR);
@@ -399,85 +348,30 @@ class RecordingsContext implements RemoteContext {
         return passed;
     }
 
-    private List<SerializableRecordingDescriptor> getRecordings() {
-        return FlightRecorder.getFlightRecorder().getRecordings().stream()
-                .map(SerializableRecordingDescriptor::new)
-                .collect(Collectors.toList());
-    }
-
     private SerializableRecordingDescriptor startRecording(StartRecordingRequest req)
-            throws QuantityConversionException,
-                    ServiceNotAvailableException,
-                    FlightRecorderException,
-                    org.openjdk.jmc.rjmx.services.jfr.FlightRecorderException,
-                    InvalidEventTemplateException,
-                    InvalidXmlException,
-                    IOException,
-                    FlightRecorderException {
-        Runnable cleanup = () -> {};
-        try {
-            JFRConnection conn =
-                    jfrConnectionToolkit.connect(
-                            jfrConnectionToolkit.createServiceURL("localhost", 0));
-            IConstrainedMap<EventOptionID> events;
-            if (req.requestsCustomTemplate()) {
-                Template template =
-                        localStorageTemplateService.addTemplate(
-                                new ByteArrayInputStream(
-                                        req.template.getBytes(StandardCharsets.UTF_8)));
-                events =
-                        localStorageTemplateService
-                                .getEvents(template)
-                                .orElseThrow(
-                                        () ->
-                                                new InvalidEventTemplateException(
-                                                        "Falied to retrieve recording events for "
-                                                                + template.getName()));
-                cleanup =
-                        () -> {
-                            try {
-                                localStorageTemplateService.deleteTemplate(template);
-                            } catch (InvalidEventTemplateException | IOException e) {
-                                log.error("Failed to clean up template " + template.getName(), e);
-                            }
-                        };
-            } else {
-                events =
-                        new RemoteTemplateService(conn)
-                                .getEvents(req.localTemplateName, TemplateType.TARGET).stream()
-                                        .findFirst()
-                                        .orElseThrow(
-                                                () ->
-                                                        new InvalidEventTemplateException(
-                                                                "Failed to retrieve recording"
-                                                                        + " events for "
-                                                                        + req.localTemplateName));
+            throws InvalidEventTemplateException {
+        Recording recording;
+        if (req.requestsCustomTemplate()) {
+            try {
+                recording = flightRecorder.createRecordingWithCustomTemplate(req.template);
+            } catch (IOException | ParseException e) {
+                throw new InvalidEventTemplateException("Invalid event template contents", e);
             }
-            IFlightRecorderService svc = conn.getService();
-            return new SerializableRecordingDescriptor(
-                    svc.start(
-                            new RecordingOptionsBuilder(conn.getService())
-                                    .name(req.name)
-                                    .duration(UnitLookup.MILLISECOND.quantity(req.duration))
-                                    .maxSize(UnitLookup.BYTE.quantity(req.maxSize))
-                                    .maxAge(UnitLookup.MILLISECOND.quantity(req.maxAge))
-                                    .toDisk(true)
-                                    .build(),
-                            events));
-        } finally {
-            cleanup.run();
+        } else {
+            recording =
+                    flightRecorder
+                            .createRecordingWithPredefinedTemplate(req.localTemplateName)
+                            .orElseThrow(
+                                    () -> new InvalidEventTemplateException(req.localTemplateName))
+                            .getRecording();
         }
-    }
-
-    private SerializableRecordingDescriptor startSnapshot(
-            StartRecordingRequest req, HttpExchange exchange) throws IOException {
-        Recording snapshot = FlightRecorder.getFlightRecorder().takeSnapshot();
-        if (snapshot.getSize() == 0) {
-            log.warn("No active recordings");
-            snapshot.close();
-            return null;
-        }
-        return new SerializableRecordingDescriptor(snapshot);
+        recording.setName(req.name);
+        recording.setToDisk(true);
+        recording.setDuration(req.duration > 0 ? Duration.ofMillis(req.duration) : null);
+        recording.setMaxSize(req.maxSize);
+        recording.setMaxAge(Duration.ofMillis(req.maxAge));
+        recording.start();
+        return new SerializableRecordingDescriptor(recording);
     }
 
     static class StartRecordingRequest {
