@@ -139,9 +139,9 @@ class RecordingsContext implements RemoteContext {
         }
     }
 
-    private void handleGetRecording(HttpExchange exchange, long id) {
+    private void handleGetRecording(HttpExchange exchange, long recordingId) {
         flightRecorder
-                .getRecording(id)
+                .getRecording(recordingId)
                 .ifPresentOrElse(
                         r -> {
                             Recording copy = r.copy(true);
@@ -314,9 +314,9 @@ class RecordingsContext implements RemoteContext {
         }
     }
 
-    private void handleDelete(HttpExchange exchange, long id) throws IOException {
+    private void handleDelete(HttpExchange exchange, long recordingId) throws IOException {
         try {
-            flightRecorder.getRecording(id).orElseThrow().close();
+            flightRecorder.getRecording(recordingId).orElseThrow().close();
             sendHeader(exchange, HttpStatus.SC_NO_CONTENT);
         } catch (NoSuchElementException e) {
             sendHeader(exchange, HttpStatus.SC_NOT_FOUND);
