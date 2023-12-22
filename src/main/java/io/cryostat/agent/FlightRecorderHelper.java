@@ -75,7 +75,6 @@ public class FlightRecorderHelper {
             Recording recording = new Recording(allTemplate);
             recording.setToDisk(true);
 
-            log.info("Creating recording with ALL template");
             return Optional.of(new TemplatedRecording(null, recording));
         } else {
             Optional<Configuration> opt = getTemplate(templateNameOrLabel);
@@ -90,7 +89,6 @@ public class FlightRecorderHelper {
             Recording recording = new Recording(configuration.getSettings());
             recording.setToDisk(true);
 
-            log.info("Creating recording with template: {}", templateNameOrLabel);
             return Optional.of(new TemplatedRecording(configuration, recording));
         }
     }

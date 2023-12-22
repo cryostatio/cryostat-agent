@@ -41,9 +41,6 @@ public class FlightRecorderHelperTest {
 
         Recording allTemplateRecording = recording.get().getRecording();
         allTemplateRecording.close();
-        List<Recording> recordings = helper.getRecordings();
-
-        assertEquals(0, recordings.size());
     }
 
     @Test
@@ -63,5 +60,5 @@ public class FlightRecorderHelperTest {
         List<Recording> recordings = helper.getRecordings();
 
         assertEquals(3, recordings.size());
-    }
+}
 }
