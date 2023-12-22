@@ -60,5 +60,5 @@ public class FlightRecorderHelperTest {
         List<Recording> recordings = helper.getRecordings();
 
         assertEquals(3, recordings.size());
-}
+    }
 }
