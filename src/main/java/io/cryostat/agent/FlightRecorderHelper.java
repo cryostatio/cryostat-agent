@@ -18,6 +18,7 @@ package io.cryostat.agent;
 import java.io.IOException;
 import java.io.StringReader;
 import java.text.ParseException;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -55,17 +56,43 @@ public class FlightRecorderHelper {
 
     public Optional<TemplatedRecording> createRecordingWithPredefinedTemplate(
             String templateNameOrLabel) {
-        Optional<Configuration> opt = getTemplate(templateNameOrLabel);
-        if (opt.isEmpty()) {
-            log.error(
-                    "Cannot start recording with template named or labelled {}",
-                    templateNameOrLabel);
-            return Optional.empty();
+        if ("ALL".equals(templateNameOrLabel)) {
+            Map<String, String> allTemplate = new HashMap<>();
+            FlightRecorder.getFlightRecorder()
+                    .getEventTypes()
+                    .forEach(
+                            e -> {
+                                e.getSettingDescriptors()
+                                        .forEach(
+                                                s -> {
+                                                    allTemplate.put(
+                                                            e.getName() + "#" + s.getName(),
+                                                            s.getDefaultValue());
+                                                });
+                                allTemplate.put(e.getName() + "#enabled", "true");
+                            });
+
+            Recording recording = new Recording(allTemplate);
+            recording.setToDisk(true);
+
+            log.info("Creating recording with ALL template");
+            return Optional.of(new TemplatedRecording(null, recording));
+        } else {
+            Optional<Configuration> opt = getTemplate(templateNameOrLabel);
+            if (opt.isEmpty()) {
+                log.error(
+                        "Cannot start recording with template named or labelled {}",
+                        templateNameOrLabel);
+                return Optional.empty();
+            }
+
+            Configuration configuration = opt.get();
+            Recording recording = new Recording(configuration.getSettings());
+            recording.setToDisk(true);
+
+            log.info("Creating recording with template: {}", templateNameOrLabel);
+            return Optional.of(new TemplatedRecording(configuration, recording));
         }
-        Configuration configuration = opt.get();
-        Recording recording = new Recording(configuration.getSettings());
-        recording.setToDisk(true);
-        return Optional.of(new TemplatedRecording(configuration, recording));
     }
 
     public Optional<Configuration> getTemplate(String nameOrLabel) {
