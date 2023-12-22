@@ -38,6 +38,12 @@ public class FlightRecorderHelperTest {
         Optional<TemplatedRecording> invalid =
                 helper.createRecordingWithPredefinedTemplate("invalid");
         assertTrue(invalid.isEmpty());
+
+        Recording allTemplateRecording = recording.get().getRecording();
+        allTemplateRecording.close();
+        List<Recording> recordings = helper.getRecordings();
+
+        assertEquals(0, recordings.size());
     }
 
     @Test
