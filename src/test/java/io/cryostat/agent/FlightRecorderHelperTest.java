@@ -23,24 +23,41 @@ import java.util.Optional;
 import io.cryostat.agent.FlightRecorderHelper.TemplatedRecording;
 
 import jdk.jfr.Recording;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 public class FlightRecorderHelperTest {
-    @Test
-    public void testCreateRecordingWithTemplate() {
+    @ParameterizedTest
+    @ValueSource(strings = {"default", "Continuous", "profile", "Profiling", "ALL"})
+    public void testCreateRecordingWithTemplate(String template) {
         FlightRecorderHelper helper = new FlightRecorderHelper();
 
         Optional<TemplatedRecording> recording =
-                helper.createRecordingWithPredefinedTemplate("ALL");
-        assertNotNull(recording);
+                helper.createRecordingWithPredefinedTemplate(template);
 
-        // Try to create recording with invalid template
-        Optional<TemplatedRecording> invalid =
-                helper.createRecordingWithPredefinedTemplate("invalid");
-        assertTrue(invalid.isEmpty());
-
-        Recording allTemplateRecording = recording.get().getRecording();
-        allTemplateRecording.close();
+        switch (template) {
+            case "ALL":
+                assertNotNull(recording);
+                assertFalse(recording.isEmpty());
+                break;
+            case "default":
+                assertFalse(recording.isEmpty());
+                break;
+            case "Continuous":
+                assertFalse(recording.isEmpty());
+                break;
+            case "profile":
+                assertFalse(recording.isEmpty());
+                break;
+            case "Profiling":
+                assertFalse(recording.isEmpty());
+                break;
+            default:
+                fail("Unexpected template: " + template);
+                assertTrue(recording.isEmpty());
+        }
     }
 
     @Test
@@ -58,7 +75,15 @@ public class FlightRecorderHelperTest {
         assertTrue(allRecording.isPresent());
 
         List<Recording> recordings = helper.getRecordings();
-
         assertEquals(3, recordings.size());
+    }
+
+    @AfterEach
+    public void cleanup() {
+        FlightRecorderHelper helper = new FlightRecorderHelper();
+
+        Recording recording = helper.getRecordings().get(0);
+        recording.close();
+        helper.getRecordings().clear();
     }
 }

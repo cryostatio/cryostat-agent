@@ -37,6 +37,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.function.Function;
 
+import io.cryostat.agent.FlightRecorderHelper.ConfigurationInfo;
 import io.cryostat.agent.FlightRecorderHelper.TemplatedRecording;
 import io.cryostat.agent.WebServer.Credentials;
 import io.cryostat.agent.harvest.Harvester;
@@ -49,7 +50,6 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
-import jdk.jfr.Configuration;
 import jdk.jfr.Recording;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.input.CountingInputStream;
@@ -373,8 +373,8 @@ public class CryostatClient {
         Instant start = Instant.now();
         String timestamp = start.truncatedTo(ChronoUnit.SECONDS).toString().replaceAll("[-:]", "");
         String template =
-                opt.map(TemplatedRecording::getConfiguration)
-                        .map(Configuration::getName)
+                opt.map(TemplatedRecording::getConfigurationInfo)
+                        .map(ConfigurationInfo::getName)
                         .map(String::toLowerCase)
                         .map(String::trim)
                         .orElse("unknown");
