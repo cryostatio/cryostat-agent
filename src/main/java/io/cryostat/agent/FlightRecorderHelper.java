@@ -77,8 +77,7 @@ public class FlightRecorderHelper {
 
             return Optional.of(
                     new TemplatedRecording(
-                            new ConfigurationInfo(TemplateType.TARGET, "allTemplate", "ALL"),
-                            recording));
+                            new ConfigurationInfo(TemplateType.TARGET, "ALL", "ALL"), recording));
         } else {
             Optional<Configuration> opt = getTemplate(templateNameOrLabel);
             if (opt.isEmpty()) {
