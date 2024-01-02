@@ -37,45 +37,35 @@ public class FlightRecorderHelperTest {
         Optional<TemplatedRecording> recording =
                 helper.createRecordingWithPredefinedTemplate(template);
 
-        switch (template) {
-            case "ALL":
-                assertNotNull(recording);
-                assertFalse(recording.isEmpty());
-                break;
-            case "default":
-                assertFalse(recording.isEmpty());
-                break;
-            case "Continuous":
-                assertFalse(recording.isEmpty());
-                break;
-            case "profile":
-                assertFalse(recording.isEmpty());
-                break;
-            case "Profiling":
-                assertFalse(recording.isEmpty());
-                break;
-            default:
-                fail("Unexpected template: " + template);
-                assertTrue(recording.isEmpty());
-        }
+        assertNotNull(recording);
+        assertFalse(recording.isEmpty(), "Recording should not be empty for template: " + template);
     }
 
     @Test
-    public void testGetRecordings() {
+    public void testStartandGetRecordingsWithPredefinedTemplate() {
         FlightRecorderHelper helper = new FlightRecorderHelper();
 
         Optional<TemplatedRecording> continuousRecording =
-                helper.createRecordingWithPredefinedTemplate("ALL");
+                helper.createRecordingWithPredefinedTemplate("Continuous");
         assertTrue(continuousRecording.isPresent());
         Optional<TemplatedRecording> profilingRecording =
-                helper.createRecordingWithPredefinedTemplate("ALL");
+                helper.createRecordingWithPredefinedTemplate("Profiling");
         assertTrue(profilingRecording.isPresent());
         Optional<TemplatedRecording> allRecording =
                 helper.createRecordingWithPredefinedTemplate("ALL");
         assertTrue(allRecording.isPresent());
+        Optional<TemplatedRecording> profileRecording =
+                helper.createRecordingWithPredefinedTemplate("profile");
+        assertTrue(profileRecording.isPresent());
+        Optional<TemplatedRecording> defaultRecording =
+                helper.createRecordingWithPredefinedTemplate("default");
+        assertTrue(defaultRecording.isPresent());
+        Optional<TemplatedRecording> invalidTemplate =
+                helper.createRecordingWithPredefinedTemplate("invalidTemplate");
+        assertTrue(invalidTemplate.isEmpty());
 
         List<Recording> recordings = helper.getRecordings();
-        assertEquals(3, recordings.size());
+        assertEquals(5, recordings.size());
     }
 
     @AfterEach
