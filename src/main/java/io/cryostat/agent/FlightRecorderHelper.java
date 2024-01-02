@@ -18,6 +18,7 @@ package io.cryostat.agent;
 import java.io.IOException;
 import java.io.StringReader;
 import java.text.ParseException;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -55,17 +56,44 @@ public class FlightRecorderHelper {
 
     public Optional<TemplatedRecording> createRecordingWithPredefinedTemplate(
             String templateNameOrLabel) {
-        Optional<Configuration> opt = getTemplate(templateNameOrLabel);
-        if (opt.isEmpty()) {
-            log.error(
-                    "Cannot start recording with template named or labelled {}",
-                    templateNameOrLabel);
-            return Optional.empty();
+        if ("ALL".equals(templateNameOrLabel)) {
+            Map<String, String> allTemplate = new HashMap<>();
+            FlightRecorder.getFlightRecorder()
+                    .getEventTypes()
+                    .forEach(
+                            e -> {
+                                e.getSettingDescriptors()
+                                        .forEach(
+                                                s -> {
+                                                    allTemplate.put(
+                                                            e.getName() + "#" + s.getName(),
+                                                            s.getDefaultValue());
+                                                });
+                                allTemplate.put(e.getName() + "#enabled", "true");
+                            });
+
+            Recording recording = new Recording(allTemplate);
+            recording.setToDisk(true);
+
+            return Optional.of(
+                    new TemplatedRecording(
+                            new ConfigurationInfo(TemplateType.TARGET, "ALL", "ALL"), recording));
+        } else {
+            Optional<Configuration> opt = getTemplate(templateNameOrLabel);
+            if (opt.isEmpty()) {
+                log.error(
+                        "Cannot start recording with template named or labelled {}",
+                        templateNameOrLabel);
+                return Optional.empty();
+            }
+
+            Configuration configuration = opt.get();
+            Recording recording = new Recording(configuration.getSettings());
+            recording.setToDisk(true);
+
+            return Optional.of(
+                    new TemplatedRecording(new ConfigurationInfo(configuration), recording));
         }
-        Configuration configuration = opt.get();
-        Recording recording = new Recording(configuration.getSettings());
-        recording.setToDisk(true);
-        return Optional.of(new TemplatedRecording(configuration, recording));
     }
 
     public Optional<Configuration> getTemplate(String nameOrLabel) {
@@ -100,21 +128,55 @@ public class FlightRecorderHelper {
 
     @SuppressFBWarnings(value = {"EI_EXPOSE_REP", "EI_EXPOSE_REP2"})
     public static class TemplatedRecording {
-        private final Configuration configuration;
+        private final ConfigurationInfo configuration;
         private final Recording recording;
 
-        public TemplatedRecording(Configuration configuration, Recording recording) {
-            this.configuration = configuration;
-            this.recording = recording;
+        public TemplatedRecording(ConfigurationInfo configuration, Recording recording) {
+            this.configuration = Objects.requireNonNull(configuration);
+            this.recording = Objects.requireNonNull(recording);
         }
 
-        public Configuration getConfiguration() {
+        public ConfigurationInfo getConfigurationInfo() {
             return configuration;
         }
 
         public Recording getRecording() {
             return recording;
         }
+    }
+
+    public static class ConfigurationInfo {
+        private final String name;
+        private final String label;
+        private final TemplateType type;
+
+        public ConfigurationInfo(TemplateType type, String name, String label) {
+            this.type = Objects.requireNonNull(type);
+            this.name = Objects.requireNonNull(name);
+            this.label = Objects.requireNonNull(label);
+        }
+
+        public ConfigurationInfo(Configuration configuration) {
+            this(TemplateType.TARGET, configuration.getName(), configuration.getLabel());
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public String getLabel() {
+            return label;
+        }
+
+        public TemplateType getType() {
+            return type;
+        }
+    }
+
+    public enum TemplateType {
+        TARGET,
+        CUSTOM,
+        ;
     }
 
     @SuppressFBWarnings(value = "URF_UNREAD_FIELD")
