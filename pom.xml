@@ -59,7 +59,7 @@
   <org.eclipse.microprofile.config.api.version>3.0.3</org.eclipse.microprofile.config.api.version>
   <javax.annotation.version>1.3.2</javax.annotation.version><!-- used by smallrye -->
   <io.smallrye.config.version>2.12.3</io.smallrye.config.version>
-  <org.slf4j.version>2.0.7</org.slf4j.version>
+  <org.slf4j.version>2.0.11</org.slf4j.version>
   <org.projectnessie.cel.bom.version>0.4.4</org.projectnessie.cel.bom.version>
   <com.google.protobuf-java.version>3.22.3</com.google.protobuf-java.version>
   <com.redhat.insights.agent.version>0.9.1</com.redhat.insights.agent.version>
