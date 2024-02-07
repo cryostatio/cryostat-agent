@@ -66,7 +66,7 @@ public class Harvester implements FlightRecorderListener {
     private Future<?> task;
     private boolean running;
 
-    @SuppressFBWarnings("EI_EXPOSE_REP2")
+    @SuppressFBWarnings(value = {"EI_EXPOSE_REP2", "CT_CONSTRUCTOR_THROW"})
     public Harvester(
             ScheduledExecutorService executor,
             ScheduledExecutorService workerPool,
