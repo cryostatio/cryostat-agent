@@ -235,7 +235,6 @@
       <configuration>
         <archive>
           <manifest>
-            <addClasspath>true</addClasspath>
             <mainClass>${mainClass}</mainClass>
           </manifest>
           <manifestEntries>
