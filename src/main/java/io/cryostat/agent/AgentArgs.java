@@ -15,6 +15,7 @@
  */
 package io.cryostat.agent;
 
+import java.lang.instrument.Instrumentation;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -32,12 +33,23 @@ import org.apache.commons.lang3.tuple.Pair;
 
 class AgentArgs {
     private static final String DELIMITER = "!";
+    private final Instrumentation instrumentation;
     private final Map<String, String> properties;
     private final String smartTriggers;
 
-    public AgentArgs(Map<String, String> properties, String smartTriggers) {
+    public AgentArgs(
+            Instrumentation instrumentation, Map<String, String> properties, String smartTriggers) {
+        this.instrumentation = instrumentation;
         this.properties = Optional.ofNullable(properties).orElse(Collections.emptyMap());
         this.smartTriggers = StringUtils.defaultValue(smartTriggers, "");
+    }
+
+    public AgentArgs(Map<String, String> properties, String smartTriggers) {
+        this(null, properties, smartTriggers);
+    }
+
+    public Instrumentation getInstrumentation() {
+        return instrumentation;
     }
 
     public Map<String, String> getProperties() {
@@ -48,7 +60,7 @@ class AgentArgs {
         return smartTriggers;
     }
 
-    public static AgentArgs from(String agentmainArg) {
+    public static AgentArgs from(Instrumentation instrumentation, String agentmainArg) {
         Map<String, String> properties = new HashMap<>();
         String smartTriggers = "";
         if (StringUtils.isNotBlank(agentmainArg)) {
@@ -70,7 +82,7 @@ class AgentArgs {
             }
             smartTriggers = parts.poll();
         }
-        return new AgentArgs(properties, smartTriggers);
+        return new AgentArgs(instrumentation, properties, smartTriggers);
     }
 
     public String toAgentMain() {
