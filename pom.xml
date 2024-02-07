@@ -10,13 +10,6 @@
 <name>cryostat-agent</name>
 <url>http://maven.apache.org</url>
 
-<repositories>
-  <repository>
-    <id>github</id>
-    <url>https://maven.pkg.github.com/cryostatio/cryostat-core</url>
-  </repository>
-</repositories>
-
 <distributionManagement>
   <repository>
     <id>github</id>
@@ -50,7 +43,7 @@
   <com.google.dagger.version>2.47</com.google.dagger.version>
   <com.google.dagger.compiler.version>${com.google.dagger.version}</com.google.dagger.compiler.version>
 
-  <io.cryostat.core.version>2.25.1</io.cryostat.core.version>
+  <io.cryostat.core.version>2.28.0</io.cryostat.core.version>
 
   <org.apache.commons.io.version>2.13.0</org.apache.commons.io.version>
   <org.apache.httpcomponents.httpclient.version>4.5.14</org.apache.httpcomponents.httpclient.version>
