@@ -18,9 +18,11 @@ package io.cryostat.agent;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Queue;
 import java.util.stream.Collectors;
 
@@ -34,7 +36,7 @@ class AgentArgs {
     private final String smartTriggers;
 
     public AgentArgs(Map<String, String> properties, String smartTriggers) {
-        this.properties = properties;
+        this.properties = Optional.ofNullable(properties).orElse(Collections.emptyMap());
         this.smartTriggers = StringUtils.defaultValue(smartTriggers, "");
     }
 
