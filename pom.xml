@@ -3,12 +3,40 @@
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
 
 <modelVersion>4.0.0</modelVersion>
+
+<name>Cryostat Agent</name>
+<description>JVM Agent for Cryostat</description>
+<url>https://github.com/cryostatio/cryostat-agent</url>
+<inceptionYear>2022</inceptionYear>
+<packaging>jar</packaging>
+
 <groupId>io.cryostat</groupId>
 <artifactId>cryostat-agent</artifactId>
+
 <version>0.4.0-SNAPSHOT</version>
-<packaging>jar</packaging>
-<name>cryostat-agent</name>
-<url>http://maven.apache.org</url>
+
+<licenses>
+  <license>
+    <name>The Apache License, Version 2.0</name>
+    <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
+    <distribution>repo</distribution>
+  </license>
+</licenses>
+
+<developers>
+  <developer>
+    <name>Andrew Azores</name>
+    <email>aazores@redhat.com</email>
+    <organization>Red Hat</organization>
+    <organizationUrl>https://www.redhat.com</organizationUrl>
+  </developer>
+  <developer>
+    <name>Elliott Baron</name>
+    <email>ebaron@redhat.com</email>
+    <organization>Red Hat</organization>
+    <organizationUrl>https://www.redhat.com</organizationUrl>
+  </developer>
+</developers>
 
 <distributionManagement>
   <repository>
@@ -17,6 +45,12 @@
     <url>https://maven.pkg.github.com/cryostatio/cryostat-agent</url>
   </repository>
 </distributionManagement>
+
+<scm>
+  <connection>scm:git://github.com/cryostatio/cryostat-agent.git</connection>
+  <developerConnection>scm:git:ssh://github.com:cryostatio/cryostat-agent.git</developerConnection>
+  <url>https://github.com/cryostatio/cryostat-agent/tree/main</url>
+</scm>
 
 <properties>
   <mainClass>io.cryostat.agent.Agent</mainClass>
@@ -66,6 +100,10 @@
   <com.diffplug.spotless.maven.plugin.version>2.43.0</com.diffplug.spotless.maven.plugin.version>
   <com.google.googlejavaformat.version>1.17.0</com.google.googlejavaformat.version>
   <org.jsoup.version>1.15.3</org.jsoup.version>
+
+  <maven-source-plugin.version>3.3.0</maven-source-plugin.version>
+  <maven-javadoc-plugin.version>3.6.3</maven-javadoc-plugin.version>
+  <jreleaser-maven-plugin.version>1.10.0</jreleaser-maven-plugin.version>
 
   <shade.prefix>io.cryostat.agent.shaded</shade.prefix>
 </properties>
@@ -492,6 +530,87 @@
                 <goal>check</goal>
               </goals>
               <phase>validate</phase>
+            </execution>
+          </executions>
+        </plugin>
+      </plugins>
+    </build>
+  </profile>
+
+  <profile>
+    <id>release</id>
+    <build>
+      <plugins>
+        <plugin>
+          <groupId>org.jreleaser</groupId>
+          <artifactId>jreleaser-maven-plugin</artifactId>
+          <version>${jreleaser-maven-plugin.version}</version>
+          <inherited>false</inherited>
+          <configuration>
+            <jreleaser>
+              <signing>
+                <active>ALWAYS</active>
+                <armored>true</armored>
+              </signing>
+              <deploy>
+                <maven>
+                  <nexus2>
+                    <maven-central>
+                      <active>ALWAYS</active>
+                      <url>https://s01.oss.sonatype.org/service/local</url>
+                      <snapshotUrl>https://s01.oss.sonatype.org/content/repositories/snapshots/</snapshotUrl>
+                      <closeRepository>true</closeRepository>
+                      <releaseRepository>true</releaseRepository>
+                      <stagingRepositories>target/staging-deploy</stagingRepositories>
+                    </maven-central>
+                  </nexus2>
+                </maven>
+              </deploy>
+            </jreleaser>
+          </configuration>
+        </plugin>
+      </plugins>
+    </build>
+  </profile>
+
+  <profile>
+    <id>publication</id>
+    <properties>
+      <altDeploymentRepository>local::file:./target/staging-deploy</altDeploymentRepository>
+    </properties>
+    <build>
+      <defaultGoal>deploy</defaultGoal>
+      <plugins>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-javadoc-plugin</artifactId>
+          <version>${maven-javadoc-plugin.version}</version>
+          <executions>
+            <execution>
+              <id>attach-javadocs</id>
+              <goals>
+                <goal>jar</goal>
+              </goals>
+              <configuration>
+                <attach>true</attach>
+                <failOnError>false</failOnError>
+              </configuration>
+            </execution>
+          </executions>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-source-plugin</artifactId>
+          <version>${maven-source-plugin.version}</version>
+          <executions>
+            <execution>
+              <id>attach-sources</id>
+              <goals>
+                <goal>jar-no-fork</goal>
+              </goals>
+              <configuration>
+                <attach>true</attach>
+              </configuration>
             </execution>
           </executions>
         </plugin>
