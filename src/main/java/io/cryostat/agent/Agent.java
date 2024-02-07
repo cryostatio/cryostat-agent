@@ -49,6 +49,7 @@ import com.sun.tools.attach.AttachNotSupportedException;
 import com.sun.tools.attach.VirtualMachine;
 import com.sun.tools.attach.VirtualMachineDescriptor;
 import dagger.Component;
+import org.eclipse.microprofile.config.Config;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import picocli.CommandLine;
@@ -73,8 +74,6 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
     private static final AtomicBoolean needsCleanup = new AtomicBoolean(true);
     private static final String ALL_PIDS = "*";
     static final String AUTO_ATTACH_PID = "0";
-
-    private static InsightsAgentHelper insights;
 
     @Parameters(
             index = "0",
@@ -151,8 +150,7 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
     // JVM application
     public static void agentmain(String args, Instrumentation instrumentation) {
         log.trace("agentmain");
-        insights = new InsightsAgentHelper(instrumentation);
-        AgentArgs aa = AgentArgs.from(args);
+        AgentArgs aa = AgentArgs.from(instrumentation, args);
         Agent agent = new Agent();
         Thread t =
                 new Thread(
@@ -212,6 +210,8 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
         AgentExitHandler agentExitHandler = null;
         try {
             final Client client = DaggerAgent_Client.builder().build();
+            InsightsAgentHelper insights =
+                    new InsightsAgentHelper(client.config(), args.getInstrumentation());
 
             URI baseUri = client.baseUri();
             URIRange uriRange = client.uriRange();
@@ -318,6 +318,8 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
     @Singleton
     @Component(modules = {MainModule.class})
     interface Client {
+        Config config();
+
         @Named(ConfigModule.CRYOSTAT_AGENT_BASEURI)
         URI baseUri();
 

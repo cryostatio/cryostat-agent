@@ -39,7 +39,6 @@ import com.redhat.insights.agent.shaded.reports.InsightsReport;
 import com.redhat.insights.agent.shaded.tls.PEMSupport;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.eclipse.microprofile.config.Config;
-import org.eclipse.microprofile.config.ConfigProvider;
 
 public class InsightsAgentHelper {
 
@@ -54,9 +53,9 @@ public class InsightsAgentHelper {
 
     private final Config config;
 
-    public InsightsAgentHelper(Instrumentation instrumentation) {
+    public InsightsAgentHelper(Config config, Instrumentation instrumentation) {
+        this.config = config;
         this.instrumentation = instrumentation;
-        this.config = ConfigProvider.getConfig();
     }
 
     public boolean isInsightsEnabled(PluginInfo pluginInfo) {
