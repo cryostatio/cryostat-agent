@@ -108,7 +108,7 @@ public abstract class MainModule {
                 return SSLContext.getDefault();
             }
 
-            SSLContext sslCtx = SSLContext.getInstance("TLS");
+            SSLContext sslCtx = SSLContext.getInstance("TLSv1.2");
             sslCtx.init(
                     null,
                     new TrustManager[] {
