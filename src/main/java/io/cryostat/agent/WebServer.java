@@ -120,7 +120,7 @@ class WebServer {
         try {
             // initialize new HTTPS server
             this.https = HttpsServer.create(new InetSocketAddress(host, port), 0);
-            SSLContext sslContext = SSLContext.getInstance("TLS");
+            SSLContext sslContext = SSLContext.getInstance("TLSv1.2");
 
             // initialize keystore
             InputStream pass = this.getClass().getResourceAsStream("/certs/keystore.pass");
