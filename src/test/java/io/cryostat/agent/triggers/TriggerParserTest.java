@@ -51,14 +51,14 @@ class TriggerParserTest {
     @NullSource
     void testEmptyCases(List<String> args) {
         MatcherAssert.assertThat(
-                parser.parse(args == null ? null : args.toArray(new String[0])),
+                parser.parse(args == null ? null : String.join(",", args.toArray(new String[0]))),
                 Matchers.equalTo(List.of()));
     }
 
     @Test
     void testSingleSimpleTrigger() {
         Mockito.when(helper.isValidTemplate(Mockito.anyString())).thenReturn(true);
-        String[] in = new String[] {"[ProcessCpuLoad>0.2]~profile"};
+        String in = "[ProcessCpuLoad>0.2]~profile";
         List<SmartTrigger> out = parser.parse(in);
 
         MatcherAssert.assertThat(out, Matchers.hasSize(1));
@@ -78,8 +78,7 @@ class TriggerParserTest {
     @Test
     void testSingleComplexTrigger() {
         Mockito.when(helper.isValidTemplate(Mockito.anyString())).thenReturn(true);
-        String[] in =
-                new String[] {"[ProcessCpuLoad>0.2;TargetDuration>duration(\"30s\")]~profile"};
+        String in = "[ProcessCpuLoad>0.2;TargetDuration>duration(\"30s\")]~profile";
         List<SmartTrigger> out = parser.parse(in);
 
         MatcherAssert.assertThat(out, Matchers.hasSize(1));
@@ -103,7 +102,7 @@ class TriggerParserTest {
     @Test
     void testSingleComplexTriggerSingleQuoted() {
         Mockito.when(helper.isValidTemplate(Mockito.anyString())).thenReturn(true);
-        String[] in = new String[] {"[ProcessCpuLoad>0.2;TargetDuration>duration('30s')]~profile"};
+        String in = "[ProcessCpuLoad>0.2;TargetDuration>duration('30s')]~profile";
         List<SmartTrigger> out = parser.parse(in);
 
         MatcherAssert.assertThat(out, Matchers.hasSize(1));
@@ -127,10 +126,7 @@ class TriggerParserTest {
     @Test
     void testSingleComplexTriggerWithWhitespace() {
         Mockito.when(helper.isValidTemplate(Mockito.anyString())).thenReturn(true);
-        String[] in =
-                new String[] {
-                    "[ProcessCpuLoad > 0.2 ; TargetDuration > duration(\"30s\")]~profile"
-                };
+        String in = "[ProcessCpuLoad > 0.2 ; TargetDuration > duration(\"30s\")]~profile";
         List<SmartTrigger> out = parser.parse(in);
 
         MatcherAssert.assertThat(out, Matchers.hasSize(1));
@@ -154,12 +150,10 @@ class TriggerParserTest {
     @Test
     void testMultipleComplexTriggerWithWhitespace() {
         Mockito.when(helper.isValidTemplate(Mockito.anyString())).thenReturn(true);
-        String[] in =
-                new String[] {
-                    "[ProcessCpuLoad>0.2 ; TargetDuration>duration(\"30s\")]~profile,"
-                            + " [(HeapMemoryUsagePercent > 50 && NonHeapMemoryUsage > 1) ||"
-                            + " SystemCpuLoad > 4 ; TargetDuration > duration(\"2m\")]~default.jfc"
-                };
+        String in =
+                "[ProcessCpuLoad>0.2 ; TargetDuration>duration(\"30s\")]~profile,"
+                        + " [(HeapMemoryUsagePercent > 50 && NonHeapMemoryUsage > 1) ||"
+                        + " SystemCpuLoad > 4 ; TargetDuration > duration(\"2m\")]~default.jfc";
         List<SmartTrigger> out = parser.parse(in);
 
         MatcherAssert.assertThat(out, Matchers.hasSize(2));
@@ -203,12 +197,10 @@ class TriggerParserTest {
         Mockito.when(helper.isValidTemplate(Mockito.anyString()))
                 .thenReturn(true)
                 .thenReturn(false);
-        String[] in =
-                new String[] {
-                    "[ProcessCpuLoad>0.2 ; TargetDuration>duration(\"30s\")]~profile,"
-                            + " [(HeapMemoryUsagePercent > 50 && NonHeapMemoryUsage > 1) ||"
-                            + " SystemCpuLoad > 4 ; TargetDuration > duration(\"2m\")]~default.jfc"
-                };
+        String in =
+                "[ProcessCpuLoad>0.2 ; TargetDuration>duration(\"30s\")]~profile,"
+                        + " [(HeapMemoryUsagePercent > 50 && NonHeapMemoryUsage > 1) ||"
+                        + " SystemCpuLoad > 4 ; TargetDuration > duration(\"2m\")]~default.jfc";
         List<SmartTrigger> out = parser.parse(in);
 
         MatcherAssert.assertThat(out, Matchers.hasSize(1));

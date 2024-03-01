@@ -39,19 +39,13 @@ public class TriggerParser {
         this.flightRecorderHelper = flightRecorderHelper;
     }
 
-    public List<SmartTrigger> parse(String[] args) {
+    public List<SmartTrigger> parse(String str) {
         List<SmartTrigger> triggers = new ArrayList<>();
-        if (args == null || args.length < 1) {
-            log.trace("Agent args were empty, no Triggers were defined");
+        if (StringUtils.isBlank(str)) {
             return triggers;
         }
-        if (StringUtils.isBlank(args[0])) {
-            log.warn("Agent arg[0] was blank, no Triggers were defined");
-            return triggers;
-        }
-        String triggerDefinitions = args[0];
 
-        String[] expressions = triggerDefinitions.split(",");
+        String[] expressions = str.split(",");
         for (String s : expressions) {
             s = s.replaceAll("\\s", "");
             Matcher m = EXPRESSION_PATTERN.matcher(s);
