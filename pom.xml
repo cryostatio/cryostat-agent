@@ -103,7 +103,7 @@
 
   <maven-source-plugin.version>3.3.0</maven-source-plugin.version>
   <maven-javadoc-plugin.version>3.6.3</maven-javadoc-plugin.version>
-  <jreleaser-maven-plugin.version>1.10.0</jreleaser-maven-plugin.version>
+  <jreleaser-maven-plugin.version>1.11.0</jreleaser-maven-plugin.version>
 
   <shade.prefix>io.cryostat.agent.shaded</shade.prefix>
 </properties>
