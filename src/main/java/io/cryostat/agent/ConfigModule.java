@@ -268,6 +268,13 @@ public abstract class ConfigModule {
 
     @Provides
     @Singleton
+    @Named(CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_PASS_CHARSET)
+    public static String provideCryostatAgentWebserverTlsKeyStorePassCharset(Config config) {
+        return config.getValue(CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_PASS_CHARSET, String.class);
+    }
+
+    @Provides
+    @Singleton
     @Named(CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_FILE)
     public static Optional<String> provideCryostatAgentWebserverTlsKeyStoreFile(Config config) {
         return config.getOptionalValue(CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_FILE, String.class);
