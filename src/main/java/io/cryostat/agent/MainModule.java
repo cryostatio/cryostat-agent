@@ -128,6 +128,7 @@ public abstract class MainModule {
                 return SSLContext.getDefault();
             }
 
+            // TODO make this configurable with a default value
             SSLContext sslCtx = SSLContext.getInstance("TLSv1.2");
             sslCtx.init(
                     null,
