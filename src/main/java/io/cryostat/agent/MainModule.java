@@ -15,12 +15,21 @@
  */
 package io.cryostat.agent;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.InetSocketAddress;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.security.KeyManagementException;
+import java.security.KeyStore;
+import java.security.KeyStoreException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.security.UnrecoverableKeyException;
+import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
+import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.util.HashSet;
 import java.util.Objects;
@@ -32,8 +41,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.inject.Named;
 import javax.inject.Singleton;
+import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLEngine;
 import javax.net.ssl.TrustManager;
+import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
 
 import io.cryostat.agent.harvest.HarvestModule;
@@ -46,9 +58,14 @@ import io.cryostat.core.sys.FileSystem;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sun.net.httpserver.HttpServer;
+import com.sun.net.httpserver.HttpsConfigurator;
+import com.sun.net.httpserver.HttpsParameters;
+import com.sun.net.httpserver.HttpsServer;
 import dagger.Lazy;
 import dagger.Module;
 import dagger.Provides;
+import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.http.Header;
 import org.apache.http.client.HttpClient;
@@ -96,9 +113,7 @@ public abstract class MainModule {
     public static WebServer provideWebServer(
             Lazy<Set<RemoteContext>> remoteContexts,
             Lazy<CryostatClient> cryostat,
-            ScheduledExecutorService executor,
-            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_HOST) String host,
-            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_PORT) int port,
+            HttpServer http,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_CREDENTIALS_PASS_HASH_FUNCTION)
                     MessageDigest digest,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_CREDENTIALS_USER) String user,
@@ -109,9 +124,7 @@ public abstract class MainModule {
         return new WebServer(
                 remoteContexts,
                 cryostat,
-                executor,
-                host,
-                port,
+                http,
                 digest,
                 user,
                 passLength,
@@ -187,6 +200,87 @@ public abstract class MainModule {
         }
 
         return builder.build();
+    }
+
+    @Provides
+    @Singleton
+    public static HttpServer provideHttpServer(
+            ScheduledExecutorService executor,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_HOST) String host,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_PORT) int port) {
+        try {
+            HttpServer http;
+
+            boolean ssl = true;
+            if (!ssl) {
+                http = HttpServer.create(new InetSocketAddress(host, port), 0);
+                http.setExecutor(executor);
+            } else {
+                // initialize new HTTPS server
+                HttpsServer https = HttpsServer.create(new InetSocketAddress(host, port), 0);
+                SSLContext sslContext = SSLContext.getInstance("TLSv1.2");
+
+                // initialize keystore
+                InputStream pass = MainModule.class.getResourceAsStream("/certs/keystore.pass");
+                String password = IOUtils.toString(pass, StandardCharsets.US_ASCII);
+                password = password.substring(0, password.length() - 1);
+                pass.close();
+                KeyStore ks = KeyStore.getInstance("PKCS12");
+                InputStream keystore =
+                        MainModule.class.getResourceAsStream("/certs/cryostat-keystore.p12");
+                ks.load(keystore, password.toCharArray());
+                if (keystore != null) {
+                    keystore.close();
+                }
+
+                // set up certificate factory
+                InputStream certFile = MainModule.class.getResourceAsStream("/certs/server.cer");
+                CertificateFactory cf = CertificateFactory.getInstance("X.509");
+                Certificate cert = cf.generateCertificate(certFile);
+                ks.setCertificateEntry("serverCert", cert);
+                certFile.close();
+
+                // set up key manager factory
+                KeyManagerFactory kmf =
+                        KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+                kmf.init(ks, password.toCharArray());
+
+                // set up trust manager factory
+                TrustManagerFactory tmf =
+                        TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+                tmf.init(ks);
+
+                // set up HTTPS context
+                sslContext.init(kmf.getKeyManagers(), tmf.getTrustManagers(), null);
+                https.setHttpsConfigurator(
+                        new HttpsConfigurator(sslContext) {
+                            public void configure(HttpsParameters params) {
+                                try {
+                                    SSLContext context = getSSLContext();
+                                    SSLEngine engine = context.createSSLEngine();
+                                    params.setNeedClientAuth(false);
+                                    params.setCipherSuites(engine.getEnabledCipherSuites());
+                                    params.setProtocols((engine.getEnabledProtocols()));
+                                    params.setSSLParameters(context.getDefaultSSLParameters());
+                                } catch (Exception e) {
+                                    throw new RuntimeException(e);
+                                }
+                            }
+                        });
+
+                http = https;
+            }
+            http.setExecutor(executor);
+
+            return http;
+        } catch (KeyStoreException
+                | CertificateException
+                | UnrecoverableKeyException
+                | KeyManagementException
+                | IOException
+                | NoSuchAlgorithmException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Provides
