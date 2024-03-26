@@ -34,7 +34,6 @@ import java.security.cert.X509Certificate;
 import java.util.Optional;
 import java.util.HashSet;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -89,6 +88,8 @@ public abstract class MainModule {
     // one for outbound HTTP requests, one for incoming HTTP requests, and one as a general worker
     private static final int NUM_WORKER_THREADS = 3;
     private static final String JVM_ID = "JVM_ID";
+    private static final String HTTP_CLIENT_SSL_CTX = "HTTP_CLIENT_SSL_CTX";
+    private static final String HTTP_SERVER_SSL_CTX = "HTTP_SERVER_SSL_CTX";
 
     @Provides
     @Singleton
@@ -136,7 +137,8 @@ public abstract class MainModule {
 
     @Provides
     @Singleton
-    public static SSLContext provideSslContext(
+    @Named(HTTP_CLIENT_SSL_CTX)
+    public static SSLContext provideClientSslContext(
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_SSL_TRUST_ALL) boolean trustAll) {
         try {
             if (!trustAll) {
@@ -171,8 +173,84 @@ public abstract class MainModule {
 
     @Provides
     @Singleton
+    @Named(HTTP_SERVER_SSL_CTX)
+    public static Optional<SSLContext> provideServerSslContext(
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_VERSION) String tlsVersion,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_PASS)
+                    Optional<String> keyStorePassFile,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_FILE)
+                    Optional<String> keyStoreFilePath,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_TYPE) String keyStoreType,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_CERT_ALIAS) String certAlias,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_CERT_FILE)
+                    Optional<String> certFilePath,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_CERT_TYPE) String certType) {
+        try {
+            // TODO check each of these individually. If none are provided use HTTP. If all are
+            // provided use HTTPS. Otherwise, print an error message indicating that all or none
+            // must be set, and throw an exception.
+            boolean ssl =
+                    keyStorePassFile.isPresent()
+                            && keyStoreFilePath.isPresent()
+                            && certFilePath.isPresent();
+            if (!ssl) {
+                return Optional.empty();
+            }
+
+            SSLContext sslContext = SSLContext.getInstance(tlsVersion);
+
+            // initialize keystore
+            try (InputStream pass = MainModule.class.getResourceAsStream(keyStorePassFile.get());
+                    InputStream keystore =
+                            MainModule.class.getResourceAsStream(keyStoreFilePath.get());
+                    InputStream certFile =
+                            MainModule.class.getResourceAsStream(certFilePath.get())) {
+                String password = IOUtils.toString(pass, StandardCharsets.US_ASCII);
+                password = password.substring(0, password.length() - 1);
+                KeyStore ks = KeyStore.getInstance(keyStoreType);
+                ks.load(keystore, password.toCharArray());
+
+                // set up certificate factory
+                CertificateFactory cf = CertificateFactory.getInstance(certType);
+                Certificate cert = cf.generateCertificate(certFile);
+                if (ks.containsAlias(certAlias)) {
+                    throw new IllegalStateException(
+                            String.format(
+                                    "%s keystore already contains a certificate with alias"
+                                            + " \"%s\"",
+                                    keyStoreType, certAlias));
+                }
+                ks.setCertificateEntry(certAlias, cert);
+
+                // set up key manager factory
+                KeyManagerFactory kmf =
+                        KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+                kmf.init(ks, password.toCharArray());
+
+                // set up trust manager factory
+                TrustManagerFactory tmf =
+                        TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+                tmf.init(ks);
+
+                // set up HTTPS context
+                sslContext.init(kmf.getKeyManagers(), tmf.getTrustManagers(), null);
+
+                return Optional.of(sslContext);
+            }
+        } catch (KeyStoreException
+                | CertificateException
+                | UnrecoverableKeyException
+                | KeyManagementException
+                | IOException
+                | NoSuchAlgorithmException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    @Provides
+    @Singleton
     public static HttpClient provideHttpClient(
-            SSLContext sslContext,
+            @Named(HTTP_CLIENT_SSL_CTX) SSLContext sslContext,
             AuthorizationType authorizationType,
             @Named(ConfigModule.CRYOSTAT_AGENT_AUTHORIZATION) Optional<String> authorization,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_SSL_VERIFY_HOSTNAME)
@@ -209,99 +287,36 @@ public abstract class MainModule {
             ScheduledExecutorService executor,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_HOST) String host,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_PORT) int port,
-            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_VERSION) String tlsVersion,
-            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_PASS)
-                    Optional<String> keyStorePassFile,
-            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_FILE)
-                    Optional<String> keyStoreFilePath,
-            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_TYPE) String keyStoreType,
-            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_CERT_ALIAS) String certAlias,
-            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_CERT_FILE)
-                    Optional<String> certFilePath,
-            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_CERT_TYPE) String certType) {
+            @Named(HTTP_SERVER_SSL_CTX) Optional<SSLContext> sslContext) {
         try {
             HttpServer http;
-
-            // TODO check each of these individually. If none are provided use HTTP. If all are
-            // provided use HTTPS. Otherwise, print an error message indicating that all or none
-            // must be set, and throw an exception.
-            boolean ssl =
-                    keyStorePassFile.isPresent()
-                            && keyStoreFilePath.isPresent()
-                            && certFilePath.isPresent();
-            if (!ssl) {
+            if (sslContext.isEmpty()) {
                 http = HttpServer.create(new InetSocketAddress(host, port), 0);
                 http.setExecutor(executor);
             } else {
-                // initialize new HTTPS server
                 HttpsServer https = HttpsServer.create(new InetSocketAddress(host, port), 0);
-                SSLContext sslContext = SSLContext.getInstance(tlsVersion);
-
-                // initialize keystore
-                try (InputStream pass =
-                                MainModule.class.getResourceAsStream(keyStorePassFile.get());
-                        InputStream keystore =
-                                MainModule.class.getResourceAsStream(keyStoreFilePath.get());
-                        InputStream certFile =
-                                MainModule.class.getResourceAsStream(certFilePath.get())) {
-                    String password = IOUtils.toString(pass, StandardCharsets.US_ASCII);
-                    password = password.substring(0, password.length() - 1);
-                    KeyStore ks = KeyStore.getInstance(keyStoreType);
-                    ks.load(keystore, password.toCharArray());
-
-                    // set up certificate factory
-                    CertificateFactory cf = CertificateFactory.getInstance(certType);
-                    Certificate cert = cf.generateCertificate(certFile);
-                    if (ks.containsAlias(certAlias)) {
-                        throw new IllegalStateException(
-                                String.format(
-                                        "%s keystore already contains a certificate with alias"
-                                                + " \"%s\"",
-                                        keyStoreType, certAlias));
-                    }
-                    ks.setCertificateEntry(certAlias, cert);
-
-                    // set up key manager factory
-                    KeyManagerFactory kmf =
-                            KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
-                    kmf.init(ks, password.toCharArray());
-
-                    // set up trust manager factory
-                    TrustManagerFactory tmf =
-                            TrustManagerFactory.getInstance(
-                                    TrustManagerFactory.getDefaultAlgorithm());
-                    tmf.init(ks);
-
-                    // set up HTTPS context
-                    sslContext.init(kmf.getKeyManagers(), tmf.getTrustManagers(), null);
-                    https.setHttpsConfigurator(
-                            new HttpsConfigurator(sslContext) {
-                                public void configure(HttpsParameters params) {
-                                    try {
-                                        SSLContext context = getSSLContext();
-                                        SSLEngine engine = context.createSSLEngine();
-                                        params.setNeedClientAuth(false);
-                                        params.setCipherSuites(engine.getEnabledCipherSuites());
-                                        params.setProtocols((engine.getEnabledProtocols()));
-                                        params.setSSLParameters(context.getDefaultSSLParameters());
-                                    } catch (Exception e) {
-                                        throw new RuntimeException(e);
-                                    }
+                https.setHttpsConfigurator(
+                        new HttpsConfigurator(sslContext.get()) {
+                            public void configure(HttpsParameters params) {
+                                try {
+                                    SSLContext context = getSSLContext();
+                                    SSLEngine engine = context.createSSLEngine();
+                                    params.setNeedClientAuth(false);
+                                    params.setCipherSuites(engine.getEnabledCipherSuites());
+                                    params.setProtocols((engine.getEnabledProtocols()));
+                                    params.setSSLParameters(context.getDefaultSSLParameters());
+                                } catch (Exception e) {
+                                    throw new RuntimeException(e);
                                 }
-                            });
-                }
-
+                            }
+                        });
                 http = https;
             }
+
             http.setExecutor(executor);
 
             return http;
-        } catch (KeyStoreException
-                | CertificateException
-                | UnrecoverableKeyException
-                | KeyManagementException
-                | IOException
-                | NoSuchAlgorithmException e) {
+        } catch (IOException e) {
             throw new RuntimeException(e);
         }
     }
