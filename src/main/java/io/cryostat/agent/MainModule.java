@@ -369,10 +369,9 @@ public abstract class MainModule {
                             t.setUncaughtExceptionHandler(
                                     (thread, err) ->
                                             log.error(
-                                                    String.format(
-                                                            "[%s] Uncaught exception: %s",
-                                                            thread.getName(),
-                                                            ExceptionUtils.getStackTrace(err))));
+                                                    "[{}] Uncaught exception: {}",
+                                                    thread.getName(),
+                                                    ExceptionUtils.getStackTrace(err)));
                             return t;
                         }),
                 cryostat,
