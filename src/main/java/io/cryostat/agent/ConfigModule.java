@@ -71,6 +71,20 @@ public abstract class ConfigModule {
 
     public static final String CRYOSTAT_AGENT_WEBSERVER_HOST = "cryostat.agent.webserver.host";
     public static final String CRYOSTAT_AGENT_WEBSERVER_PORT = "cryostat.agent.webserver.port";
+    public static final String CRYOSTAT_AGENT_WEBSERVER_TLS_VERSION =
+            "cryostat.agent.webserver.tls.version";
+    public static final String CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_PASS =
+            "cryostat.agent.webserver.tls.keystore.pass";
+    public static final String CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_FILE =
+            "cryostat.agent.webserver.tls.keystore.file";
+    public static final String CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_TYPE =
+            "cryostat.agent.webserver.tls.keystore.type";
+    public static final String CRYOSTAT_AGENT_WEBSERVER_TLS_CERT_ALIAS =
+            "cryostat.agent.webserver.tls.cert.alias";
+    public static final String CRYOSTAT_AGENT_WEBSERVER_TLS_CERT_FILE =
+            "cryostat.agent.webserver.tls.cert.file";
+    public static final String CRYOSTAT_AGENT_WEBSERVER_TLS_CERT_TYPE =
+            "cryostat.agent.webserver.tls.cert.type";
     public static final String CRYOSTAT_AGENT_WEBSERVER_CREDENTIALS_USER =
             "cryostat.agent.webserver.credentials.user";
     public static final String CRYOSTAT_AGENT_WEBSERVER_CREDENTIALS_PASS_HASH_FUNCTION =
@@ -234,6 +248,55 @@ public abstract class ConfigModule {
     @Named(CRYOSTAT_AGENT_WEBSERVER_PORT)
     public static int provideCryostatAgentWebserverPort(Config config) {
         return config.getValue(CRYOSTAT_AGENT_WEBSERVER_PORT, int.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBSERVER_TLS_VERSION)
+    public static String provideCryostatAgentWebserverTlsVersion(Config config) {
+        return config.getValue(CRYOSTAT_AGENT_WEBSERVER_TLS_VERSION, String.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_PASS)
+    public static Optional<String> provideCryostatAgentWebserverTlsKeyStorePass(Config config) {
+        return config.getOptionalValue(CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_PASS, String.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_FILE)
+    public static Optional<String> provideCryostatAgentWebserverTlsKeyStoreFile(Config config) {
+        return config.getOptionalValue(CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_FILE, String.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_TYPE)
+    public static String provideCryostatAgentWebserverTlsKeyStoreType(Config config) {
+        return config.getValue(CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_TYPE, String.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBSERVER_TLS_CERT_ALIAS)
+    public static String provideCryostatAgentWebserverTlsCertAlias(Config config) {
+        return config.getValue(CRYOSTAT_AGENT_WEBSERVER_TLS_CERT_ALIAS, String.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBSERVER_TLS_CERT_FILE)
+    public static Optional<String> provideCryostatAgentWebserverTlsCertFile(Config config) {
+        return config.getOptionalValue(CRYOSTAT_AGENT_WEBSERVER_TLS_CERT_FILE, String.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBSERVER_TLS_CERT_TYPE)
+    public static String provideCryostatAgentWebserverTlsCertType(Config config) {
+        return config.getValue(CRYOSTAT_AGENT_WEBSERVER_TLS_CERT_TYPE, String.class);
     }
 
     @Provides

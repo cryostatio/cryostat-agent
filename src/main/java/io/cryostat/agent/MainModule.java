@@ -31,6 +31,7 @@ import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
+import java.util.Optional;
 import java.util.HashSet;
 import java.util.Objects;
 import java.util.Optional;
@@ -207,66 +208,88 @@ public abstract class MainModule {
     public static HttpServer provideHttpServer(
             ScheduledExecutorService executor,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_HOST) String host,
-            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_PORT) int port) {
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_PORT) int port,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_VERSION) String tlsVersion,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_PASS)
+                    Optional<String> keyStorePassFile,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_FILE)
+                    Optional<String> keyStoreFilePath,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_TYPE) String keyStoreType,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_CERT_ALIAS) String certAlias,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_CERT_FILE)
+                    Optional<String> certFilePath,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_CERT_TYPE) String certType) {
         try {
             HttpServer http;
 
-            boolean ssl = true;
+            // TODO check each of these individually. If none are provided use HTTP. If all are
+            // provided use HTTPS. Otherwise, print an error message indicating that all or none
+            // must be set, and throw an exception.
+            boolean ssl =
+                    keyStorePassFile.isPresent()
+                            && keyStoreFilePath.isPresent()
+                            && certFilePath.isPresent();
             if (!ssl) {
                 http = HttpServer.create(new InetSocketAddress(host, port), 0);
                 http.setExecutor(executor);
             } else {
                 // initialize new HTTPS server
                 HttpsServer https = HttpsServer.create(new InetSocketAddress(host, port), 0);
-                SSLContext sslContext = SSLContext.getInstance("TLSv1.2");
+                SSLContext sslContext = SSLContext.getInstance(tlsVersion);
 
                 // initialize keystore
-                InputStream pass = MainModule.class.getResourceAsStream("/certs/keystore.pass");
-                String password = IOUtils.toString(pass, StandardCharsets.US_ASCII);
-                password = password.substring(0, password.length() - 1);
-                pass.close();
-                KeyStore ks = KeyStore.getInstance("PKCS12");
-                InputStream keystore =
-                        MainModule.class.getResourceAsStream("/certs/cryostat-keystore.p12");
-                ks.load(keystore, password.toCharArray());
-                if (keystore != null) {
-                    keystore.close();
-                }
+                try (InputStream pass =
+                                MainModule.class.getResourceAsStream(keyStorePassFile.get());
+                        InputStream keystore =
+                                MainModule.class.getResourceAsStream(keyStoreFilePath.get());
+                        InputStream certFile =
+                                MainModule.class.getResourceAsStream(certFilePath.get())) {
+                    String password = IOUtils.toString(pass, StandardCharsets.US_ASCII);
+                    password = password.substring(0, password.length() - 1);
+                    KeyStore ks = KeyStore.getInstance(keyStoreType);
+                    ks.load(keystore, password.toCharArray());
 
-                // set up certificate factory
-                InputStream certFile = MainModule.class.getResourceAsStream("/certs/server.cer");
-                CertificateFactory cf = CertificateFactory.getInstance("X.509");
-                Certificate cert = cf.generateCertificate(certFile);
-                ks.setCertificateEntry("serverCert", cert);
-                certFile.close();
+                    // set up certificate factory
+                    CertificateFactory cf = CertificateFactory.getInstance(certType);
+                    Certificate cert = cf.generateCertificate(certFile);
+                    if (ks.containsAlias(certAlias)) {
+                        throw new IllegalStateException(
+                                String.format(
+                                        "%s keystore already contains a certificate with alias"
+                                                + " \"%s\"",
+                                        keyStoreType, certAlias));
+                    }
+                    ks.setCertificateEntry(certAlias, cert);
 
-                // set up key manager factory
-                KeyManagerFactory kmf =
-                        KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
-                kmf.init(ks, password.toCharArray());
+                    // set up key manager factory
+                    KeyManagerFactory kmf =
+                            KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+                    kmf.init(ks, password.toCharArray());
 
-                // set up trust manager factory
-                TrustManagerFactory tmf =
-                        TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-                tmf.init(ks);
+                    // set up trust manager factory
+                    TrustManagerFactory tmf =
+                            TrustManagerFactory.getInstance(
+                                    TrustManagerFactory.getDefaultAlgorithm());
+                    tmf.init(ks);
 
-                // set up HTTPS context
-                sslContext.init(kmf.getKeyManagers(), tmf.getTrustManagers(), null);
-                https.setHttpsConfigurator(
-                        new HttpsConfigurator(sslContext) {
-                            public void configure(HttpsParameters params) {
-                                try {
-                                    SSLContext context = getSSLContext();
-                                    SSLEngine engine = context.createSSLEngine();
-                                    params.setNeedClientAuth(false);
-                                    params.setCipherSuites(engine.getEnabledCipherSuites());
-                                    params.setProtocols((engine.getEnabledProtocols()));
-                                    params.setSSLParameters(context.getDefaultSSLParameters());
-                                } catch (Exception e) {
-                                    throw new RuntimeException(e);
+                    // set up HTTPS context
+                    sslContext.init(kmf.getKeyManagers(), tmf.getTrustManagers(), null);
+                    https.setHttpsConfigurator(
+                            new HttpsConfigurator(sslContext) {
+                                public void configure(HttpsParameters params) {
+                                    try {
+                                        SSLContext context = getSSLContext();
+                                        SSLEngine engine = context.createSSLEngine();
+                                        params.setNeedClientAuth(false);
+                                        params.setCipherSuites(engine.getEnabledCipherSuites());
+                                        params.setProtocols((engine.getEnabledProtocols()));
+                                        params.setSSLParameters(context.getDefaultSSLParameters());
+                                    } catch (Exception e) {
+                                        throw new RuntimeException(e);
+                                    }
                                 }
-                            }
-                        });
+                            });
+                }
 
                 http = https;
             }
