@@ -197,47 +197,44 @@ public abstract class MainModule {
             return Optional.empty();
         }
 
-        try {
+        try (InputStream pass = MainModule.class.getResourceAsStream(keyStorePassFile.get());
+                InputStream keystore =
+                        MainModule.class.getResourceAsStream(keyStoreFilePath.get());
+                InputStream certFile = MainModule.class.getResourceAsStream(certFilePath.get())) {
             SSLContext sslContext = SSLContext.getInstance(tlsVersion);
 
             // initialize keystore
-            try (InputStream pass = MainModule.class.getResourceAsStream(keyStorePassFile.get());
-                    InputStream keystore =
-                            MainModule.class.getResourceAsStream(keyStoreFilePath.get());
-                    InputStream certFile =
-                            MainModule.class.getResourceAsStream(certFilePath.get())) {
-                String password = IOUtils.toString(pass, StandardCharsets.US_ASCII);
-                password = password.substring(0, password.length() - 1);
-                KeyStore ks = KeyStore.getInstance(keyStoreType);
-                ks.load(keystore, password.toCharArray());
+            String password = IOUtils.toString(pass, StandardCharsets.US_ASCII);
+            password = password.substring(0, password.length() - 1);
+            KeyStore ks = KeyStore.getInstance(keyStoreType);
+            ks.load(keystore, password.toCharArray());
 
-                // set up certificate factory
-                CertificateFactory cf = CertificateFactory.getInstance(certType);
-                Certificate cert = cf.generateCertificate(certFile);
-                if (ks.containsAlias(certAlias)) {
-                    throw new IllegalStateException(
-                            String.format(
-                                    "%s keystore at %s already contains a certificate with alias"
-                                            + " \"%s\"",
-                                    keyStoreType, keyStoreFilePath, certAlias));
-                }
-                ks.setCertificateEntry(certAlias, cert);
-
-                // set up key manager factory
-                KeyManagerFactory kmf =
-                        KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
-                kmf.init(ks, password.toCharArray());
-
-                // set up trust manager factory
-                TrustManagerFactory tmf =
-                        TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-                tmf.init(ks);
-
-                // set up HTTPS context
-                sslContext.init(kmf.getKeyManagers(), tmf.getTrustManagers(), null);
-
-                return Optional.of(sslContext);
+            // set up certificate factory
+            CertificateFactory cf = CertificateFactory.getInstance(certType);
+            Certificate cert = cf.generateCertificate(certFile);
+            if (ks.containsAlias(certAlias)) {
+                throw new IllegalStateException(
+                        String.format(
+                                "%s keystore at %s already contains a certificate with alias"
+                                        + " \"%s\"",
+                                keyStoreType, keyStoreFilePath, certAlias));
             }
+            ks.setCertificateEntry(certAlias, cert);
+
+            // set up key manager factory
+            KeyManagerFactory kmf =
+                    KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+            kmf.init(ks, password.toCharArray());
+
+            // set up trust manager factory
+            TrustManagerFactory tmf =
+                    TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+            tmf.init(ks);
+
+            // set up HTTPS context
+            sslContext.init(kmf.getKeyManagers(), tmf.getTrustManagers(), null);
+
+            return Optional.of(sslContext);
         } catch (KeyStoreException
                 | CertificateException
                 | UnrecoverableKeyException
