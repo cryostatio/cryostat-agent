@@ -19,7 +19,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.URI;
-import java.nio.charset.StandardCharsets;
+import java.nio.charset.Charset;
 import java.security.KeyManagementException;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
@@ -179,6 +179,8 @@ public abstract class MainModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_VERSION) String tlsVersion,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_PASS)
                     Optional<String> keyStorePassFile,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_PASS_CHARSET)
+                    String passFileCharset,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_FILE)
                     Optional<String> keyStoreFilePath,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_TYPE) String keyStoreType,
@@ -204,7 +206,7 @@ public abstract class MainModule {
             SSLContext sslContext = SSLContext.getInstance(tlsVersion);
 
             // initialize keystore
-            String password = IOUtils.toString(pass, StandardCharsets.US_ASCII);
+            String password = IOUtils.toString(pass, Charset.forName(passFileCharset));
             password = password.substring(0, password.length() - 1);
             KeyStore ks = KeyStore.getInstance(keyStoreType);
             ks.load(keystore, password.toCharArray());
