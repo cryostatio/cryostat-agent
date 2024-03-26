@@ -75,6 +75,8 @@ public abstract class ConfigModule {
             "cryostat.agent.webserver.tls.version";
     public static final String CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_PASS =
             "cryostat.agent.webserver.tls.keystore.pass";
+    public static final String CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_PASS_CHARSET =
+            "cryostat.agent.webserver.tls.keystore.pass-charset";
     public static final String CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_FILE =
             "cryostat.agent.webserver.tls.keystore.file";
     public static final String CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_TYPE =
