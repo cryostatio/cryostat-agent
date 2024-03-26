@@ -186,18 +186,18 @@ public abstract class MainModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_CERT_FILE)
                     Optional<String> certFilePath,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_CERT_TYPE) String certType) {
-        try {
-            // TODO check each of these individually. If none are provided use HTTP. If all are
-            // provided use HTTPS. Otherwise, print an error message indicating that all or none
-            // must be set, and throw an exception.
-            boolean ssl =
-                    keyStorePassFile.isPresent()
-                            && keyStoreFilePath.isPresent()
-                            && certFilePath.isPresent();
-            if (!ssl) {
-                return Optional.empty();
-            }
+        // TODO check each of these individually. If none are provided use HTTP. If all are
+        // provided use HTTPS. Otherwise, print an error message indicating that all or none
+        // must be set, and throw an exception.
+        boolean ssl =
+                keyStorePassFile.isPresent()
+                        && keyStoreFilePath.isPresent()
+                        && certFilePath.isPresent();
+        if (!ssl) {
+            return Optional.empty();
+        }
 
+        try {
             SSLContext sslContext = SSLContext.getInstance(tlsVersion);
 
             // initialize keystore
@@ -217,9 +217,9 @@ public abstract class MainModule {
                 if (ks.containsAlias(certAlias)) {
                     throw new IllegalStateException(
                             String.format(
-                                    "%s keystore already contains a certificate with alias"
+                                    "%s keystore at %s already contains a certificate with alias"
                                             + " \"%s\"",
-                                    keyStoreType, certAlias));
+                                    keyStoreType, keyStoreFilePath, certAlias));
                 }
                 ks.setCertificateEntry(certAlias, cert);
 
