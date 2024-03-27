@@ -88,7 +88,7 @@
   <io.smallrye.config.version>2.12.3</io.smallrye.config.version>
   <org.slf4j.version>2.0.7</org.slf4j.version>
   <org.projectnessie.cel.bom.version>0.4.4</org.projectnessie.cel.bom.version>
-  <com.google.protobuf-java.version>3.22.3</com.google.protobuf-java.version>
+  <com.google.protobuf-java.version>4.26.0</com.google.protobuf-java.version>
   <com.redhat.insights.agent.version>0.9.1</com.redhat.insights.agent.version>
 
   <com.github.spotbugs.version>4.8.3</com.github.spotbugs.version>
