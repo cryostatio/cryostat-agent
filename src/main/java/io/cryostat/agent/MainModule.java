@@ -139,14 +139,14 @@ public abstract class MainModule {
     @Singleton
     @Named(HTTP_CLIENT_SSL_CTX)
     public static SSLContext provideClientSslContext(
-            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_SSL_TRUST_ALL) boolean trustAll) {
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_VERSION) String clientTlsVersion,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUST_ALL) boolean trustAll) {
         try {
             if (!trustAll) {
                 return SSLContext.getDefault();
             }
 
-            // TODO make this configurable with a default value
-            SSLContext sslCtx = SSLContext.getInstance("TLSv1.2");
+            SSLContext sslCtx = SSLContext.getInstance(clientTlsVersion);
             sslCtx.init(
                     null,
                     new TrustManager[] {
@@ -176,7 +176,7 @@ public abstract class MainModule {
     @Singleton
     @Named(HTTP_SERVER_SSL_CTX)
     public static Optional<SSLContext> provideServerSslContext(
-            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_VERSION) String tlsVersion,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_VERSION) String serverTlsVersion,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_PASS)
                     Optional<String> keyStorePassFile,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_PASS_CHARSET)
@@ -188,14 +188,19 @@ public abstract class MainModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_CERT_FILE)
                     Optional<String> certFilePath,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_CERT_TYPE) String certType) {
-        // TODO check each of these individually. If none are provided use HTTP. If all are
-        // provided use HTTPS. Otherwise, print an error message indicating that all or none
-        // must be set, and throw an exception.
         boolean ssl =
                 keyStorePassFile.isPresent()
                         && keyStoreFilePath.isPresent()
                         && certFilePath.isPresent();
         if (!ssl) {
+            if (keyStorePassFile.isPresent()
+                    || keyStoreFilePath.isPresent()
+                    || certFilePath.isPresent()) {
+                throw new IllegalArgumentException(
+                        "The file paths for the keystore, keystore password, and certificate must"
+                            + " ALL be provided to set up HTTPS connections. Otherwise, make sure"
+                            + " they are all unset to use an HTTP server.");
+            }
             return Optional.empty();
         }
 
@@ -203,7 +208,7 @@ public abstract class MainModule {
                 InputStream keystore =
                         MainModule.class.getResourceAsStream(keyStoreFilePath.get());
                 InputStream certFile = MainModule.class.getResourceAsStream(certFilePath.get())) {
-            SSLContext sslContext = SSLContext.getInstance(tlsVersion);
+            SSLContext sslContext = SSLContext.getInstance(serverTlsVersion);
 
             // initialize keystore
             String password = IOUtils.toString(pass, Charset.forName(passFileCharset));
@@ -253,7 +258,7 @@ public abstract class MainModule {
             @Named(HTTP_CLIENT_SSL_CTX) SSLContext sslContext,
             AuthorizationType authorizationType,
             @Named(ConfigModule.CRYOSTAT_AGENT_AUTHORIZATION) Optional<String> authorization,
-            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_SSL_VERIFY_HOSTNAME)
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_VERIFY_HOSTNAME)
                     boolean verifyHostname,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_CONNECT_TIMEOUT_MS) int connectTimeout,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_TIMEOUT_MS) int responseTimeout) {

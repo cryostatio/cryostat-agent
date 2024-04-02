@@ -60,10 +60,12 @@ public abstract class ConfigModule {
     public static final String CRYOSTAT_AGENT_AUTHORIZATION_VALUE =
             "cryostat.agent.authorization.value";
 
-    public static final String CRYOSTAT_AGENT_WEBCLIENT_SSL_TRUST_ALL =
-            "cryostat.agent.webclient.ssl.trust-all";
-    public static final String CRYOSTAT_AGENT_WEBCLIENT_SSL_VERIFY_HOSTNAME =
-            "cryostat.agent.webclient.ssl.verify-hostname";
+    public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_VERSION =
+            "cryostat.agent.webclient.tls.version";
+    public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUST_ALL =
+            "cryostat.agent.webclient.tls.trust-all";
+    public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_VERIFY_HOSTNAME =
+            "cryostat.agent.webclient.tls.verify-hostname";
     public static final String CRYOSTAT_AGENT_WEBCLIENT_CONNECT_TIMEOUT_MS =
             "cryostat.agent.webclient.connect.timeout-ms";
     public static final String CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_TIMEOUT_MS =
@@ -212,16 +214,16 @@ public abstract class ConfigModule {
 
     @Provides
     @Singleton
-    @Named(CRYOSTAT_AGENT_WEBCLIENT_SSL_TRUST_ALL)
+    @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUST_ALL)
     public static boolean provideCryostatAgentWebclientTrustAll(Config config) {
-        return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_SSL_TRUST_ALL, boolean.class);
+        return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUST_ALL, boolean.class);
     }
 
     @Provides
     @Singleton
-    @Named(CRYOSTAT_AGENT_WEBCLIENT_SSL_VERIFY_HOSTNAME)
+    @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_VERIFY_HOSTNAME)
     public static boolean provideCryostatAgentWebclientVerifyHostname(Config config) {
-        return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_SSL_VERIFY_HOSTNAME, boolean.class);
+        return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_TLS_VERIFY_HOSTNAME, boolean.class);
     }
 
     @Provides
@@ -250,6 +252,13 @@ public abstract class ConfigModule {
     @Named(CRYOSTAT_AGENT_WEBSERVER_PORT)
     public static int provideCryostatAgentWebserverPort(Config config) {
         return config.getValue(CRYOSTAT_AGENT_WEBSERVER_PORT, int.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_VERSION)
+    public static String provideCryostatAgentWebclientTlsVersion(Config config) {
+        return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_TLS_VERSION, String.class);
     }
 
     @Provides
