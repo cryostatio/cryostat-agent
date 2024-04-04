@@ -208,8 +208,8 @@ public abstract class ConfigModule {
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_WEBSERVER_CREDENTIALS_USER)
-    public static int provideCryostatAgentWebserverCredentialsUser(Config config) {
-        return config.getValue(CRYOSTAT_AGENT_WEBSERVER_CREDENTIALS_USER, int.class);
+    public static String provideCryostatAgentWebserverCredentialsUser(Config config) {
+        return config.getValue(CRYOSTAT_AGENT_WEBSERVER_CREDENTIALS_USER, String.class);
     }
 
     @Provides
