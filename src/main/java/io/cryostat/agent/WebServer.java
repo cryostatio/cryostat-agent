@@ -363,19 +363,43 @@ class WebServer {
         }
 
         private byte randomAlphabetical(boolean upperCase) throws NoSuchAlgorithmException {
-            return randomChar(upperCase ? 'A' : 'a', 26);
+            return upperCase ? randomAsciiChar('A', 'Z') : randomAsciiChar('a', 'z');
         }
 
         private byte randomNumeric() throws NoSuchAlgorithmException {
-            return randomChar('0', 10);
+            return randomAsciiChar('0', '9');
         }
 
         private byte randomSymbol() throws NoSuchAlgorithmException {
-            return randomChar('!', 14);
+            switch (random.nextInt(4)) {
+                case 0:
+                    return randomAsciiChar('!', '/');
+                case 1:
+                    return randomAsciiChar(':', '@');
+                case 2:
+                    return randomAsciiChar('[', '`');
+                default:
+                    return randomAsciiChar('{', '~');
+            }
         }
 
-        private byte randomChar(int offset, int range) throws NoSuchAlgorithmException {
-            return (byte) (random.nextInt(range) + offset);
+        private byte randomAsciiChar(char start, char end) throws NoSuchAlgorithmException {
+            if (start < 0 || start > 127) {
+                throw new IllegalArgumentException(
+                        String.format("start byte '%d' is out of ASCII range", (byte) start));
+            }
+            if (end < 0 || end > 127) {
+                throw new IllegalArgumentException(
+                        String.format("end byte '%d' is out of ASCII range", (byte) end));
+            }
+            if (start == end) {
+                throw new IllegalArgumentException("start and end bytes cannot be equal");
+            }
+            if (start > end) {
+                throw new IllegalArgumentException("start byte cannot be greater than end byte");
+            }
+            int diff = end - start;
+            return (byte) (random.nextInt(diff + 1) + start);
         }
 
         private static byte[] hash(String pass) throws NoSuchAlgorithmException {
