@@ -181,12 +181,12 @@ and how it advertises itself to a Cryostat server instance. Properties that requ
 - [ ] `cryostat.agent.webserver.host` [`String`]: the internal hostname or IP address for the embedded webserver to bind to. Default `0.0.0.0`.
 - [ ] `cryostat.agent.webserver.port` [`int`]: the internal port number for the embedded webserver to bind to. Default `9977`.
 - [ ] `cryostat.agent.webserver.tls.version` [`String`]: the version of TLS used for the Agent's server SSL context. Default `TLSv1.2`.
-- [ ] `cryostat.agent.webserver.tls.keystore.pass` [`String`]: the name of the file containing the HTTPS server keystore's password
+- [ ] `cryostat.agent.webserver.tls.keystore.pass` [`String`]: the filepath to the HTTPS server keystore's password
 - [ ] `cryostat.agent.webserver.tls.keystore.pass.charset` [`String`]: the character set used by the HTTPS server keystore's password. Default `utf-8`.
 - [ ] `cryostat.agent.webserver.tls.keystore.file` [`String`]: the file path to the HTTPS server keystore
 - [ ] `cryostat.agent.webserver.tls.keystore.type` [`String`]: the type of keystore used for the Agent's HTTPS server. Default `PKCS12`.
 - [ ] `cryostat.agent.webserver.tls.cert.alias` [`String`]: the alias for the certificate stored in the HTTPS server keystore. Default `serverCert`.
-- [ ] `cryostat.agent.webserver.tls.cert.file` [`String`]: the name of the file containing the certificate to be stored by the HTTPS server keystore
+- [ ] `cryostat.agent.webserver.tls.cert.file` [`String`]: the filepath to the certificate to be stored by the HTTPS server keystore
 - [ ] `cryostat.agent.webserver.tls.cert.type` [`String`]: the type of certificate that the HTTPS server keystore will present. Default `X.509`.
 - [ ] `cryostat.agent.webserver.credentials.user` [`String`]: the username used for `Basic` authorization on the embedded webserver. Default `user`.
 - [ ] `cryostat.agent.webserver.credentials.pass.length` [`int`]: the length of the generated password used for `Basic` authorization on the embedded webserver. Default `24`.
