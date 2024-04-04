@@ -321,19 +321,23 @@ class WebServer {
             this.pass = new byte[passLength];
 
             // guarantee at least one character from each class
-            this.pass[0] = randomSymbol();
-            this.pass[1] = randomNumeric();
-            this.pass[2] = randomAlphabetical(random.nextBoolean());
+            int idx = 0;
+            this.pass[idx++] = randomSymbol();
+            this.pass[idx++] = randomNumeric();
+            this.pass[idx++] = randomAlphabetical(random.nextBoolean());
 
             // fill remaining slots with randomly assigned characters across classes
-            for (int i = 3; i < passLength; i++) {
-                int s = random.nextInt(3);
-                if (s == 0) {
-                    this.pass[i] = randomSymbol();
-                } else if (s == 1) {
-                    this.pass[i] = randomNumeric();
-                } else {
-                    this.pass[i] = randomAlphabetical(random.nextBoolean());
+            for (; idx < passLength; idx++) {
+                switch (random.nextInt(3)) {
+                    case 0:
+                        this.pass[idx] = randomSymbol();
+                        break;
+                    case 1:
+                        this.pass[idx] = randomNumeric();
+                        break;
+                    default:
+                        this.pass[idx] = randomAlphabetical(random.nextBoolean());
+                        break;
                 }
             }
 
