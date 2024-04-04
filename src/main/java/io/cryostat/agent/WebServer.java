@@ -321,7 +321,8 @@ class WebServer {
             int idx = 0;
             this.pass[idx++] = randomSymbol();
             this.pass[idx++] = randomNumeric();
-            this.pass[idx++] = randomAlphabetical(random.nextBoolean());
+            this.pass[idx++] = randomAlphabetical(true);
+            this.pass[idx++] = randomAlphabetical(false);
 
             // fill remaining slots with randomly assigned characters across classes
             for (; idx < this.pass.length; idx++) {
