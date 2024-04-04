@@ -379,7 +379,7 @@ class WebServer {
         }
 
         private static byte[] hash(String pass) throws NoSuchAlgorithmException {
-            return hash(pass.getBytes(StandardCharsets.UTF_8));
+            return hash(pass.getBytes(StandardCharsets.US_ASCII));
         }
 
         private static byte[] hash(byte[] bytes) throws NoSuchAlgorithmException {
