@@ -176,6 +176,8 @@ and how it advertises itself to a Cryostat server instance. Required properties 
 - [ ] `cryostat.agent.webclient.response.timeout-ms` [`long`]: the duration in milliseconds to wait for HTTP requests to the Cryostat server to respond. Default `1000`.
 - [ ] `cryostat.agent.webserver.host` [`String`]: the internal hostname or IP address for the embedded webserver to bind to. Default `0.0.0.0`.
 - [ ] `cryostat.agent.webserver.port` [`int`]: the internal port number for the embedded webserver to bind to. Default `9977`.
+- [ ] `cryostat.agent.webserver.credentials.user` [`String`]: the username used for `Basic` authorization on the embedded webserver. Default `user`.
+- [ ] `cryostat.agent.webserver.credentials.pass-length` [`int`]: the length of the generated password used for `Basic` authorization on the embedded webserver. Default `24`.
 - [ ] `cryostat.agent.app.name` [`String`]: a human-friendly name for this application. Default `cryostat-agent`.
 - [ ] `cryostat.agent.app.jmx.port` [`int`]: the JMX RMI port that the application is listening on. The default is to attempt to determine this from the `com.sun.management.jmxremote.port` system property.
 - [ ] `cryostat.agent.registration.retry-ms` [`long`]: the duration in milliseconds between attempts to register with the Cryostat server. Default `5000`.

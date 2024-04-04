@@ -72,6 +72,8 @@ class WebServer {
             ScheduledExecutorService executor,
             String host,
             int port,
+            String user,
+            int passLength,
             URI callback,
             Lazy<Registration> registration) {
         this.remoteContexts = remoteContexts;
@@ -79,7 +81,7 @@ class WebServer {
         this.executor = executor;
         this.host = host;
         this.port = port;
-        this.credentials = new Credentials();
+        this.credentials = new Credentials(user, passLength);
         this.callback = callback;
         this.registration = registration;
 
@@ -295,23 +297,28 @@ class WebServer {
 
     static class Credentials {
 
-        private static final String user = "agent";
+        private final String user;
+        private final int passLength;
         private final SecureRandom random = new SecureRandom();
         private byte[] passHash = new byte[0];
         private byte[] pass = new byte[0];
 
+        Credentials(String user, int passLength) {
+            this.user = user;
+            this.passLength = passLength;
+        }
+
         synchronized boolean checkUserInfo(String username, String password)
                 throws NoSuchAlgorithmException {
             return passHash.length > 0
-                    && Objects.equals(username, Credentials.user)
+                    && Objects.equals(username, user)
                     && Arrays.equals(hash(password), this.passHash);
         }
 
         synchronized void regenerate() throws NoSuchAlgorithmException {
             this.clear();
-            final int len = 24;
 
-            this.pass = new byte[len];
+            this.pass = new byte[passLength];
 
             // guarantee at least one character from each class
             this.pass[0] = randomSymbol();
@@ -319,7 +326,7 @@ class WebServer {
             this.pass[2] = randomAlphabetical(random.nextBoolean());
 
             // fill remaining slots with randomly assigned characters across classes
-            for (int i = 3; i < len; i++) {
+            for (int i = 3; i < passLength; i++) {
                 int s = random.nextInt(3);
                 if (s == 0) {
                     this.pass[i] = randomSymbol();
