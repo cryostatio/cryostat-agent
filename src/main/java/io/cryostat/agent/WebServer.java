@@ -297,15 +297,14 @@ class WebServer {
 
     static class Credentials {
 
-        private final String user;
-        private final int passLength;
         private final SecureRandom random = new SecureRandom();
+        private final String user;
+        private final byte[] pass;
         private byte[] passHash = new byte[0];
-        private byte[] pass = new byte[0];
 
         Credentials(String user, int passLength) {
             this.user = user;
-            this.passLength = passLength;
+            this.pass = new byte[passLength];
         }
 
         synchronized boolean checkUserInfo(String username, String password)
@@ -318,8 +317,6 @@ class WebServer {
         synchronized void regenerate() throws NoSuchAlgorithmException {
             this.clear();
 
-            this.pass = new byte[passLength];
-
             // guarantee at least one character from each class
             int idx = 0;
             this.pass[idx++] = randomSymbol();
@@ -327,7 +324,7 @@ class WebServer {
             this.pass[idx++] = randomAlphabetical(random.nextBoolean());
 
             // fill remaining slots with randomly assigned characters across classes
-            for (; idx < passLength; idx++) {
+            for (; idx < this.pass.length; idx++) {
                 switch (random.nextInt(3)) {
                     case 0:
                         this.pass[idx] = randomSymbol();
@@ -374,7 +371,7 @@ class WebServer {
         }
 
         private byte randomSymbol() throws NoSuchAlgorithmException {
-            return randomChar(33, 14);
+            return randomChar('!', 14);
         }
 
         private byte randomChar(int offset, int range) throws NoSuchAlgorithmException {
