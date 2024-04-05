@@ -34,19 +34,43 @@ is an available version upgrade and ensure both your Agent and server match this
 
 ### Build Requirements
 - Git
-- JDK11+
+- OpenJDK11+
 - Maven 3+
 
 Run Requirements:
-- An application JVM to attach this agent to
+- A OpenJDK11+ application JVM to attach this agent to
 - Configuration for the application JVM to load this agent
+- A [Cryostat server](https://github.com/cryostatio/cryostat) instance
 
+## Run
 
 An example for configuring a Quarkus application to use this agent and enable JMX:
 ```
 JAVA_OPTIONS="-Dcom.sun.management.jmxremote.port=9091 -Dcom.sun.management.jmxremote.rmi.port=9091 -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false -javaagent:/deployments/app/cryostat-agent-${CRYOSTAT_AGENT_VERSION}.jar"
 ```
-This assumes that the agent JAR has been included in the application image within `/deployments/app/`.
+This assumes that the agent JAR has been included in the application image within `/deployments/app/` or mounted as a
+volume at the same location.
+
+The agent JAR may also be loaded and dynamically attached to an already-running JVM. In this case, the agent JAR must
+again be already included in the application image mounted as a volume into the container at the same location. If this
+requirement is met, then the host JVM application may be started first without the Cryostat Agent with whatever its own
+standard launcher process looks like. Once that application is running, the Cryostat Agent can be launched as a separate
+process and asked to dynamically attach to the host application:
+```
+$ java -jar /path/to/cryostat-agent.jar -Dcryostat.agent.baseuri=http://cryostat.local
+```
+
+In this dynamic attachment mode, the agent [configuration](#configuration) options can be specified using the
+`-D`/`property` flag. These must be placed *after* the `-jar /path/to/cryostat-agent.jar` in order to be passed as
+arguments to the agent launcher - if they are passed *before* the `-jar` then they will be used by the `java` process
+as system properties on the agent launcher itself, rather than having them passed on to the injected instances.
+
+[Smart triggers](#smart-triggers) can be specified using `--smartTrigger`.
+
+The optional PID is a positional argument and may be ignored or set to: `0` to request that the Agent launcher attempt
+to find exactly one candidate JVM application to dynamically attach to, exiting if zero or more than one applications
+are found; `*` to request that the Agent launch attempt to dynamically attach to every JVM application it finds; or a
+specific PID to request that the Agent attempt to dynamically attach only to that one PID.
 
 ## Harvester
 
@@ -55,7 +79,7 @@ Recording using a given event template on Agent initialization, and to periodica
 it to the Agent's associated Cryostat server. The Agent will also attempt to push the tail end of this recording on JVM
 shutdown so that the cause of an unexpected JVM shutdown might be captured for later analysis.
 
-## SMART TRIGGERS
+## Smart Triggers
 
 `cryostat-agent` supports Smart Triggers that listen to the values of the MBean Counters and can start recordings based
 on a set of constraints specified by the user.
@@ -102,8 +126,10 @@ Smart Triggers may define more complex conditions that test multiple metrics:
 These may be passed as an argument to the Cryostat Agent, for example:
 
 ```
-JAVA_OPTIONS="-javaagent:/deployments/app/cryostat-agent-${CRYOSTAT_AGENT_VERSION}.jar=[ProcessCpuLoad>0.2]~profile
+JAVA_OPTIONS="-javaagent:-Dcryostat.agent.baseuri=http://cryostat.local!/deployments/app/cryostat-agent-${CRYOSTAT_AGENT_VERSION}.jar=[ProcessCpuLoad>0.2]~profile
 ```
+
+(note the '!' separator between system properties overrides and Smart Triggers)
 
 or as a [configuration property](#configuration):
 
@@ -130,7 +156,7 @@ Harvester period without a Harvester template, you can achieve a setup where dyn
 begin when trigger conditions are met, and their data is then periodically captured until the recording is manually
 stopped or the host JVM shuts down.
 
-## CONFIGURATION
+## Configuration
 
 `cryostat-agent` uses [smallrye-config](https://github.com/smallrye/smallrye-config) for configuration.
 Below is a list of configuration properties that can be used to influence how `cryostat-agent` runs

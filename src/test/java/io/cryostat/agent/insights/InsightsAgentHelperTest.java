@@ -38,7 +38,6 @@ import com.redhat.insights.agent.SLF4JLogger;
 import com.redhat.insights.agent.shaded.InsightsReportController;
 import com.redhat.insights.agent.shaded.http.InsightsHttpClient;
 import org.eclipse.microprofile.config.Config;
-import org.eclipse.microprofile.config.ConfigProvider;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -61,16 +60,12 @@ public class InsightsAgentHelperTest {
     @Mock InsightsReportController controller;
     @Captor ArgumentCaptor<AgentConfiguration> configCaptor;
     @Captor ArgumentCaptor<Supplier<InsightsHttpClient>> clientSupplierCaptor;
-    private MockedStatic<ConfigProvider> providerStatic;
     MockedStatic<AgentBasicReport> reportStatic;
     MockedStatic<InsightsReportController> controllerStatic;
     InsightsAgentHelper helper;
 
     @BeforeEach
     void setupEach() {
-        providerStatic = Mockito.mockStatic(ConfigProvider.class);
-        providerStatic.when(() -> ConfigProvider.getConfig()).thenReturn(config);
-
         reportStatic = Mockito.mockStatic(AgentBasicReport.class);
         reportStatic.when(() -> AgentBasicReport.of(any())).thenReturn(report);
 
@@ -83,12 +78,11 @@ public class InsightsAgentHelperTest {
                 Collections.singletonMap("INSIGHTS_SVC", "http://insights-proxy.example.com:8080");
         when(pluginInfo.getEnv()).thenReturn(env);
 
-        this.helper = new InsightsAgentHelper(instrumentation);
+        this.helper = new InsightsAgentHelper(config, instrumentation);
     }
 
     @AfterEach
     void teardownEach() {
-        providerStatic.close();
         reportStatic.close();
         controllerStatic.close();
     }

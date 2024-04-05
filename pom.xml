@@ -87,6 +87,7 @@
   <org.slf4j.version>2.0.12</org.slf4j.version>
   <org.projectnessie.cel.bom.version>0.4.4</org.projectnessie.cel.bom.version>
   <com.google.protobuf-java.version>3.22.3</com.google.protobuf-java.version>
+  <info.picocli.version>4.7.4</info.picocli.version>
   <com.redhat.insights.agent.version>0.9.1</com.redhat.insights.agent.version>
 
   <com.github.spotbugs.version>4.8.3</com.github.spotbugs.version>
@@ -176,6 +177,11 @@
         <artifactId>slf4j-api</artifactId>
       </exclusion>
     </exclusions>
+  </dependency>
+  <dependency>
+    <groupId>info.picocli</groupId>
+    <artifactId>picocli</artifactId>
+    <version>${info.picocli.version}</version>
   </dependency>
   <dependency>
     <groupId>org.projectnessie.cel</groupId>
@@ -278,6 +284,7 @@
       <configuration>
         <archive>
           <manifest>
+            <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
             <mainClass>${mainClass}</mainClass>
           </manifest>
           <manifestEntries>
@@ -348,6 +355,10 @@
               <relocation>
                 <pattern>com.fasterxml.jackson</pattern>
                 <shadedPattern>${shade.prefix}.com.fasterxml.jackson</shadedPattern>
+              </relocation>
+              <relocation>
+                <pattern>picocli</pattern>
+                <shadedPattern>${shade.prefix}.picocli</shadedPattern>
               </relocation>
             </relocations>
             <transformers>
