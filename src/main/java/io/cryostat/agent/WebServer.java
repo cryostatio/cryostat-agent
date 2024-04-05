@@ -337,33 +337,10 @@ class WebServer {
         }
 
         private byte randomAscii() throws NoSuchAlgorithmException {
-            return randomAsciiChar((char) 33, (char) 126);
-        }
-
-        private byte randomAsciiChar(char start, char end) throws NoSuchAlgorithmException {
-            if (start < 0 || start > 127) {
-                throw new IllegalArgumentException(
-                        String.format("start byte '%d' is out of ASCII range", (byte) start));
-            }
-            if (start < 33 || start > 126) {
-                throw new IllegalArgumentException(
-                        String.format(
-                                "start byte '%d' is out of ASCII printable range", (byte) start));
-            }
-            if (end < 0 || end > 127) {
-                throw new IllegalArgumentException(
-                        String.format("end byte '%d' is out of ASCII range", (byte) end));
-            }
-            if (end < 33 || end > 126) {
-                throw new IllegalArgumentException(
-                        String.format("end byte '%d' is out of ASCII printable range", (byte) end));
-            }
-            if (start == end) {
-                throw new IllegalArgumentException("start and end bytes cannot be equal");
-            }
-            if (start > end) {
-                throw new IllegalArgumentException("start byte cannot be greater than end byte");
-            }
+            // ASCII printable characters range from 33 to 126. Other values are null, whitespace,
+            // and various control characters
+            char start = (char) 33;
+            char end = (char) 126;
             int diff = end - start;
             return (byte) (random.nextInt(diff + 1) + start);
         }
