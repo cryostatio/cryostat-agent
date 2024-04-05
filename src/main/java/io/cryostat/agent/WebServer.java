@@ -309,12 +309,9 @@ class WebServer {
         }
 
         synchronized void regenerate() {
-            this.clear();
-
             for (int idx = 0; idx < this.pass.length; idx++) {
                 this.pass[idx] = randomAscii();
             }
-
             this.passHash = hash(this.pass);
         }
 
