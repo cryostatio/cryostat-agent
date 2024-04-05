@@ -46,16 +46,17 @@ public class InsightsAgentHelper {
     static final String RHT_INSIGHTS_JAVA_DEBUG = "rht.insights.java.debug";
 
     private static final BlockingQueue<JarInfo> jarsToSend = new LinkedBlockingQueue<>();
-    private static final AgentLogger log = AgentLogger.getLogger();
 
     @SuppressFBWarnings("EI_EXPOSE_REP2")
     private final Instrumentation instrumentation;
 
     private final Config config;
+    private final AgentLogger log;
 
     public InsightsAgentHelper(Config config, Instrumentation instrumentation) {
         this.config = config;
         this.instrumentation = instrumentation;
+        this.log = AgentLogger.getLogger();
     }
 
     public boolean isInsightsEnabled(PluginInfo pluginInfo) {
