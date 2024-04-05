@@ -82,7 +82,7 @@
   <org.apache.commons.io.version>2.13.0</org.apache.commons.io.version>
   <org.apache.httpcomponents.httpclient.version>4.5.14</org.apache.httpcomponents.httpclient.version>
   <org.apache.httpcomponents.httpmime.version>${org.apache.httpcomponents.httpclient.version}</org.apache.httpcomponents.httpmime.version>
-  <com.fasterxml.jackson.version>2.15.2</com.fasterxml.jackson.version>
+  <com.fasterxml.jackson.version>2.15.4</com.fasterxml.jackson.version>
   <io.smallrye.config.version>3.4.3</io.smallrye.config.version>
   <org.slf4j.version>2.0.7</org.slf4j.version>
   <org.projectnessie.cel.bom.version>0.4.4</org.projectnessie.cel.bom.version>
