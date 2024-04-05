@@ -317,35 +317,8 @@ class WebServer {
         synchronized void regenerate() throws NoSuchAlgorithmException {
             this.clear();
 
-            // guarantee at least one character from each class
-            int idx = 0;
-            this.pass[idx++] = randomSymbol();
-            this.pass[idx++] = randomNumeric();
-            this.pass[idx++] = randomAlphabetical(true);
-            this.pass[idx++] = randomAlphabetical(false);
-
-            // fill remaining slots with randomly assigned characters across classes
-            for (; idx < this.pass.length; idx++) {
-                switch (random.nextInt(3)) {
-                    case 0:
-                        this.pass[idx] = randomSymbol();
-                        break;
-                    case 1:
-                        this.pass[idx] = randomNumeric();
-                        break;
-                    default:
-                        this.pass[idx] = randomAlphabetical(random.nextBoolean());
-                        break;
-                }
-            }
-
-            // randomly shuffle the characters
-            // https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle
-            for (int i = this.pass.length - 1; i > 1; i--) {
-                int j = random.nextInt(i);
-                byte b = this.pass[i];
-                this.pass[i] = this.pass[j];
-                this.pass[j] = b;
+            for (int idx = 0; idx < this.pass.length; idx++) {
+                this.pass[idx] = randomAscii();
             }
 
             this.passHash = hash(this.pass);
@@ -363,25 +336,8 @@ class WebServer {
             Arrays.fill(this.pass, (byte) 0);
         }
 
-        private byte randomAlphabetical(boolean upperCase) throws NoSuchAlgorithmException {
-            return upperCase ? randomAsciiChar('A', 'Z') : randomAsciiChar('a', 'z');
-        }
-
-        private byte randomNumeric() throws NoSuchAlgorithmException {
-            return randomAsciiChar('0', '9');
-        }
-
-        private byte randomSymbol() throws NoSuchAlgorithmException {
-            switch (random.nextInt(4)) {
-                case 0:
-                    return randomAsciiChar('!', '/');
-                case 1:
-                    return randomAsciiChar(':', '@');
-                case 2:
-                    return randomAsciiChar('[', '`');
-                default:
-                    return randomAsciiChar('{', '~');
-            }
+        private byte randomAscii() throws NoSuchAlgorithmException {
+            return randomAsciiChar((char) 33, (char) 126);
         }
 
         private byte randomAsciiChar(char start, char end) throws NoSuchAlgorithmException {
@@ -389,9 +345,18 @@ class WebServer {
                 throw new IllegalArgumentException(
                         String.format("start byte '%d' is out of ASCII range", (byte) start));
             }
+            if (start < 33 || start > 126) {
+                throw new IllegalArgumentException(
+                        String.format(
+                                "start byte '%d' is out of ASCII printable range", (byte) start));
+            }
             if (end < 0 || end > 127) {
                 throw new IllegalArgumentException(
                         String.format("end byte '%d' is out of ASCII range", (byte) end));
+            }
+            if (end < 33 || end > 126) {
+                throw new IllegalArgumentException(
+                        String.format("end byte '%d' is out of ASCII printable range", (byte) end));
             }
             if (start == end) {
                 throw new IllegalArgumentException("start and end bytes cannot be equal");
