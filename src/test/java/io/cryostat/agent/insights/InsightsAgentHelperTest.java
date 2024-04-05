@@ -32,9 +32,9 @@ import io.cryostat.agent.model.PluginInfo;
 
 import com.redhat.insights.agent.AgentBasicReport;
 import com.redhat.insights.agent.AgentConfiguration;
+import com.redhat.insights.agent.AgentLogger;
 import com.redhat.insights.agent.ClassNoticer;
 import com.redhat.insights.agent.InsightsAgentHttpClient;
-import com.redhat.insights.agent.SLF4JLogger;
 import com.redhat.insights.agent.shaded.InsightsReportController;
 import com.redhat.insights.agent.shaded.http.InsightsHttpClient;
 import org.eclipse.microprofile.config.Config;
@@ -134,7 +134,7 @@ public class InsightsAgentHelperTest {
         controllerStatic.verify(
                 () ->
                         InsightsReportController.of(
-                                any(SLF4JLogger.class),
+                                any(AgentLogger.class),
                                 eq(agentConfig),
                                 eq(report),
                                 clientSupplierCaptor.capture(),
