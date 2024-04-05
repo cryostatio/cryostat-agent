@@ -17,6 +17,7 @@ package io.cryostat.agent;
 
 import java.net.URI;
 import java.security.KeyManagementException;
+import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.security.cert.CertificateException;
@@ -93,6 +94,8 @@ public abstract class MainModule {
             ScheduledExecutorService executor,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_HOST) String host,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_PORT) int port,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_CREDENTIALS_PASS_HASH_FUNCTION)
+                    MessageDigest digest,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_CREDENTIALS_USER) String user,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_CREDENTIALS_PASS_LENGTH) int passLength,
             @Named(ConfigModule.CRYOSTAT_AGENT_CALLBACK) URI callback,
@@ -103,6 +106,7 @@ public abstract class MainModule {
                 executor,
                 host,
                 port,
+                digest,
                 user,
                 passLength,
                 callback,

@@ -18,7 +18,6 @@ package io.cryostat.agent;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.UnknownHostException;
-import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Collection;
@@ -104,36 +103,31 @@ public class Registration {
                             }
                             executor.submit(
                                     () -> {
-                                        try {
-                                            webServer
-                                                    .generateCredentials()
-                                                    .handle(
-                                                            (v, t) -> {
-                                                                if (t != null) {
-                                                                    executor.schedule(
-                                                                            () ->
-                                                                                    notify(
-                                                                                            RegistrationEvent
-                                                                                                    .State
-                                                                                                    .UNREGISTERED),
-                                                                            registrationRetryMs,
-                                                                            TimeUnit.MILLISECONDS);
-                                                                    log.error(
-                                                                            "Failed to generate"
+                                        webServer
+                                                .generateCredentials()
+                                                .handle(
+                                                        (v, t) -> {
+                                                            if (t != null) {
+                                                                executor.schedule(
+                                                                        () ->
+                                                                                notify(
+                                                                                        RegistrationEvent
+                                                                                                .State
+                                                                                                .UNREGISTERED),
+                                                                        registrationRetryMs,
+                                                                        TimeUnit.MILLISECONDS);
+                                                                log.error(
+                                                                        "Failed to generate"
                                                                                 + " credentials",
-                                                                            t);
-                                                                    throw new CompletionException(
-                                                                            t);
-                                                                }
-                                                                ;
-                                                                notify(
-                                                                        RegistrationEvent.State
-                                                                                .REFRESHING);
-                                                                return v;
-                                                            });
-                                        } catch (NoSuchAlgorithmException nsae) {
-                                            log.error("Could not regenerate credentials", nsae);
-                                        }
+                                                                        t);
+                                                                throw new CompletionException(t);
+                                                            }
+                                                            ;
+                                                            notify(
+                                                                    RegistrationEvent.State
+                                                                            .REFRESHING);
+                                                            return v;
+                                                        });
                                     });
                             break;
                         case REGISTERED:

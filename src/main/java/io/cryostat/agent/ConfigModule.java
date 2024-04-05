@@ -21,6 +21,8 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.net.UnknownHostException;
 import java.security.AccessController;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.security.PrivilegedActionException;
 import java.security.PrivilegedExceptionAction;
 import java.util.Arrays;
@@ -66,8 +68,10 @@ public abstract class ConfigModule {
     public static final String CRYOSTAT_AGENT_WEBSERVER_PORT = "cryostat.agent.webserver.port";
     public static final String CRYOSTAT_AGENT_WEBSERVER_CREDENTIALS_USER =
             "cryostat.agent.webserver.credentials.user";
+    public static final String CRYOSTAT_AGENT_WEBSERVER_CREDENTIALS_PASS_HASH_FUNCTION =
+            "cryostat.agent.webserver.credentials.pass.hash-function";
     public static final String CRYOSTAT_AGENT_WEBSERVER_CREDENTIALS_PASS_LENGTH =
-            "cryostat.agent.webserver.credentials.pass-length";
+            "cryostat.agent.webserver.credentials.pass.length";
 
     public static final String CRYOSTAT_AGENT_APP_NAME = "cryostat.agent.app.name";
     public static final String CRYOSTAT_AGENT_HOSTNAME = "cryostat.agent.hostname";
@@ -210,6 +214,21 @@ public abstract class ConfigModule {
     @Named(CRYOSTAT_AGENT_WEBSERVER_CREDENTIALS_USER)
     public static String provideCryostatAgentWebserverCredentialsUser(Config config) {
         return config.getValue(CRYOSTAT_AGENT_WEBSERVER_CREDENTIALS_USER, String.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBSERVER_CREDENTIALS_PASS_HASH_FUNCTION)
+    public static MessageDigest provideCryostatAgentWebserverCredentialsPassHashFunction(
+            Config config) {
+        try {
+            String id =
+                    config.getValue(
+                            CRYOSTAT_AGENT_WEBSERVER_CREDENTIALS_PASS_HASH_FUNCTION, String.class);
+            return MessageDigest.getInstance(id);
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Provides
