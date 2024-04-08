@@ -28,13 +28,12 @@ import io.cryostat.agent.model.PluginInfo;
 
 import com.redhat.insights.agent.AgentBasicReport;
 import com.redhat.insights.agent.AgentConfiguration;
+import com.redhat.insights.agent.AgentLogger;
 import com.redhat.insights.agent.ClassNoticer;
 import com.redhat.insights.agent.InsightsAgentHttpClient;
-import com.redhat.insights.agent.SLF4JLogger;
 import com.redhat.insights.agent.shaded.InsightsReportController;
 import com.redhat.insights.agent.shaded.http.InsightsHttpClient;
 import com.redhat.insights.agent.shaded.jars.JarInfo;
-import com.redhat.insights.agent.shaded.logging.InsightsLogger;
 import com.redhat.insights.agent.shaded.reports.InsightsReport;
 import com.redhat.insights.agent.shaded.tls.PEMSupport;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
@@ -44,18 +43,20 @@ public class InsightsAgentHelper {
 
     private static final String INSIGHTS_SVC = "INSIGHTS_SVC";
     static final String RHT_INSIGHTS_JAVA_OPT_OUT = "rht.insights.java.opt-out";
+    static final String RHT_INSIGHTS_JAVA_DEBUG = "rht.insights.java.debug";
 
     private static final BlockingQueue<JarInfo> jarsToSend = new LinkedBlockingQueue<>();
-    private static final InsightsLogger log = new SLF4JLogger(InsightsAgentHelper.class);
 
     @SuppressFBWarnings("EI_EXPOSE_REP2")
     private final Instrumentation instrumentation;
 
     private final Config config;
+    private final AgentLogger log;
 
     public InsightsAgentHelper(Config config, Instrumentation instrumentation) {
         this.config = config;
         this.instrumentation = instrumentation;
+        this.log = AgentLogger.getLogger();
     }
 
     public boolean isInsightsEnabled(PluginInfo pluginInfo) {
@@ -84,6 +85,14 @@ public class InsightsAgentHelper {
         out.put("should_defer", "false");
         // Will be replaced by the Insights Proxy
         out.put("token", "dummy");
+
+        // Check if debug logging should be enabled
+        boolean debug =
+                config.getOptionalValue(RHT_INSIGHTS_JAVA_DEBUG, boolean.class).orElse(false);
+        if (debug) {
+            out.put("debug", "true");
+            log.setDebugDelegate();
+        }
         AgentConfiguration config = new AgentConfiguration(out);
 
         final InsightsReport simpleReport = AgentBasicReport.of(config);
