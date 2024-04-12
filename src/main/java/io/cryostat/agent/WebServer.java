@@ -20,7 +20,6 @@ import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.util.Arrays;
@@ -72,6 +71,9 @@ class WebServer {
             ScheduledExecutorService executor,
             String host,
             int port,
+            MessageDigest digest,
+            String user,
+            int passLength,
             URI callback,
             Lazy<Registration> registration) {
         this.remoteContexts = remoteContexts;
@@ -79,7 +81,7 @@ class WebServer {
         this.executor = executor;
         this.host = host;
         this.port = port;
-        this.credentials = new Credentials();
+        this.credentials = new Credentials(digest, user, passLength);
         this.callback = callback;
         this.registration = registration;
 
@@ -88,7 +90,7 @@ class WebServer {
         this.compressionFilter = new CompressionFilter();
     }
 
-    void start() throws IOException, NoSuchAlgorithmException {
+    void start() throws IOException {
         if (this.http != null) {
             stop();
         }
@@ -126,7 +128,7 @@ class WebServer {
         this.credentialId = -1;
     }
 
-    CompletableFuture<Void> generateCredentials() throws NoSuchAlgorithmException {
+    CompletableFuture<Void> generateCredentials() {
         this.credentials.regenerate();
         return this.cryostat
                 .get()
@@ -276,69 +278,40 @@ class WebServer {
 
     private class AgentAuthenticator extends BasicAuthenticator {
 
-        private final Logger log = LoggerFactory.getLogger(getClass());
-
         public AgentAuthenticator() {
             super("cryostat-agent");
         }
 
         @Override
         public boolean checkCredentials(String username, String password) {
-            try {
-                return WebServer.this.credentials.checkUserInfo(username, password);
-            } catch (NoSuchAlgorithmException e) {
-                log.error("Could not check credentials", e);
-                return false;
-            }
+            return WebServer.this.credentials.checkUserInfo(username, password);
         }
     }
 
     static class Credentials {
 
-        private static final String user = "agent";
         private final SecureRandom random = new SecureRandom();
+        private final MessageDigest digest;
+        private final String user;
+        private final byte[] pass;
         private byte[] passHash = new byte[0];
-        private byte[] pass = new byte[0];
 
-        synchronized boolean checkUserInfo(String username, String password)
-                throws NoSuchAlgorithmException {
+        Credentials(MessageDigest digest, String user, int passLength) {
+            this.digest = digest;
+            this.user = user;
+            this.pass = new byte[passLength];
+        }
+
+        synchronized boolean checkUserInfo(String username, String password) {
             return passHash.length > 0
-                    && Objects.equals(username, Credentials.user)
+                    && Objects.equals(username, user)
                     && Arrays.equals(hash(password), this.passHash);
         }
 
-        synchronized void regenerate() throws NoSuchAlgorithmException {
-            this.clear();
-            final int len = 24;
-
-            this.pass = new byte[len];
-
-            // guarantee at least one character from each class
-            this.pass[0] = randomSymbol();
-            this.pass[1] = randomNumeric();
-            this.pass[2] = randomAlphabetical(random.nextBoolean());
-
-            // fill remaining slots with randomly assigned characters across classes
-            for (int i = 3; i < len; i++) {
-                int s = random.nextInt(3);
-                if (s == 0) {
-                    this.pass[i] = randomSymbol();
-                } else if (s == 1) {
-                    this.pass[i] = randomNumeric();
-                } else {
-                    this.pass[i] = randomAlphabetical(random.nextBoolean());
-                }
+        synchronized void regenerate() {
+            for (int idx = 0; idx < this.pass.length; idx++) {
+                this.pass[idx] = randomAscii();
             }
-
-            // randomly shuffle the characters
-            // https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle
-            for (int i = this.pass.length - 1; i > 1; i--) {
-                int j = random.nextInt(i);
-                byte b = this.pass[i];
-                this.pass[i] = this.pass[j];
-                this.pass[j] = b;
-            }
-
             this.passHash = hash(this.pass);
         }
 
@@ -354,28 +327,21 @@ class WebServer {
             Arrays.fill(this.pass, (byte) 0);
         }
 
-        private byte randomAlphabetical(boolean upperCase) throws NoSuchAlgorithmException {
-            return randomChar(upperCase ? 'A' : 'a', 26);
+        private byte randomAscii() {
+            // ASCII printable characters range from 33 to 126. Other values are null, whitespace,
+            // and various control characters
+            char start = (char) 33;
+            char end = (char) 126;
+            int diff = end - start;
+            return (byte) (random.nextInt(diff + 1) + start);
         }
 
-        private byte randomNumeric() throws NoSuchAlgorithmException {
-            return randomChar('0', 10);
+        private byte[] hash(String pass) {
+            return hash(pass.getBytes(StandardCharsets.US_ASCII));
         }
 
-        private byte randomSymbol() throws NoSuchAlgorithmException {
-            return randomChar(33, 14);
-        }
-
-        private byte randomChar(int offset, int range) throws NoSuchAlgorithmException {
-            return (byte) (random.nextInt(range) + offset);
-        }
-
-        private static byte[] hash(String pass) throws NoSuchAlgorithmException {
-            return hash(pass.getBytes(StandardCharsets.UTF_8));
-        }
-
-        private static byte[] hash(byte[] bytes) throws NoSuchAlgorithmException {
-            return MessageDigest.getInstance("SHA-256").digest(bytes);
+        private byte[] hash(byte[] bytes) {
+            return digest.digest(bytes);
         }
     }
 }

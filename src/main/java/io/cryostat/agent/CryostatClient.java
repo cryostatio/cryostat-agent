@@ -16,7 +16,6 @@
 package io.cryostat.agent;
 
 import java.io.BufferedInputStream;
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -65,6 +64,7 @@ import org.apache.http.entity.ContentType;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.entity.mime.FormBodyPartBuilder;
 import org.apache.http.entity.mime.MultipartEntityBuilder;
+import org.apache.http.entity.mime.content.ByteArrayBody;
 import org.apache.http.entity.mime.content.InputStreamBody;
 import org.apache.http.entity.mime.content.StringBody;
 import org.slf4j.Logger;
@@ -267,10 +267,10 @@ public class CryostatClient {
                         .addPart(
                                 FormBodyPartBuilder.create(
                                                 "password",
-                                                new InputStreamBody(
-                                                        new ByteArrayInputStream(
-                                                                credentials.pass()),
-                                                        ContentType.TEXT_PLAIN))
+                                                new ByteArrayBody(
+                                                        credentials.pass(),
+                                                        ContentType.TEXT_PLAIN,
+                                                        "pass"))
                                         .build())
                         .addPart(
                                 FormBodyPartBuilder.create(

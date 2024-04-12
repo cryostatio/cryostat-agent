@@ -160,7 +160,7 @@ stopped or the host JVM shuts down.
 
 `cryostat-agent` uses [smallrye-config](https://github.com/smallrye/smallrye-config) for configuration.
 Below is a list of configuration properties that can be used to influence how `cryostat-agent` runs
-and how it advertises itself to a Cryostat server instance. Required properties are indicated with a checked box.
+and how it advertises itself to a Cryostat server instance. Properties that require configuration are indicated with a checked box.
 
 - [x] `cryostat.agent.baseuri` [`java.net.URI`]: the URL location of the Cryostat server backend that this agent advertises itself to.
 - [x] `cryostat.agent.baseuri-range` [`String`]: a `String` representing the `io.cryostat.agent.ConfigModule.UriRange` enum level that restricts the acceptable hosts specified in the `cryostat.agent.baseuri` property. This is used to control the server locations that this Cryostat Agent instance is willing to register itself with. Default `dns_local`, which means any IP or hostname that is or resolves to `localhost`, a link-local IP address, an IP address from a private range block, or a hostname ending in `.local` will be accepted. If a `cryostat.agent.baseuri` is specified with a host outside of this range then the Agent will refuse to start. Acceptable values are: `loopback`, `link_local`, `site_local`, `dns_local`, and `public`. Each higher/more relaxed level implies that each lower level is also acceptable.
@@ -176,6 +176,9 @@ and how it advertises itself to a Cryostat server instance. Required properties 
 - [ ] `cryostat.agent.webclient.response.timeout-ms` [`long`]: the duration in milliseconds to wait for HTTP requests to the Cryostat server to respond. Default `1000`.
 - [ ] `cryostat.agent.webserver.host` [`String`]: the internal hostname or IP address for the embedded webserver to bind to. Default `0.0.0.0`.
 - [ ] `cryostat.agent.webserver.port` [`int`]: the internal port number for the embedded webserver to bind to. Default `9977`.
+- [ ] `cryostat.agent.webserver.credentials.user` [`String`]: the username used for `Basic` authorization on the embedded webserver. Default `user`.
+- [ ] `cryostat.agent.webserver.credentials.pass.length` [`int`]: the length of the generated password used for `Basic` authorization on the embedded webserver. Default `24`.
+- [ ] `cryostat.agent.webserver.credentials.pass.hash-function` [`String`]: the name of the hash function to use when generating passwords. Default `SHA-256`.
 - [ ] `cryostat.agent.app.name` [`String`]: a human-friendly name for this application. Default `cryostat-agent`.
 - [ ] `cryostat.agent.app.jmx.port` [`int`]: the JMX RMI port that the application is listening on. The default is to attempt to determine this from the `com.sun.management.jmxremote.port` system property.
 - [ ] `cryostat.agent.registration.retry-ms` [`long`]: the duration in milliseconds between attempts to register with the Cryostat server. Default `5000`.
