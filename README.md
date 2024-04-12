@@ -160,7 +160,7 @@ stopped or the host JVM shuts down.
 
 `cryostat-agent` uses [smallrye-config](https://github.com/smallrye/smallrye-config) for configuration.
 Below is a list of configuration properties that can be used to influence how `cryostat-agent` runs
-and how it advertises itself to a Cryostat server instance. Required properties are indicated with a checked box.
+and how it advertises itself to a Cryostat server instance. Properties that require configuration are indicated with a checked box.
 
 - [x] `cryostat.agent.baseuri` [`java.net.URI`]: the URL location of the Cryostat server backend that this agent advertises itself to.
 - [x] `cryostat.agent.baseuri-range` [`String`]: a `String` representing the `io.cryostat.agent.ConfigModule.UriRange` enum level that restricts the acceptable hosts specified in the `cryostat.agent.baseuri` property. This is used to control the server locations that this Cryostat Agent instance is willing to register itself with. Default `dns_local`, which means any IP or hostname that is or resolves to `localhost`, a link-local IP address, an IP address from a private range block, or a hostname ending in `.local` will be accepted. If a `cryostat.agent.baseuri` is specified with a host outside of this range then the Agent will refuse to start. Acceptable values are: `loopback`, `link_local`, `site_local`, `dns_local`, and `public`. Each higher/more relaxed level implies that each lower level is also acceptable.
