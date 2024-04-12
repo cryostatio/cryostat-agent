@@ -78,7 +78,6 @@ public class InsightsAgentHelper {
         Map<String, String> out = new HashMap<>();
         out.put("name", appName);
         out.put("base_url", server);
-        out.put("is_ocp", "true");
         // If the user's application already contains Insights support,
         // use this agent instead as it has the proper configuration
         // for OpenShift.
