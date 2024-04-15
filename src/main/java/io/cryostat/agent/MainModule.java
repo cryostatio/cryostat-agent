@@ -15,6 +15,7 @@
  */
 package io.cryostat.agent;
 
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
@@ -204,10 +205,9 @@ public abstract class MainModule {
             return Optional.empty();
         }
 
-        try (InputStream pass = MainModule.class.getResourceAsStream(keyStorePassFile.get());
-                InputStream keystore =
-                        MainModule.class.getResourceAsStream(keyStoreFilePath.get());
-                InputStream certFile = MainModule.class.getResourceAsStream(certFilePath.get())) {
+        try (InputStream pass = new FileInputStream(keyStorePassFile.get());
+                InputStream keystore = new FileInputStream(keyStoreFilePath.get());
+                InputStream certFile = new FileInputStream(certFilePath.get())) {
             SSLContext sslContext = SSLContext.getInstance(serverTlsVersion);
 
             // initialize keystore
