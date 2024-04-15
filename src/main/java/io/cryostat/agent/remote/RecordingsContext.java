@@ -25,7 +25,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -316,10 +315,13 @@ class RecordingsContext implements RemoteContext {
 
     private void handleDelete(HttpExchange exchange, long recordingId) throws IOException {
         try {
-            flightRecorder.getRecording(recordingId).orElseThrow().close();
+            Optional<Recording> opt = flightRecorder.getRecording(recordingId);
+            if (opt.isEmpty()) {
+                sendHeader(exchange, HttpStatus.SC_NOT_FOUND);
+                return;
+            }
+            opt.get().close();
             sendHeader(exchange, HttpStatus.SC_NO_CONTENT);
-        } catch (NoSuchElementException e) {
-            sendHeader(exchange, HttpStatus.SC_NOT_FOUND);
         } catch (Exception e) {
             log.error("Operation failed", e);
             sendHeader(exchange, HttpStatus.SC_INTERNAL_SERVER_ERROR);
