@@ -42,6 +42,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
 import jdk.jfr.Recording;
+import jdk.jfr.RecordingState;
 import org.apache.http.HttpStatus;
 import org.eclipse.microprofile.config.Config;
 import org.slf4j.Logger;
@@ -287,8 +288,16 @@ class RecordingsContext implements RemoteContext {
                 }
             }
             if (shouldStop) {
-                if (!recording.stop()) {
-                    sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
+                try {
+                    if (!recording.stop()) {
+                        sendHeader(exchange, HttpStatus.SC_INTERNAL_SERVER_ERROR);
+                    }
+                } catch (IllegalStateException e) {
+                    sendHeader(
+                            exchange,
+                            recording.getState().equals(RecordingState.STOPPED)
+                                    ? HttpStatus.SC_NO_CONTENT
+                                    : HttpStatus.SC_INTERNAL_SERVER_ERROR);
                 }
             }
 
