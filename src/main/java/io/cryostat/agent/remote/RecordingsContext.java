@@ -34,6 +34,7 @@ import java.util.stream.Collectors;
 import javax.inject.Inject;
 
 import io.cryostat.agent.FlightRecorderHelper;
+import io.cryostat.agent.harvest.Harvester;
 import io.cryostat.agent.util.StringUtils;
 import io.cryostat.core.serialization.SerializableRecordingDescriptor;
 import io.cryostat.core.templates.MutableTemplateService.InvalidEventTemplateException;
@@ -130,6 +131,10 @@ class RecordingsContext implements RemoteContext {
         try (OutputStream response = exchange.getResponseBody()) {
             List<SerializableRecordingDescriptor> recordings =
                     flightRecorder.getRecordings().stream()
+                            .filter(
+                                    r ->
+                                            !Harvester.RECORDING_NAME_HARVESTER_SNAPSHOT.equals(
+                                                    r.getName()))
                             .map(SerializableRecordingDescriptor::new)
                             .collect(Collectors.toList());
             exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);

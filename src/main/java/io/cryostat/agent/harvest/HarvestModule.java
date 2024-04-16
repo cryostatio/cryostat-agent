@@ -47,9 +47,11 @@ public abstract class HarvestModule {
             FlightRecorderHelper flightRecorderHelper,
             Registration registration) {
         RecordingSettings exitSettings = new RecordingSettings();
+        exitSettings.name = Harvester.RECORDING_NAME_ON_EXIT;
         exitSettings.maxAge = exitMaxAge;
         exitSettings.maxSize = exitMaxSize;
         RecordingSettings periodicSettings = new RecordingSettings();
+        periodicSettings.name = Harvester.RECORDING_NAME_HARVESTER_SNAPSHOT;
         periodicSettings.maxAge = maxAge > 0 ? maxAge : (long) (period * 1.5);
         periodicSettings.maxSize = maxSize;
         return new Harvester(
