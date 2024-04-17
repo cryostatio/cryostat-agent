@@ -23,6 +23,7 @@ import java.security.SecureRandom;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.HashSet;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Executors;
@@ -162,7 +163,10 @@ public abstract class MainModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_CONNECT_TIMEOUT_MS) int connectTimeout,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_TIMEOUT_MS) int responseTimeout) {
         Set<Header> headers = new HashSet<>();
-        authorization.map(v -> new BasicHeader("Authorization", v)).ifPresent(headers::add);
+        authorization
+                .filter(Objects::nonNull)
+                .map(v -> new BasicHeader("Authorization", v))
+                .ifPresent(headers::add);
         HttpClientBuilder builder =
                 HttpClients.custom()
                         .setDefaultHeaders(headers)
