@@ -27,6 +27,7 @@ import java.security.PrivilegedActionException;
 import java.security.PrivilegedExceptionAction;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -54,6 +55,10 @@ public abstract class ConfigModule {
     public static final String CRYOSTAT_AGENT_CALLBACK = "cryostat.agent.callback";
     public static final String CRYOSTAT_AGENT_REALM = "cryostat.agent.realm";
     public static final String CRYOSTAT_AGENT_AUTHORIZATION = "cryostat.agent.authorization";
+    public static final String CRYOSTAT_AGENT_AUTHORIZATION_TYPE =
+            "cryostat.agent.authorization.type";
+    public static final String CRYOSTAT_AGENT_AUTHORIZATION_VALUE =
+            "cryostat.agent.authorization.value";
 
     public static final String CRYOSTAT_AGENT_WEBCLIENT_SSL_TRUST_ALL =
             "cryostat.agent.webclient.ssl.trust-all";
@@ -163,8 +168,26 @@ public abstract class ConfigModule {
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_AUTHORIZATION)
-    public static String provideCryostatAgentAuthorization(Config config) {
-        return config.getValue(CRYOSTAT_AGENT_AUTHORIZATION, String.class);
+    public static Optional<String> provideCryostatAgentAuthorization(
+            Config config,
+            AuthorizationType authorizationType,
+            @Named(CRYOSTAT_AGENT_AUTHORIZATION_VALUE) Optional<String> authorizationValue) {
+        Optional<String> opt = config.getOptionalValue(CRYOSTAT_AGENT_AUTHORIZATION, String.class);
+        return opt.or(() -> authorizationValue.map(authorizationType::apply));
+    }
+
+    @Provides
+    @Singleton
+    public static AuthorizationType provideCryostatAgentAuthorizationType(Config config) {
+        return AuthorizationType.fromString(
+                config.getValue(CRYOSTAT_AGENT_AUTHORIZATION_TYPE, String.class));
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_AUTHORIZATION_VALUE)
+    public static Optional<String> provideCryostatAgentAuthorizationValue(Config config) {
+        return config.getOptionalValue(CRYOSTAT_AGENT_AUTHORIZATION_VALUE, String.class);
     }
 
     @Provides

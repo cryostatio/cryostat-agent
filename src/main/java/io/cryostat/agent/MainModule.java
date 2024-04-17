@@ -22,6 +22,8 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
+import java.util.HashSet;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -46,6 +48,7 @@ import dagger.Lazy;
 import dagger.Module;
 import dagger.Provides;
 import org.apache.commons.lang3.exception.ExceptionUtils;
+import org.apache.http.Header;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.impl.client.HttpClientBuilder;
@@ -152,14 +155,17 @@ public abstract class MainModule {
     @Singleton
     public static HttpClient provideHttpClient(
             SSLContext sslContext,
-            @Named(ConfigModule.CRYOSTAT_AGENT_AUTHORIZATION) String authorization,
+            AuthorizationType authorizationType,
+            @Named(ConfigModule.CRYOSTAT_AGENT_AUTHORIZATION) Optional<String> authorization,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_SSL_VERIFY_HOSTNAME)
                     boolean verifyHostname,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_CONNECT_TIMEOUT_MS) int connectTimeout,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_TIMEOUT_MS) int responseTimeout) {
+        Set<Header> headers = new HashSet<>();
+        authorization.map(v -> new BasicHeader("Authorization", v)).ifPresent(headers::add);
         HttpClientBuilder builder =
                 HttpClients.custom()
-                        .setDefaultHeaders(Set.of(new BasicHeader("Authorization", authorization)))
+                        .setDefaultHeaders(headers)
                         .setSSLContext(sslContext)
                         .setDefaultRequestConfig(
                                 RequestConfig.custom()
@@ -192,8 +198,7 @@ public abstract class MainModule {
             @Named(JVM_ID) String jvmId,
             @Named(ConfigModule.CRYOSTAT_AGENT_APP_NAME) String appName,
             @Named(ConfigModule.CRYOSTAT_AGENT_BASEURI) URI baseUri,
-            @Named(ConfigModule.CRYOSTAT_AGENT_REALM) String realm,
-            @Named(ConfigModule.CRYOSTAT_AGENT_AUTHORIZATION) String authorization) {
+            @Named(ConfigModule.CRYOSTAT_AGENT_REALM) String realm) {
         return new CryostatClient(
                 executor, objectMapper, http, instanceId, jvmId, appName, baseUri, realm);
     }
