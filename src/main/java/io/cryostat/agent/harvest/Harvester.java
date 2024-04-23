@@ -48,6 +48,9 @@ import org.slf4j.LoggerFactory;
 
 public class Harvester implements FlightRecorderListener {
 
+    public static final String RECORDING_NAME_ON_EXIT = "onexit";
+    public static final String RECORDING_NAME_HARVESTER_SNAPSHOT = "harvester_snapshot";
+
     private final Logger log = LoggerFactory.getLogger(getClass());
 
     private final ScheduledExecutorService executor;
@@ -382,11 +385,15 @@ public class Harvester implements FlightRecorderListener {
     }
 
     public static class RecordingSettings implements UnaryOperator<Recording> {
+        public String name;
         public long maxSize;
         public long maxAge;
 
         @Override
         public Recording apply(Recording r) {
+            if (StringUtils.isNotBlank(name)) {
+                r.setName(name);
+            }
             if (maxSize > 0) {
                 r.setMaxSize(maxSize);
             }

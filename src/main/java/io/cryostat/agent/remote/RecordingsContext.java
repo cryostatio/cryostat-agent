@@ -25,7 +25,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -35,6 +34,7 @@ import java.util.stream.Collectors;
 import javax.inject.Inject;
 
 import io.cryostat.agent.FlightRecorderHelper;
+import io.cryostat.agent.harvest.Harvester;
 import io.cryostat.agent.util.StringUtils;
 import io.cryostat.core.serialization.SerializableRecordingDescriptor;
 import io.cryostat.core.templates.MutableTemplateService.InvalidEventTemplateException;
@@ -43,6 +43,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
 import jdk.jfr.Recording;
+import jdk.jfr.RecordingState;
 import org.apache.http.HttpStatus;
 import org.eclipse.microprofile.config.Config;
 import org.slf4j.Logger;
@@ -130,6 +131,10 @@ class RecordingsContext implements RemoteContext {
         try (OutputStream response = exchange.getResponseBody()) {
             List<SerializableRecordingDescriptor> recordings =
                     flightRecorder.getRecordings().stream()
+                            .filter(
+                                    r ->
+                                            !Harvester.RECORDING_NAME_HARVESTER_SNAPSHOT.equals(
+                                                    r.getName()))
                             .map(SerializableRecordingDescriptor::new)
                             .collect(Collectors.toList());
             exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
@@ -288,8 +293,16 @@ class RecordingsContext implements RemoteContext {
                 }
             }
             if (shouldStop) {
-                if (!recording.stop()) {
-                    sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
+                try {
+                    if (!recording.stop()) {
+                        sendHeader(exchange, HttpStatus.SC_INTERNAL_SERVER_ERROR);
+                    }
+                } catch (IllegalStateException e) {
+                    sendHeader(
+                            exchange,
+                            recording.getState().equals(RecordingState.STOPPED)
+                                    ? HttpStatus.SC_NO_CONTENT
+                                    : HttpStatus.SC_INTERNAL_SERVER_ERROR);
                 }
             }
 
@@ -316,10 +329,13 @@ class RecordingsContext implements RemoteContext {
 
     private void handleDelete(HttpExchange exchange, long recordingId) throws IOException {
         try {
-            flightRecorder.getRecording(recordingId).orElseThrow().close();
+            Optional<Recording> opt = flightRecorder.getRecording(recordingId);
+            if (opt.isEmpty()) {
+                sendHeader(exchange, HttpStatus.SC_NOT_FOUND);
+                return;
+            }
+            opt.get().close();
             sendHeader(exchange, HttpStatus.SC_NO_CONTENT);
-        } catch (NoSuchElementException e) {
-            sendHeader(exchange, HttpStatus.SC_NOT_FOUND);
         } catch (Exception e) {
             log.error("Operation failed", e);
             sendHeader(exchange, HttpStatus.SC_INTERNAL_SERVER_ERROR);
