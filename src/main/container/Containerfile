@@ -1,0 +1,2 @@
+FROM docker.io/library/busybox:latest
+COPY target/cryostat-agent-*-shaded.jar /agent/
