@@ -1,2 +1,4 @@
-FROM docker.io/library/busybox:latest
-COPY target/cryostat-agent-*-shaded.jar /agent/
+ARG BASEIMAGE=docker.io/library/busybox:latest
+FROM ${BASEIMAGE}
+ARG OUTDIR=/agent
+COPY target/cryostat-agent-*-shaded.jar ${OUTDIR}/
