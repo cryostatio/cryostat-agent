@@ -388,7 +388,6 @@ public class Harvester implements FlightRecorderListener {
         public String name;
         public long maxSize;
         public long maxAge;
-        public boolean toDisk = true;
 
         @Override
         public Recording apply(Recording r) {
@@ -401,7 +400,6 @@ public class Harvester implements FlightRecorderListener {
             if (maxAge > 0) {
                 r.setMaxAge(Duration.ofMillis(maxAge));
             }
-            r.setToDisk(toDisk);
             return r;
         }
     }
