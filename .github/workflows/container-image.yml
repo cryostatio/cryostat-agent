@@ -74,9 +74,9 @@ jobs:
       pull-requests: write
       statuses: write
     outputs:
-      image: ${{ steps.push-to-quay.outputs.image }}
+      quay-image: ${{ steps.quakus-test-image.outputs.image }}
     env:
-      IMAGE_VERSION: ${{ needs.build-agent.outputs.image-version }}
+      agent-version: ${{ needs.build-agent.outputs.image-version }}
     name: Build Java ${{ matrix.java }}
     steps:
     - uses: actions/checkout@v4
@@ -128,7 +128,7 @@ jobs:
     - name: Set DOCKER_HOST environment variable
       run: echo "DOCKER_HOST=unix:///run/user/$(id -u)/podman/podman.sock" >> "$GITHUB_ENV"
     - name: Build application
-      run: ./mvnw -B -U -Dio.cryostat.agent.version=${{ env.IMAGE_VERSION }} clean verify
+      run: ./mvnw -B -U -Dio.cryostat.agent.version=${{ env.agent-version }} clean verify
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     - name: Build container images and manifest
@@ -137,7 +137,7 @@ jobs:
       with:
         image: ${{ env.CI_IMG }}
         archs: amd64
-        tags: ${{ env.IMAGE_VERSION }}
+        tags: ${{ env.agent-version }}
         containerfiles: |
           ./src/main/docker/Dockerfile.jvm
     - name: Push to quay.io
@@ -157,7 +157,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build-quarkus-test-app]
     env:
-      image: ${{ needs.build-quarkus-test-app.outputs.image }}
+      image: ${{ needs.build-quarkus-test-app.outputs.quay-image }}
     permissions:
       pull-requests: write
     steps:
