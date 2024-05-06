@@ -90,11 +90,6 @@ jobs:
         ref: main
         submodules: true
         fetch-depth: 0
-    - name: maven-settings
-      uses: s4u/maven-settings-action@v2
-      with:
-        servers: '[{"id": "github", "username": "dummy", "password": "${{ secrets.GITHUB_TOKEN }}"}]'
-        githubServer: false
     - name: Build application
       run: ./mvnw -B -U -Dio.cryostat.agent.version=${{ env.agent-version }} clean verify
       env:
