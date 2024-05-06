@@ -347,14 +347,14 @@ public class Harvester implements FlightRecorderListener {
 
     private Future<Void> uploadOngoing(PushType pushType, RecordingSettings settings) {
         Recording recording = settings.apply(flightRecorder.takeSnapshot());
-        if (recording.getSize() < 1) {
-            return CompletableFuture.failedFuture(
-                    new IllegalStateException("No source recording data"));
-        }
         try {
             Path exitPath = Files.createTempFile(null, null);
             Files.write(exitPath, new byte[0], StandardOpenOption.TRUNCATE_EXISTING);
             recording.dump(exitPath);
+            if (Files.size(exitPath) < 1) {
+                return CompletableFuture.failedFuture(
+                        new IllegalStateException("No source recording data"));
+            }
             log.trace("Dumping {}({}) to {}", recording.getName(), recording.getId(), exitPath);
             return client.upload(pushType, sownRecording, maxFiles, exitPath)
                     .thenRun(
