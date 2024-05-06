@@ -151,7 +151,7 @@ jobs:
         password: ${{ secrets.QUAY_PASSWORD }}
     - name: store quarkus-test image as output
       id: quarkus-test-image
-      run: echo "image=${{ steps.push-to-quay.outputs.registry-path }}" >> "$GITHUB_OUTPUT"
+      run: echo "image=${{ steps.push-to-quay.outputs.registry-path }}" >> $GITHUB_OUTPUT
 
   comment-image:
     runs-on: ubuntu-latest
