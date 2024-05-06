@@ -5,38 +5,27 @@ concurrency:
   cancel-in-progress: true
 
 on:
-  #push:
-  #  branches:
-  #    - main
-  #    - v[0-9]+
-  #    - v[0-9]+.[0-9]+
-  #    - cryostat-v[0-9]+.[0-9]+
-  issues:
-    types:
-      - opened
-      - edited
-      - reopened
-  pull_request_target:
-    types:
-      - opened
-      - edited
-      - reopened
-      - labeled
-      - synchronize
+  push:
+    branches:
+      - main
+      - v[0-9]+
+      - v[0-9]+.[0-9]+
+      - cryostat-v[0-9]+.[0-9]+
 
 env:
   OPENSUSE_UNOFFICIAL_LIBCONTAINERS_KEY_URL: "https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/unstable/xUbuntu_22.04/Release.key"
   OPENSUSE_UNOFFICIAL_LIBCONTAINERS_SOURCE_URL: "https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/unstable/xUbuntu_22.04"
-  CI_USER: miwan
-  CI_REGISTRY: quay.io/miwan
-  CI_IMG: quay.io/miwan/quarkus-test
+  CI_USER: cryostat+bot
+  CI_REGISTRY: quay.io/cryostat
+  CI_IMG: quay.io/cryostat/quarkus-test
 
 jobs:
   check-before-build:
     runs-on: ubuntu-latest
+    if: ${{ github.repository_owner == 'cryostatio' }}
     steps:
     - name: Fail if safe-to-test is not applied
-      if: github.repository_owner == 'cryostatio' && (!contains(github.event.pull_request.labels.*.name, 'safe-to-test'))
+      if: (!contains(github.event.pull_request.labels.*.name, 'safe-to-test'))
       run: exit 1
 
   build-agent:
@@ -97,7 +86,7 @@ jobs:
         cache: 'maven'
     - uses: actions/checkout@v4
       with:
-        repository: mwangggg/quarkus-test
+        repository: ${{ github.repository_owner }}/quarkus-test
         ref: main
         submodules: true
         fetch-depth: 0
@@ -148,7 +137,7 @@ jobs:
         tags: ${{ steps.buildah-build.outputs.tags }}
         registry: ${{ env.CI_REGISTRY }}
         username: ${{ env.CI_USER }}
-        password: ${{ secrets.QUAY_PASSWORD }}
+        password: ${{ secrets.REPOSITORY_PASSWORD }}
     - name: store quarkus-test image as output
       id: quarkus-test-image
       run: echo "image=${{ steps.push-to-quay.outputs.registry-path }}" >> $GITHUB_OUTPUT
