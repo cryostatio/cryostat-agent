@@ -5,62 +5,108 @@ concurrency:
   cancel-in-progress: true
 
 on:
-  push:
-    branches:
-      - main
-      - v[0-9]+
-      - v[0-9]+.[0-9]+
-      - cryostat-v[0-9]+.[0-9]+
+  #push:
+  #  branches:
+  #    - main
+  #    - v[0-9]+
+  #    - v[0-9]+.[0-9]+
+  #    - cryostat-v[0-9]+.[0-9]+
+  issues:
+    types:
+      - opened
+      - edited
+      - reopened
+  pull_request_target:
+    types:
+      - opened
+      - edited
+      - reopened
+      - labeled
+      - synchronize
 
 env:
   OPENSUSE_UNOFFICIAL_LIBCONTAINERS_KEY_URL: "https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/unstable/xUbuntu_22.04/Release.key"
   OPENSUSE_UNOFFICIAL_LIBCONTAINERS_SOURCE_URL: "https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/unstable/xUbuntu_22.04"
-  CI_USER: cryostat+bot
-  CI_REGISTRY: quay.io/cryostat
-  CI_IMG: quay.io/cryostat/quarkus-test
+  CI_USER: miwan
+  CI_REGISTRY: quay.io/miwan
+  CI_IMG: quay.io/miwan/quarkus-test
 
 jobs:
-  get-pom-properties:
+  check-before-build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+    - name: Fail if safe-to-test is not applied
+      if: github.repository_owner == 'cryostatio' && (!contains(github.event.pull_request.labels.*.name, 'safe-to-test'))
+      run: exit 1
+
+  build-agent:
+    runs-on: ubuntu-latest
+    needs: [check-before-build]
+    outputs: 
+      image-version: ${{ steps.get-agent-version.outputs.agent-version }}
+    steps:
+    - uses: actions/checkout@v4
       with:
         submodules: true
         fetch-depth: 0
-    - id: query-pom
-      name: Get properties from POM
-      # Query POM image version and save as output parameter
+    - id: get-agent-version
       run: |
-        IMAGE_VERSION="$(mvn -q -DforceStdout help:evaluate -Dexpression=project.version)"
-        echo "::set-output name=image-version::$IMAGE_VERSION"
-    outputs:
-      image-version: ${{ steps.query-pom.outputs.image-version }}
+        echo "agent-version=$(mvn -q -DforceStdout help:evaluate -Dexpression=project.version)" >> $GITHUB_OUTPUT
+        - uses: actions/setup-java@v3
+    - uses: actions/setup-java@v3
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+    - uses: actions/cache@v3
+      with:
+        path: ~/.m2
+        key: ${{ runner.os }}-build-${{ hashFiles('**/pom.xml') }}
+    - run: mvn -B -U clean install
 
-  build-and-test:
+  build-quarkus-test-app:
+    needs: [build-agent]
     runs-on: ubuntu-latest
-    needs: [get-pom-properties]
     strategy:
       matrix:
         java: ['17']
-    env:
-      IMAGE_VERSION: ${{ needs.get-pom-properties.outputs.image-version }}
-      cache-name: cache-yarn
-    name: Build and test Java ${{ matrix.java }}
     permissions:
       packages: write
       contents: read
-    if: ${{ github.repository_owner == 'cryostatio' }}
+      pull-requests: write
+      statuses: write
+    outputs:
+      image: ${{ steps.push-to-quay.outputs.image }}
+    env:
+      IMAGE_VERSION: ${{ needs.get-pom-properties.outputs.image-version }}
+    name: Build Java ${{ matrix.java }}
     steps:
     - uses: actions/checkout@v3
       with:
         submodules: true
         fetch-depth: 0
+    - uses: actions/cache@v3
+      with:
+        path: ~/.m2
+        key: ${{ runner.os }}-build-${{ hashFiles('**/pom.xml') }}
+        restore-keys: |
+          ${{ runner.os }}-build-
+          ${{ runner.os }}-
     - uses: actions/setup-java@v3
       with:
         java-version: ${{ matrix.java }}
         distribution: 'temurin'
-        cache: 'maven'clear
-        
+        cache: 'maven'
+    - uses: actions/checkout@v3
+      with:
+        repository: miwan/quarkus-test
+        ref: main
+        submodules: true
+        fetch-depth: 0
+    - name: maven-settings
+      uses: s4u/maven-settings-action@v2
+      with:
+        servers: '[{"id": "github", "username": "dummy", "password": "${{ secrets.GITHUB_TOKEN }}"}]'
+        githubServer: false
     - name: Install podman v4
       run: |
         echo "deb $OPENSUSE_UNOFFICIAL_LIBCONTAINERS_SOURCE_URL/ /" | sudo tee /etc/apt/sources.list.d/devel:kubic:libcontainers:unstable.list
@@ -83,16 +129,15 @@ jobs:
     - name: Set DOCKER_HOST environment variable
       run: echo "DOCKER_HOST=unix:///run/user/$(id -u)/podman/podman.sock" >> "$GITHUB_ENV"
     - name: Build application
-      run: ./mvnw -B -U clean verify
-    - name: Delete local integration test image
-      run: podman rmi ${{ env.CI_IMG }}:dev ${{ env.CI_IMG }}:${{ env.IMAGE_VERSION }}
-      continue-on-error: true
+      run: ./mvnw -B -U -Dio.cryostat.agent.version=${{ env.IMAGE_VERSION }} clean verify
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     - name: Build container images and manifest
       id: buildah-build
       uses: redhat-actions/buildah-build@v2
       with:
         image: ${{ env.CI_IMG }}
-        archs: amd64, arm64
+        archs: amd64
         tags: ${{ env.IMAGE_VERSION }}
         containerfiles: |
           ./src/main/docker/Dockerfile.jvm
@@ -100,10 +145,31 @@ jobs:
       id: push-to-quay
       uses: redhat-actions/push-to-registry@v2
       with:
-        image: cryostat
+        image: quarkus-test
         tags: ${{ steps.buildah-build.outputs.tags }}
         registry: ${{ env.CI_REGISTRY }}
         username: ${{ env.CI_USER }}
-        password: ${{ secrets.REGISTRY_PASSWORD }}
-    - name: Print image URL
-      run: echo "Image pushed to ${{ steps.push-to-quay.outputs.registry-paths }}"
+        password: ${{ secrets.QUAY_PASSWORD }}
+    - name: store quarkus-test image as output
+      id: quarkus-test-image
+      run: echo "image=${{ steps.push-to-quay.outputs.registry-path }}" >> "$GITHUB_OUTPUT"
+
+  comment-image:
+    runs-on: ubuntu-latest
+    needs: [build-quarkus-test-app]
+    env:
+      image: ${{ needs.build-quarkus-test-app.outputs.image }}
+    permissions:
+      pull-requests: write
+    steps:
+    - name: Create markdown table
+      id: md-table
+      uses: petems/csv-to-md-table-action@v3.0.0
+      with:
+        csvinput: |
+          ARCH, IMAGE
+          amd64, ${{ env.image }}
+    - uses: thollander/actions-comment-pull-request@v2
+      with:
+        message: |-
+          ${{ steps.md-table.outputs.markdown-table }}
