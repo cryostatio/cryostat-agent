@@ -86,7 +86,7 @@ jobs:
         cache: 'maven'
     - uses: actions/checkout@v4
       with:
-        repository: ${{ github.repository_owner }}/quarkus-test
+        repository: ${{ github.repository_owner }}/test-applications
         ref: main
         submodules: true
         fetch-depth: 0
@@ -107,7 +107,7 @@ jobs:
         archs: amd64
         tags: ${{ env.agent-version }}
         containerfiles: |
-          ./src/main/docker/Dockerfile.jvm
+          ./quarkus-test/src/main/docker/Dockerfile.jvm
     - name: Push to quay.io
       id: push-to-quay
       uses: redhat-actions/push-to-registry@v2
