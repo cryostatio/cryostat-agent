@@ -56,7 +56,7 @@ jobs:
       with:
         java-version: '17'
         distribution: 'temurin'
-    - uses: actions/cache@v3
+    - uses: actions/cache@v4
       with:
         path: ~/.m2
         key: ${{ runner.os }}-build-${{ hashFiles('**/pom.xml') }}
@@ -79,11 +79,11 @@ jobs:
       IMAGE_VERSION: ${{ needs.build-agent.outputs.image-version }}
     name: Build Java ${{ matrix.java }}
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
       with:
         submodules: true
         fetch-depth: 0
-    - uses: actions/cache@v3
+    - uses: actions/cache@v4
       with:
         path: ~/.m2
         key: ${{ runner.os }}-build-${{ hashFiles('**/pom.xml') }}
@@ -95,7 +95,7 @@ jobs:
         java-version: ${{ matrix.java }}
         distribution: 'temurin'
         cache: 'maven'
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
       with:
         repository: mwangggg/quarkus-test
         ref: main
