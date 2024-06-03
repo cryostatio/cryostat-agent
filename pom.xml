@@ -101,7 +101,7 @@
   <org.jsoup.version>1.15.3</org.jsoup.version>
 
   <maven-source-plugin.version>3.3.1</maven-source-plugin.version>
-  <maven-javadoc-plugin.version>3.6.3</maven-javadoc-plugin.version>
+  <maven-javadoc-plugin.version>3.7.0</maven-javadoc-plugin.version>
   <jreleaser-maven-plugin.version>1.11.0</jreleaser-maven-plugin.version>
 
   <shade.prefix>io.cryostat.agent.shaded</shade.prefix>
