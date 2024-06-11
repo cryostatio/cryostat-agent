@@ -60,7 +60,7 @@ public class TriggerParser {
                         log.error("Failed to parse trigger duration constraint", dtpe);
                     }
                 } else {
-                    log.error("Template " + templateName + " not found. Skipping trigger.");
+                    log.warn("Template " + templateName + " not found. Skipping trigger.");
                 }
             }
         }

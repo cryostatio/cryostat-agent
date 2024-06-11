@@ -157,7 +157,7 @@ public class Registration {
                                                             .get();
                                                 } catch (ExecutionException
                                                         | InterruptedException e) {
-                                                    log.warn(
+                                                    log.error(
                                                             "Could not check registration status",
                                                             e);
                                                 }
@@ -260,7 +260,7 @@ public class Registration {
         try {
             f.get();
         } catch (ExecutionException | InterruptedException e) {
-            log.warn("Failed to update", e);
+            log.error("Failed to update", e);
         }
     }
 
@@ -270,7 +270,7 @@ public class Registration {
         long pid = ProcessHandle.current().pid();
         String javaMain = System.getProperty("sun.java.command", System.getenv("JAVA_MAIN_CLASS"));
         if (StringUtils.isBlank(javaMain)) {
-            log.error("Unable to determine application mainclass");
+            log.warn("Unable to determine application mainclass");
             javaMain = null;
         }
         long startTime =
@@ -326,7 +326,7 @@ public class Registration {
 
     CompletableFuture<Void> deregister() {
         if (!this.pluginInfo.isInitialized()) {
-            log.info("Deregistration requested before registration complete!");
+            log.warn("Deregistration requested before registration complete!");
             return CompletableFuture.completedFuture(null);
         }
         return cryostat.deleteCredentials(webServer.getCredentialId())
