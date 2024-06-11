@@ -120,7 +120,7 @@ public class CryostatClient {
                                         + pluginInfo.getId()
                                         + "?token="
                                         + pluginInfo.getToken()));
-        log.info("{}", req);
+        log.trace("{}", req);
         return supply(req, (res) -> logResponse(req, res)).thenApply(this::isOkStatus);
     }
 
@@ -131,7 +131,7 @@ public class CryostatClient {
                     new RegistrationInfo(
                             pluginInfo.getId(), realm, callback, pluginInfo.getToken());
             HttpPost req = new HttpPost(baseUri.resolve(DISCOVERY_API_PATH));
-            log.info("{}", req);
+            log.trace("{}", req);
             req.setEntity(
                     new StringEntity(
                             mapper.writeValueAsString(registrationInfo),
@@ -189,7 +189,7 @@ public class CryostatClient {
                             });
         }
         HttpGet req = new HttpGet(baseUri.resolve(CREDENTIALS_API_PATH + "/" + prevId));
-        log.info("{}", req);
+        log.trace("{}", req);
         return supply(req, (res) -> logResponse(req, res))
                 .handle(
                         (v, t) -> {
@@ -210,7 +210,7 @@ public class CryostatClient {
 
     private CompletableFuture<Integer> queryExistingCredentials(URI callback) {
         HttpGet req = new HttpGet(baseUri.resolve(CREDENTIALS_API_PATH));
-        log.info("{}", req);
+        log.trace("{}", req);
         return supply(req, (res) -> logResponse(req, res))
                 .handle(
                         (res, t) -> {
@@ -279,7 +279,7 @@ public class CryostatClient {
                                                         selfMatchExpression(callback),
                                                         ContentType.TEXT_PLAIN))
                                         .build());
-        log.info("{}", req);
+        log.trace("{}", req);
         req.setEntity(entityBuilder.build());
         return supply(req, (res) -> logResponse(req, res))
                 .thenApply(
@@ -321,7 +321,7 @@ public class CryostatClient {
             return CompletableFuture.completedFuture(null);
         }
         HttpDelete req = new HttpDelete(baseUri.resolve(CREDENTIALS_API_PATH + "/" + id));
-        log.info("{}", req);
+        log.trace("{}", req);
         return supply(req, (res) -> logResponse(req, res)).thenApply(res -> null);
     }
 
@@ -334,7 +334,7 @@ public class CryostatClient {
                                         + pluginInfo.getId()
                                         + "?token="
                                         + pluginInfo.getToken()));
-        log.info("{}", req);
+        log.trace("{}", req);
         return supply(req, (res) -> logResponse(req, res))
                 .thenApply(res -> assertOkStatus(req, res))
                 .thenApply(res -> null);
@@ -355,7 +355,7 @@ public class CryostatClient {
                     new StringEntity(
                             mapper.writeValueAsString(subtree), ContentType.APPLICATION_JSON));
 
-            log.info("{}", req);
+            log.trace("{}", req);
             return supply(req, (res) -> logResponse(req, res))
                     .thenApply(res -> assertOkStatus(req, res))
                     .thenApply(res -> null);
@@ -431,7 +431,7 @@ public class CryostatClient {
                 req,
                 (res) -> {
                     Instant finish = Instant.now();
-                    log.info(
+                    log.trace(
                             "{} {} ({} -> {}): {}/{}",
                             req.getMethod(),
                             res.getStatusLine().getStatusCode(),
@@ -445,7 +445,7 @@ public class CryostatClient {
     }
 
     private HttpResponse logResponse(HttpRequestBase req, HttpResponse res) {
-        log.info("{} {} : {}", req.getMethod(), req.getURI(), res.getStatusLine().getStatusCode());
+        log.trace("{} {} : {}", req.getMethod(), req.getURI(), res.getStatusLine().getStatusCode());
         return res;
     }
 
