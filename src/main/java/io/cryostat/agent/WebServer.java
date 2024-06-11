@@ -211,10 +211,10 @@ class WebServer {
             long start = System.nanoTime();
             String requestMethod = exchange.getRequestMethod();
             String path = exchange.getRequestURI().getPath();
-            log.info("{} {}", requestMethod, path);
+            log.trace("{} {}", requestMethod, path);
             chain.doFilter(exchange);
             long elapsed = System.nanoTime() - start;
-            log.info(
+            log.trace(
                     "{} {} : {} {}ms",
                     requestMethod,
                     path,
@@ -262,9 +262,9 @@ class WebServer {
                 }
             }
             if (negotiatedEncoding == null) {
-                log.info("Using no encoding");
+                log.trace("Using no encoding");
             } else {
-                log.info("Using '{}' encoding", negotiatedEncoding);
+                log.trace("Using '{}' encoding", negotiatedEncoding);
                 exchange.getResponseHeaders().put("Content-Encoding", List.of(negotiatedEncoding));
             }
             chain.doFilter(exchange);

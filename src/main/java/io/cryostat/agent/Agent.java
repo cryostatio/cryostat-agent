@@ -130,7 +130,7 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
         log.trace("agentmain arg: \"{}\"", agentmainArg);
         for (String pid : pids) {
             VirtualMachine vm = VirtualMachine.attach(pid);
-            log.info("Injecting agent into PID {}", pid);
+            log.trace("Injecting agent into PID {}", pid);
             try {
                 vm.loadAgent(Path.of(selfJarLocation()).toAbsolutePath().toString(), agentmainArg);
             } finally {
@@ -189,7 +189,7 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
         }
         return vms.stream()
                 .filter(vmFilter)
-                .peek(vmd -> log.info("Attaching to VM: {} {}", vmd.displayName(), vmd.id()))
+                .peek(vmd -> log.trace("Attaching to VM: {} {}", vmd.displayName(), vmd.id()))
                 .map(VirtualMachineDescriptor::id)
                 .collect(Collectors.toList());
     }
@@ -200,11 +200,10 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
 
     @Override
     public void accept(AgentArgs args) {
-        log.info("Cryostat Agent starting...");
         args.getProperties()
                 .forEach(
                         (k, v) -> {
-                            log.info("Set system property {} = {}", k, v);
+                            log.trace("Set system property {} = {}", k, v);
                             System.setProperty(k, v);
                         });
         AgentExitHandler agentExitHandler = null;
@@ -265,7 +264,7 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
                                 log.info("Registration state: {}", evt.state);
                                 break;
                             default:
-                                log.error("Unknown registration state: {}", evt.state);
+                                log.warn("Unknown registration state: {}", evt.state);
                                 break;
                         }
                     });
@@ -378,7 +377,7 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
 
         @Override
         public void handle(Signal sig) {
-            log.info("Caught SIG{}({})", sig.getName(), sig.getNumber());
+            log.debug("Caught SIG{}({})", sig.getName(), sig.getNumber());
             if (needsCleanup.getAndSet(false)) {
                 performCleanup(sig);
             }

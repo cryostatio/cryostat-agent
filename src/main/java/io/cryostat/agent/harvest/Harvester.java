@@ -118,10 +118,10 @@ public class Harvester implements FlightRecorderListener {
                     }
                     this.running = true;
                     if (StringUtils.isBlank(template)) {
-                        log.info("Template not specified");
+                        log.warn("Template not specified");
                     }
                     if (maxFiles <= 0) {
-                        log.info(
+                        log.warn(
                                 "Maximum number of files to keep within target is {} <= 0",
                                 maxFiles);
                     }
@@ -201,7 +201,7 @@ public class Harvester implements FlightRecorderListener {
 
     @Override
     public void recordingStateChanged(Recording recording) {
-        log.info("{}({}) {}", recording.getName(), recording.getId(), recording.getState().name());
+        log.debug("{}({}) {}", recording.getName(), recording.getId(), recording.getState().name());
         getTrackedRecordingById(recording.getId())
                 .ifPresent(
                         tr -> {
@@ -267,7 +267,7 @@ public class Harvester implements FlightRecorderListener {
                     try {
                         uploadOngoing(PushType.ON_STOP, exitSettings).get();
                     } catch (ExecutionException | InterruptedException e) {
-                        log.warn("Exit upload failed", e);
+                        log.error("Exit upload failed", e);
                         throw new CompletionException(e);
                     } finally {
                         safeCloseCurrentRecording();
@@ -363,7 +363,7 @@ public class Harvester implements FlightRecorderListener {
                                     Files.deleteIfExists(exitPath);
                                     log.trace("Deleted temp file {}", exitPath);
                                 } catch (IOException ioe) {
-                                    log.warn("Failed to clean up snapshot dump file", ioe);
+                                    log.error("Failed to clean up snapshot dump file", ioe);
                                 }
                             });
         } catch (IOException e) {
