@@ -59,6 +59,8 @@ public class Registration {
     private final int jmxPort;
     private final int registrationRetryMs;
     private final int registrationCheckMs;
+    private final boolean registrationJmxIgnore;
+    private final boolean registrationJmxUseCallbackHost;
 
     private final PluginInfo pluginInfo = new PluginInfo();
     private final Set<Consumer<RegistrationEvent>> listeners = new HashSet<>();
@@ -77,7 +79,9 @@ public class Registration {
             String hostname,
             int jmxPort,
             int registrationRetryMs,
-            int registrationCheckMs) {
+            int registrationCheckMs,
+            boolean registrationJmxIgnore,
+            boolean registrationJmxUseCallbackHost) {
         this.executor = executor;
         this.cryostat = cryostat;
         this.callback = callback;
@@ -90,6 +94,8 @@ public class Registration {
         this.jmxPort = jmxPort;
         this.registrationRetryMs = registrationRetryMs;
         this.registrationCheckMs = registrationCheckMs;
+        this.registrationJmxIgnore = registrationJmxIgnore;
+        this.registrationJmxUseCallbackHost = registrationJmxUseCallbackHost;
     }
 
     void start() {
@@ -296,12 +302,13 @@ public class Registration {
         discoveryNodes.add(
                 new DiscoveryNode(appName + "-agent-" + pluginInfo.getId(), NODE_TYPE, httpSelf));
 
-        if (jmxPort > 0) {
+        if (!registrationJmxIgnore && jmxPort > 0) {
             uri =
                     URI.create(
                             String.format(
                                     "service:jmx:rmi:///jndi/rmi://%s:%d/jmxrmi",
-                                    hostname, jmxPort));
+                                    registrationJmxUseCallbackHost ? uri.getHost() : hostname,
+                                    jmxPort));
             port = jmxPort;
             DiscoveryNode.Target jmxSelf =
                     new DiscoveryNode.Target(

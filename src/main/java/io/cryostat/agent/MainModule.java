@@ -221,8 +221,11 @@ public abstract class MainModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_HOSTNAME) String hostname,
             @Named(ConfigModule.CRYOSTAT_AGENT_APP_JMX_PORT) int jmxPort,
             @Named(ConfigModule.CRYOSTAT_AGENT_REGISTRATION_RETRY_MS) int registrationRetryMs,
-            @Named(ConfigModule.CRYOSTAT_AGENT_REGISTRATION_CHECK_MS) int registrationCheckMs) {
-
+            @Named(ConfigModule.CRYOSTAT_AGENT_REGISTRATION_CHECK_MS) int registrationCheckMs,
+            @Named(ConfigModule.CRYOSTAT_AGENT_REGISTRATION_JMX_IGNORE)
+                    boolean registrationJmxIgnore,
+            @Named(ConfigModule.CRYOSTAT_AGENT_REGISTRATION_JMX_USE_CALLBACK_HOST)
+                    boolean registrationJmxUseCallbackHost) {
         Logger log = LoggerFactory.getLogger(Registration.class);
         return new Registration(
                 Executors.newSingleThreadScheduledExecutor(
@@ -249,7 +252,9 @@ public abstract class MainModule {
                 hostname,
                 jmxPort,
                 registrationRetryMs,
-                registrationCheckMs);
+                registrationCheckMs,
+                registrationJmxIgnore,
+                registrationJmxUseCallbackHost);
     }
 
     @Provides
