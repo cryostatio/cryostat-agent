@@ -85,6 +85,10 @@ public abstract class ConfigModule {
             "cryostat.agent.registration.retry-ms";
     public static final String CRYOSTAT_AGENT_REGISTRATION_CHECK_MS =
             "cryostat.agent.registration.check-ms";
+    public static final String CRYOSTAT_AGENT_REGISTRATION_JMX_IGNORE =
+            "cryostat.agent.registration.jmx.ignore";
+    public static final String CRYOSTAT_AGENT_REGISTRATION_JMX_USE_CALLBACK_HOST =
+            "cryostat.agent.registration.jmx.use-callback-host";
     public static final String CRYOSTAT_AGENT_EXIT_SIGNALS = "cryostat.agent.exit.signals";
     public static final String CRYOSTAT_AGENT_EXIT_DEREGISTRATION_TIMEOUT_MS =
             "cryostat.agent.exit.deregistration.timeout-ms";
@@ -314,6 +318,20 @@ public abstract class ConfigModule {
     @Named(CRYOSTAT_AGENT_REGISTRATION_CHECK_MS)
     public static int provideCryostatAgentRegistrationCheckMs(Config config) {
         return config.getValue(CRYOSTAT_AGENT_REGISTRATION_CHECK_MS, int.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_REGISTRATION_JMX_IGNORE)
+    public static boolean provideCryostatAgentRegistrationJmxIgnore(Config config) {
+        return config.getValue(CRYOSTAT_AGENT_REGISTRATION_JMX_IGNORE, boolean.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_REGISTRATION_JMX_USE_CALLBACK_HOST)
+    public static boolean provideCryostatAgentRegistrationJmxUseCallbackHost(Config config) {
+        return config.getValue(CRYOSTAT_AGENT_REGISTRATION_JMX_USE_CALLBACK_HOST, boolean.class);
     }
 
     @Provides
