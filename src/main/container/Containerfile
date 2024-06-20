@@ -1,0 +1,4 @@
+ARG BASEIMAGE=docker.io/library/busybox:latest
+FROM ${BASEIMAGE}
+ARG OUTDIR=/agent
+COPY target/cryostat-agent-*-shaded.jar ${OUTDIR}/
