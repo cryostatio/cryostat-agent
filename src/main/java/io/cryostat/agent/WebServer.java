@@ -16,7 +16,6 @@
 package io.cryostat.agent;
 
 import java.io.IOException;
-import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -29,11 +28,11 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.stream.Collectors;
 import java.util.zip.DeflaterOutputStream;
 
 import io.cryostat.agent.remote.RemoteContext;
+import io.cryostat.core.sys.FileSystem;
 
 import com.sun.net.httpserver.BasicAuthenticator;
 import com.sun.net.httpserver.Filter;
@@ -52,14 +51,12 @@ class WebServer {
 
     private final Lazy<Set<RemoteContext>> remoteContexts;
     private final Lazy<CryostatClient> cryostat;
-    private final ScheduledExecutorService executor;
-    private final String host;
-    private final int port;
     private final Credentials credentials;
     private final URI callback;
     private final Lazy<Registration> registration;
     private HttpServer http;
     private volatile int credentialId = -1;
+    private final FileSystem fs;
 
     private final AgentAuthenticator agentAuthenticator;
     private final RequestLoggingFilter requestLoggingFilter;
@@ -68,36 +65,27 @@ class WebServer {
     WebServer(
             Lazy<Set<RemoteContext>> remoteContexts,
             Lazy<CryostatClient> cryostat,
-            ScheduledExecutorService executor,
-            String host,
-            int port,
+            HttpServer http,
             MessageDigest digest,
             String user,
             int passLength,
             URI callback,
-            Lazy<Registration> registration) {
+            Lazy<Registration> registration,
+            FileSystem fs) {
         this.remoteContexts = remoteContexts;
         this.cryostat = cryostat;
-        this.executor = executor;
-        this.host = host;
-        this.port = port;
+        this.http = http;
         this.credentials = new Credentials(digest, user, passLength);
         this.callback = callback;
         this.registration = registration;
+        this.fs = fs;
 
         this.agentAuthenticator = new AgentAuthenticator();
         this.requestLoggingFilter = new RequestLoggingFilter();
         this.compressionFilter = new CompressionFilter();
     }
 
-    void start() throws IOException {
-        if (this.http != null) {
-            stop();
-        }
-
-        this.http = HttpServer.create(new InetSocketAddress(host, port), 0);
-        this.http.setExecutor(executor);
-
+    void start() {
         Set<RemoteContext> mergedContexts = new HashSet<>(remoteContexts.get());
         mergedContexts.add(new PingContext(registration));
         mergedContexts.stream()
@@ -109,7 +97,6 @@ class WebServer {
                             ctx.getFilters().add(requestLoggingFilter);
                             ctx.getFilters().add(compressionFilter);
                         });
-
         this.http.start();
     }
 

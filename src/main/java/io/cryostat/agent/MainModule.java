@@ -15,12 +15,22 @@
  */
 package io.cryostat.agent;
 
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.InetSocketAddress;
 import java.net.URI;
+import java.nio.charset.Charset;
 import java.security.KeyManagementException;
+import java.security.KeyStore;
+import java.security.KeyStoreException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.security.UnrecoverableKeyException;
+import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
+import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.util.HashSet;
 import java.util.Objects;
@@ -32,8 +42,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.inject.Named;
 import javax.inject.Singleton;
+import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLEngine;
 import javax.net.ssl.TrustManager;
+import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
 
 import io.cryostat.agent.harvest.HarvestModule;
@@ -42,12 +55,18 @@ import io.cryostat.agent.remote.RemoteModule;
 import io.cryostat.agent.triggers.TriggerModule;
 import io.cryostat.core.JvmIdentifier;
 import io.cryostat.core.net.IDException;
+import io.cryostat.core.sys.FileSystem;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sun.net.httpserver.HttpServer;
+import com.sun.net.httpserver.HttpsConfigurator;
+import com.sun.net.httpserver.HttpsParameters;
+import com.sun.net.httpserver.HttpsServer;
 import dagger.Lazy;
 import dagger.Module;
 import dagger.Provides;
+import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.http.Header;
 import org.apache.http.client.HttpClient;
@@ -70,6 +89,8 @@ public abstract class MainModule {
     // one for outbound HTTP requests, one for incoming HTTP requests, and one as a general worker
     private static final int NUM_WORKER_THREADS = 3;
     private static final String JVM_ID = "JVM_ID";
+    private static final String HTTP_CLIENT_SSL_CTX = "HTTP_CLIENT_SSL_CTX";
+    private static final String HTTP_SERVER_SSL_CTX = "HTTP_SERVER_SSL_CTX";
 
     @Provides
     @Singleton
@@ -95,38 +116,38 @@ public abstract class MainModule {
     public static WebServer provideWebServer(
             Lazy<Set<RemoteContext>> remoteContexts,
             Lazy<CryostatClient> cryostat,
-            ScheduledExecutorService executor,
-            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_HOST) String host,
-            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_PORT) int port,
+            HttpServer http,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_CREDENTIALS_PASS_HASH_FUNCTION)
                     MessageDigest digest,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_CREDENTIALS_USER) String user,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_CREDENTIALS_PASS_LENGTH) int passLength,
             @Named(ConfigModule.CRYOSTAT_AGENT_CALLBACK) URI callback,
-            Lazy<Registration> registration) {
+            Lazy<Registration> registration,
+            FileSystem fs) {
         return new WebServer(
                 remoteContexts,
                 cryostat,
-                executor,
-                host,
-                port,
+                http,
                 digest,
                 user,
                 passLength,
                 callback,
-                registration);
+                registration,
+                fs);
     }
 
     @Provides
     @Singleton
-    public static SSLContext provideSslContext(
-            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_SSL_TRUST_ALL) boolean trustAll) {
+    @Named(HTTP_CLIENT_SSL_CTX)
+    public static SSLContext provideClientSslContext(
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_VERSION) String clientTlsVersion,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUST_ALL) boolean trustAll) {
         try {
             if (!trustAll) {
                 return SSLContext.getDefault();
             }
 
-            SSLContext sslCtx = SSLContext.getInstance("TLSv1.2");
+            SSLContext sslCtx = SSLContext.getInstance(clientTlsVersion);
             sslCtx.init(
                     null,
                     new TrustManager[] {
@@ -154,11 +175,90 @@ public abstract class MainModule {
 
     @Provides
     @Singleton
+    @Named(HTTP_SERVER_SSL_CTX)
+    public static Optional<SSLContext> provideServerSslContext(
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_VERSION) String serverTlsVersion,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_PASS)
+                    Optional<String> keyStorePassFile,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_PASS_CHARSET)
+                    String passFileCharset,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_FILE)
+                    Optional<String> keyStoreFilePath,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_TYPE) String keyStoreType,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_CERT_ALIAS) String certAlias,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_CERT_FILE)
+                    Optional<String> certFilePath,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_CERT_TYPE) String certType) {
+        boolean ssl =
+                keyStorePassFile.isPresent()
+                        && keyStoreFilePath.isPresent()
+                        && certFilePath.isPresent();
+        if (!ssl) {
+            if (keyStorePassFile.isPresent()
+                    || keyStoreFilePath.isPresent()
+                    || certFilePath.isPresent()) {
+                throw new IllegalArgumentException(
+                        "The file paths for the keystore, keystore password, and certificate must"
+                            + " ALL be provided to set up HTTPS connections. Otherwise, make sure"
+                            + " they are all unset to use an HTTP server.");
+            }
+            return Optional.empty();
+        }
+
+        try (InputStream pass = new FileInputStream(keyStorePassFile.get());
+                InputStream keystore = new FileInputStream(keyStoreFilePath.get());
+                InputStream certFile = new FileInputStream(certFilePath.get())) {
+            SSLContext sslContext = SSLContext.getInstance(serverTlsVersion);
+
+            // initialize keystore
+            String password = IOUtils.toString(pass, Charset.forName(passFileCharset));
+            password = password.substring(0, password.length() - 1);
+            KeyStore ks = KeyStore.getInstance(keyStoreType);
+            ks.load(keystore, password.toCharArray());
+
+            // set up certificate factory
+            CertificateFactory cf = CertificateFactory.getInstance(certType);
+            Certificate cert = cf.generateCertificate(certFile);
+            if (ks.containsAlias(certAlias)) {
+                throw new IllegalStateException(
+                        String.format(
+                                "%s keystore at %s already contains a certificate with alias"
+                                        + " \"%s\"",
+                                keyStoreType, keyStoreFilePath, certAlias));
+            }
+            ks.setCertificateEntry(certAlias, cert);
+
+            // set up key manager factory
+            KeyManagerFactory kmf =
+                    KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+            kmf.init(ks, password.toCharArray());
+
+            // set up trust manager factory
+            TrustManagerFactory tmf =
+                    TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+            tmf.init(ks);
+
+            // set up HTTPS context
+            sslContext.init(kmf.getKeyManagers(), tmf.getTrustManagers(), null);
+
+            return Optional.of(sslContext);
+        } catch (KeyStoreException
+                | CertificateException
+                | UnrecoverableKeyException
+                | KeyManagementException
+                | IOException
+                | NoSuchAlgorithmException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    @Provides
+    @Singleton
     public static HttpClient provideHttpClient(
-            SSLContext sslContext,
+            @Named(HTTP_CLIENT_SSL_CTX) SSLContext sslContext,
             AuthorizationType authorizationType,
             @Named(ConfigModule.CRYOSTAT_AGENT_AUTHORIZATION) Optional<String> authorization,
-            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_SSL_VERIFY_HOSTNAME)
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_VERIFY_HOSTNAME)
                     boolean verifyHostname,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_CONNECT_TIMEOUT_MS) int connectTimeout,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_TIMEOUT_MS) int responseTimeout) {
@@ -184,6 +284,46 @@ public abstract class MainModule {
         }
 
         return builder.build();
+    }
+
+    @Provides
+    @Singleton
+    public static HttpServer provideHttpServer(
+            ScheduledExecutorService executor,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_HOST) String host,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_PORT) int port,
+            @Named(HTTP_SERVER_SSL_CTX) Optional<SSLContext> sslContext) {
+        try {
+            HttpServer http;
+            if (sslContext.isEmpty()) {
+                http = HttpServer.create(new InetSocketAddress(host, port), 0);
+                http.setExecutor(executor);
+            } else {
+                HttpsServer https = HttpsServer.create(new InetSocketAddress(host, port), 0);
+                https.setHttpsConfigurator(
+                        new HttpsConfigurator(sslContext.get()) {
+                            public void configure(HttpsParameters params) {
+                                try {
+                                    SSLContext context = getSSLContext();
+                                    SSLEngine engine = context.createSSLEngine();
+                                    params.setNeedClientAuth(false);
+                                    params.setCipherSuites(engine.getEnabledCipherSuites());
+                                    params.setProtocols((engine.getEnabledProtocols()));
+                                    params.setSSLParameters(context.getDefaultSSLParameters());
+                                } catch (Exception e) {
+                                    throw new RuntimeException(e);
+                                }
+                            }
+                        });
+                http = https;
+            }
+
+            http.setExecutor(executor);
+
+            return http;
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Provides
@@ -236,10 +376,9 @@ public abstract class MainModule {
                             t.setUncaughtExceptionHandler(
                                     (thread, err) ->
                                             log.error(
-                                                    String.format(
-                                                            "[%s] Uncaught exception: %s",
-                                                            thread.getName(),
-                                                            ExceptionUtils.getStackTrace(err))));
+                                                    "[{}] Uncaught exception: {}",
+                                                    thread.getName(),
+                                                    ExceptionUtils.getStackTrace(err)));
                             return t;
                         }),
                 cryostat,
@@ -261,6 +400,12 @@ public abstract class MainModule {
     @Singleton
     public static FlightRecorderHelper provideFlightRecorderHelper() {
         return new FlightRecorderHelper();
+    }
+
+    @Provides
+    @Singleton
+    public static FileSystem provideFileSystem() {
+        return new FileSystem();
     }
 
     @Provides
