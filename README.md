@@ -31,6 +31,7 @@ is an available version upgrade and ensure both your Agent and server match this
 | 2.3.0            | v2.3.0         | v0.2.0        |
 | 2.3.1            | v2.3.1         | v0.2.3        |
 | 2.4.0            | v2.4.0         | v0.3.0        |
+| 3.0.0            | v3.0.0         | v0.4.0        |
 
 ### Build Requirements
 - Git
