@@ -5,6 +5,7 @@ concurrency:
   cancel-in-progress: true
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -72,6 +73,8 @@ jobs:
       with:
         submodules: true
         fetch-depth: 0
+    - name: Get date tag
+      run: echo "DATE_TAG=$(date -uI)" >> "$GITHUB_ENV"
     - uses: actions/cache@v4
       with:
         path: ~/.m2
@@ -100,7 +103,7 @@ jobs:
       with:
         image: ${{ env.CI_IMG }}
         archs: amd64
-        tags: ${{ env.agent-version }}
+        tags: ${{ env.agent-version }} ${{env.DATE_TAG}}
         containerfiles: |
           ./quarkus-agent/src/main/docker/Dockerfile.jvm
     - name: Push to quay.io
