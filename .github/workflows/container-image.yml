@@ -15,9 +15,9 @@ on:
 env:
   OPENSUSE_UNOFFICIAL_LIBCONTAINERS_KEY_URL: "https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/unstable/xUbuntu_22.04/Release.key"
   OPENSUSE_UNOFFICIAL_LIBCONTAINERS_SOURCE_URL: "https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/unstable/xUbuntu_22.04"
-  CI_USER: cryostat+bot
-  CI_REGISTRY: quay.io/cryostat
-  CI_IMG: quay.io/cryostat/quarkus-test
+  CI_USER: redhat-java-monitoring+github_ci
+  CI_REGISTRY: quay.io/redhat-java-monitoring
+  CI_IMG: quay.io/redhat-java-monitoring/quarkus-cryostat-agent
 
 jobs:
   check-before-build:
@@ -111,7 +111,7 @@ jobs:
         tags: ${{ steps.buildah-build.outputs.tags }}
         registry: ${{ env.CI_REGISTRY }}
         username: ${{ env.CI_USER }}
-        password: ${{ secrets.REPOSITORY_PASSWORD }}
+        password: ${{ secrets.REPOSITORY_TOKEN }}
     - name: store quarkus-test image as output
       id: quarkus-test-image
       run: echo "image=${{ steps.push-to-quay.outputs.registry-path }}" >> $GITHUB_OUTPUT
