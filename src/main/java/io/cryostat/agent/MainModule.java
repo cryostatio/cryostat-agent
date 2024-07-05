@@ -288,8 +288,8 @@ public abstract class MainModule {
             if (sslContext.isEmpty()) {
                 http = HttpServer.create(new InetSocketAddress(host, port), 0);
             } else {
-                HttpsServer https = HttpsServer.create(new InetSocketAddress(host, port), 0);
-                https.setHttpsConfigurator(
+                http = HttpsServer.create(new InetSocketAddress(host, port), 0);
+                ((HttpsServer) http).setHttpsConfigurator(
                         new HttpsConfigurator(sslContext.get()) {
                             public void configure(HttpsParameters params) {
                                 try {
@@ -304,7 +304,6 @@ public abstract class MainModule {
                                 }
                             }
                         });
-                http = https;
             }
             http.setExecutor(executor);
             return http;
