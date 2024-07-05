@@ -54,7 +54,6 @@ import io.cryostat.agent.remote.RemoteModule;
 import io.cryostat.agent.triggers.TriggerModule;
 import io.cryostat.core.JvmIdentifier;
 import io.cryostat.core.net.IDException;
-import io.cryostat.core.sys.FileSystem;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -386,12 +385,6 @@ public abstract class MainModule {
     @Singleton
     public static FlightRecorderHelper provideFlightRecorderHelper() {
         return new FlightRecorderHelper();
-    }
-
-    @Provides
-    @Singleton
-    public static FileSystem provideFileSystem() {
-        return new FileSystem();
     }
 
     @Provides
