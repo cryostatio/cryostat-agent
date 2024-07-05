@@ -96,8 +96,8 @@ jobs:
       uses: redhat-actions/buildah-build@v2
       with:
         image: ${{ env.CI_IMG }}
-        archs: amd64
-        tags: ${{ env.agent-version }} ${{env.DATE_TAG}}
+        archs: amd64, arm64
+        tags: ${{ env.agent-version }} ${{env.DATE_TAG}} latest
         context: quarkus-agent
         containerfiles: |
           ./quarkus-agent/src/main/docker/Dockerfile.jvm
