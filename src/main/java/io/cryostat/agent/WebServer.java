@@ -32,7 +32,6 @@ import java.util.stream.Collectors;
 import java.util.zip.DeflaterOutputStream;
 
 import io.cryostat.agent.remote.RemoteContext;
-import io.cryostat.core.sys.FileSystem;
 
 import com.sun.net.httpserver.BasicAuthenticator;
 import com.sun.net.httpserver.Filter;
@@ -56,7 +55,6 @@ class WebServer {
     private final Lazy<Registration> registration;
     private HttpServer http;
     private volatile int credentialId = -1;
-    private final FileSystem fs;
 
     private final AgentAuthenticator agentAuthenticator;
     private final RequestLoggingFilter requestLoggingFilter;
@@ -70,15 +68,13 @@ class WebServer {
             String user,
             int passLength,
             URI callback,
-            Lazy<Registration> registration,
-            FileSystem fs) {
+            Lazy<Registration> registration) {
         this.remoteContexts = remoteContexts;
         this.cryostat = cryostat;
         this.http = http;
         this.credentials = new Credentials(digest, user, passLength);
         this.callback = callback;
         this.registration = registration;
-        this.fs = fs;
 
         this.agentAuthenticator = new AgentAuthenticator();
         this.requestLoggingFilter = new RequestLoggingFilter();

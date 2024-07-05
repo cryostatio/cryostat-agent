@@ -26,7 +26,6 @@ import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.security.SecureRandom;
 import java.security.UnrecoverableKeyException;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
@@ -122,18 +121,9 @@ public abstract class MainModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_CREDENTIALS_USER) String user,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_CREDENTIALS_PASS_LENGTH) int passLength,
             @Named(ConfigModule.CRYOSTAT_AGENT_CALLBACK) URI callback,
-            Lazy<Registration> registration,
-            FileSystem fs) {
+            Lazy<Registration> registration) {
         return new WebServer(
-                remoteContexts,
-                cryostat,
-                http,
-                digest,
-                user,
-                passLength,
-                callback,
-                registration,
-                fs);
+                remoteContexts, cryostat, http, digest, user, passLength, callback, registration);
     }
 
     @Provides
@@ -166,7 +156,7 @@ public abstract class MainModule {
                             }
                         }
                     },
-                    new SecureRandom());
+                    null);
             return sslCtx;
         } catch (NoSuchAlgorithmException | KeyManagementException e) {
             throw new RuntimeException(e);
@@ -297,7 +287,6 @@ public abstract class MainModule {
             HttpServer http;
             if (sslContext.isEmpty()) {
                 http = HttpServer.create(new InetSocketAddress(host, port), 0);
-                http.setExecutor(executor);
             } else {
                 HttpsServer https = HttpsServer.create(new InetSocketAddress(host, port), 0);
                 https.setHttpsConfigurator(
@@ -317,9 +306,7 @@ public abstract class MainModule {
                         });
                 http = https;
             }
-
             http.setExecutor(executor);
-
             return http;
         } catch (IOException e) {
             throw new RuntimeException(e);
