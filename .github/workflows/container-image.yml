@@ -102,18 +102,18 @@ jobs:
         archs: amd64
         tags: ${{ env.agent-version }}
         containerfiles: |
-          ./quarkus-test/src/main/docker/Dockerfile.jvm
+          ./quarkus-agent/src/main/docker/Dockerfile.jvm
     - name: Push to quay.io
       id: push-to-quay
       uses: redhat-actions/push-to-registry@v2
       with:
-        image: quarkus-test
+        image: quarkus-cryostat-agent
         tags: ${{ steps.buildah-build.outputs.tags }}
         registry: ${{ env.CI_REGISTRY }}
         username: ${{ env.CI_USER }}
         password: ${{ secrets.REPOSITORY_TOKEN }}
-    - name: store quarkus-test image as output
-      id: quarkus-test-image
+    - name: store quarkus-agent image as output
+      id: quarkus-agent-image
       run: echo "image=${{ steps.push-to-quay.outputs.registry-path }}" >> $GITHUB_OUTPUT
 
   comment-image:
