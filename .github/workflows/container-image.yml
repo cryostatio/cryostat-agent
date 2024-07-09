@@ -50,11 +50,6 @@ jobs:
     strategy:
       matrix:
         java: ['17']
-    permissions:
-      packages: write
-      contents: read
-      pull-requests: write
-      statuses: write
     outputs:
       quay-image: ${{ steps.quarkus-test-image.outputs.image }}
     env:
