@@ -18,7 +18,8 @@ env:
   OPENSUSE_UNOFFICIAL_LIBCONTAINERS_SOURCE_URL: "https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/unstable/xUbuntu_22.04"
   CI_USER: redhat-java-monitoring+github_ci
   CI_REGISTRY: quay.io/redhat-java-monitoring
-  CI_IMG: quay.io/redhat-java-monitoring/quarkus-cryostat-agent
+  CARRIER_IMG: quay.io/cryostat/cryostat-agent-carrier
+  TEST_APP_IMG: quay.io/redhat-java-monitoring/quarkus-cryostat-agent
 
 jobs:
   build-agent:
@@ -44,14 +45,46 @@ jobs:
         key: ${{ runner.os }}-build-${{ hashFiles('**/pom.xml') }}
     - run: mvn -B -U clean install
 
+  build-carrier:
+    needs: [build-agent]
+    runs-on: ubuntu-latest
+    env:
+      agent-version: ${{ needs.build-agent.outputs.image-version }}
+    name: Build carrier image
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: true
+        fetch-depth: 0
+    - name: Get date tag
+      run: echo "DATE_TAG=$(date -uI)" >> "$GITHUB_ENV"
+    - name: Build container images and manifest
+      id: buildah-build
+      uses: redhat-actions/buildah-build@v2
+      with:
+        image: ${{ env.CARRIER_IMG }}
+        archs: amd64, arm64
+        tags: ${{ env.agent-version }} ${{env.DATE_TAG}} latest
+        containerfiles: |
+          src/main/container/Containerfile
+    - name: Push to quay.io
+      id: push-to-quay
+      uses: redhat-actions/push-to-registry@v2
+      with:
+        image: cryostat-agent-carrier
+        tags: ${{ steps.buildah-build.outputs.tags }}
+        registry: ${{ env.CI_REGISTRY }}
+        username: ${{ env.CI_USER }}
+        password: ${{ secrets.REPOSITORY_TOKEN }}
+    - name: Print image URL
+      run: echo "Image pushed to ${{ steps.push-to-quay.outputs.registry-paths }}"
+
   build-quarkus-test-app:
     needs: [build-agent]
     runs-on: ubuntu-latest
     strategy:
       matrix:
         java: ['17']
-    outputs:
-      quay-image: ${{ steps.quarkus-test-image.outputs.image }}
     env:
       agent-version: ${{ needs.build-agent.outputs.image-version }}
     name: Build Java ${{ matrix.java }}
@@ -89,7 +122,7 @@ jobs:
       id: buildah-build
       uses: redhat-actions/buildah-build@v2
       with:
-        image: ${{ env.CI_IMG }}
+        image: ${{ env.TEST_APP_IMG }}
         archs: amd64, arm64
         tags: ${{ env.agent-version }} ${{env.DATE_TAG}} latest
         context: quarkus-agent
