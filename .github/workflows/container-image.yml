@@ -1,0 +1,114 @@
+name: Build Container Image
+
+concurrency:
+  group: ci-${{ github.run_id }}
+  cancel-in-progress: true
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - v[0-9]+
+      - v[0-9]+.[0-9]+
+      - cryostat-v[0-9]+.[0-9]+
+
+env:
+  OPENSUSE_UNOFFICIAL_LIBCONTAINERS_KEY_URL: "https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/unstable/xUbuntu_22.04/Release.key"
+  OPENSUSE_UNOFFICIAL_LIBCONTAINERS_SOURCE_URL: "https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/unstable/xUbuntu_22.04"
+  CI_USER: redhat-java-monitoring+github_ci
+  CI_REGISTRY: quay.io/redhat-java-monitoring
+  CI_IMG: quay.io/redhat-java-monitoring/quarkus-cryostat-agent
+
+jobs:
+  build-agent:
+    runs-on: ubuntu-latest
+    needs: [check-before-build]
+    if: ${{ github.repository_owner == 'cryostatio' }}
+    outputs: 
+      image-version: ${{ steps.get-agent-version.outputs.agent-version }}
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: true
+        fetch-depth: 0
+    - id: get-agent-version
+      run: |
+        echo "agent-version=$(mvn -q -DforceStdout help:evaluate -Dexpression=project.version)" >> $GITHUB_OUTPUT
+    - uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+    - uses: actions/cache@v4
+      with:
+        path: ~/.m2
+        key: ${{ runner.os }}-build-${{ hashFiles('**/pom.xml') }}
+    - run: mvn -B -U clean install
+
+  build-quarkus-test-app:
+    needs: [build-agent]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        java: ['17']
+    permissions:
+      packages: write
+      contents: read
+      pull-requests: write
+      statuses: write
+    outputs:
+      quay-image: ${{ steps.quarkus-test-image.outputs.image }}
+    env:
+      agent-version: ${{ needs.build-agent.outputs.image-version }}
+    name: Build Java ${{ matrix.java }}
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: true
+        fetch-depth: 0
+    - name: Get date tag
+      run: echo "DATE_TAG=$(date -uI)" >> "$GITHUB_ENV"
+    - uses: actions/cache@v4
+      with:
+        path: ~/.m2
+        key: ${{ runner.os }}-build-${{ hashFiles('**/pom.xml') }}
+        restore-keys: |
+          ${{ runner.os }}-build-
+          ${{ runner.os }}-
+    - uses: actions/setup-java@v4
+      with:
+        java-version: ${{ matrix.java }}
+        distribution: 'temurin'
+        cache: 'maven'
+    - uses: actions/checkout@v4
+      with:
+        repository: ${{ github.repository_owner }}/test-applications
+        ref: main
+        submodules: true
+        fetch-depth: 0
+    - name: Build application
+      working-directory: quarkus-agent
+      run: ./mvnw -B -U -Dio.cryostat.agent.version=${{ env.agent-version }} clean verify
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Build container images and manifest
+      id: buildah-build
+      uses: redhat-actions/buildah-build@v2
+      with:
+        image: ${{ env.CI_IMG }}
+        archs: amd64, arm64
+        tags: ${{ env.agent-version }} ${{env.DATE_TAG}} latest
+        context: quarkus-agent
+        containerfiles: |
+          ./quarkus-agent/src/main/docker/Dockerfile.jvm
+    - name: Push to quay.io
+      id: push-to-quay
+      uses: redhat-actions/push-to-registry@v2
+      with:
+        image: quarkus-cryostat-agent
+        tags: ${{ steps.buildah-build.outputs.tags }}
+        registry: ${{ env.CI_REGISTRY }}
+        username: ${{ env.CI_USER }}
+        password: ${{ secrets.REPOSITORY_TOKEN }}
+    - name: Print image URL
+      run: echo "Image pushed to ${{ steps.push-to-quay.outputs.registry-paths }}"
