@@ -77,7 +77,7 @@ jobs:
         tags: ${{ steps.buildah-build.outputs.tags }}
         registry: ${{ env.CARRIER_CI_REGISTRY }}
         username: ${{ env.CARRIER_CI_USER }}
-        password: ${{ secrets.REPOSITORY_TOKEN }}
+        password: ${{ secrets.CARRIER_REPOSITORY_TOKEN }}
     - name: Print image URL
       run: echo "Image pushed to ${{ steps.push-to-quay.outputs.registry-paths }}"
 
@@ -138,6 +138,6 @@ jobs:
         tags: ${{ steps.buildah-build.outputs.tags }}
         registry: ${{ env.TEST_APP_CI_REGISTRY }}
         username: ${{ env.TEST_APP_CI_USER }}
-        password: ${{ secrets.REPOSITORY_TOKEN }}
+        password: ${{ secrets.TEST_APP_REPOSITORY_TOKEN }}
     - name: Print image URL
       run: echo "Image pushed to ${{ steps.push-to-quay.outputs.registry-paths }}"
