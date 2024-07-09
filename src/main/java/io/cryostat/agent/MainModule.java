@@ -288,21 +288,23 @@ public abstract class MainModule {
                 http = HttpServer.create(new InetSocketAddress(host, port), 0);
             } else {
                 http = HttpsServer.create(new InetSocketAddress(host, port), 0);
-                ((HttpsServer) http).setHttpsConfigurator(
-                        new HttpsConfigurator(sslContext.get()) {
-                            public void configure(HttpsParameters params) {
-                                try {
-                                    SSLContext context = getSSLContext();
-                                    SSLEngine engine = context.createSSLEngine();
-                                    params.setNeedClientAuth(false);
-                                    params.setCipherSuites(engine.getEnabledCipherSuites());
-                                    params.setProtocols((engine.getEnabledProtocols()));
-                                    params.setSSLParameters(context.getDefaultSSLParameters());
-                                } catch (Exception e) {
-                                    throw new RuntimeException(e);
-                                }
-                            }
-                        });
+                ((HttpsServer) http)
+                        .setHttpsConfigurator(
+                                new HttpsConfigurator(sslContext.get()) {
+                                    public void configure(HttpsParameters params) {
+                                        try {
+                                            SSLContext context = getSSLContext();
+                                            SSLEngine engine = context.createSSLEngine();
+                                            params.setNeedClientAuth(false);
+                                            params.setCipherSuites(engine.getEnabledCipherSuites());
+                                            params.setProtocols((engine.getEnabledProtocols()));
+                                            params.setSSLParameters(
+                                                    context.getDefaultSSLParameters());
+                                        } catch (Exception e) {
+                                            throw new RuntimeException(e);
+                                        }
+                                    }
+                                });
             }
             http.setExecutor(executor);
             return http;
