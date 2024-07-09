@@ -60,10 +60,12 @@ public abstract class ConfigModule {
     public static final String CRYOSTAT_AGENT_AUTHORIZATION_VALUE =
             "cryostat.agent.authorization.value";
 
-    public static final String CRYOSTAT_AGENT_WEBCLIENT_SSL_TRUST_ALL =
-            "cryostat.agent.webclient.ssl.trust-all";
-    public static final String CRYOSTAT_AGENT_WEBCLIENT_SSL_VERIFY_HOSTNAME =
-            "cryostat.agent.webclient.ssl.verify-hostname";
+    public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_VERSION =
+            "cryostat.agent.webclient.tls.version";
+    public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUST_ALL =
+            "cryostat.agent.webclient.tls.trust-all";
+    public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_VERIFY_HOSTNAME =
+            "cryostat.agent.webclient.tls.verify-hostname";
     public static final String CRYOSTAT_AGENT_WEBCLIENT_CONNECT_TIMEOUT_MS =
             "cryostat.agent.webclient.connect.timeout-ms";
     public static final String CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_TIMEOUT_MS =
@@ -71,6 +73,22 @@ public abstract class ConfigModule {
 
     public static final String CRYOSTAT_AGENT_WEBSERVER_HOST = "cryostat.agent.webserver.host";
     public static final String CRYOSTAT_AGENT_WEBSERVER_PORT = "cryostat.agent.webserver.port";
+    public static final String CRYOSTAT_AGENT_WEBSERVER_TLS_VERSION =
+            "cryostat.agent.webserver.tls.version";
+    public static final String CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_PASS =
+            "cryostat.agent.webserver.tls.keystore.pass";
+    public static final String CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_PASS_CHARSET =
+            "cryostat.agent.webserver.tls.keystore.pass-charset";
+    public static final String CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_FILE =
+            "cryostat.agent.webserver.tls.keystore.file";
+    public static final String CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_TYPE =
+            "cryostat.agent.webserver.tls.keystore.type";
+    public static final String CRYOSTAT_AGENT_WEBSERVER_TLS_CERT_ALIAS =
+            "cryostat.agent.webserver.tls.cert.alias";
+    public static final String CRYOSTAT_AGENT_WEBSERVER_TLS_CERT_FILE =
+            "cryostat.agent.webserver.tls.cert.file";
+    public static final String CRYOSTAT_AGENT_WEBSERVER_TLS_CERT_TYPE =
+            "cryostat.agent.webserver.tls.cert.type";
     public static final String CRYOSTAT_AGENT_WEBSERVER_CREDENTIALS_USER =
             "cryostat.agent.webserver.credentials.user";
     public static final String CRYOSTAT_AGENT_WEBSERVER_CREDENTIALS_PASS_HASH_FUNCTION =
@@ -196,16 +214,16 @@ public abstract class ConfigModule {
 
     @Provides
     @Singleton
-    @Named(CRYOSTAT_AGENT_WEBCLIENT_SSL_TRUST_ALL)
+    @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUST_ALL)
     public static boolean provideCryostatAgentWebclientTrustAll(Config config) {
-        return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_SSL_TRUST_ALL, boolean.class);
+        return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUST_ALL, boolean.class);
     }
 
     @Provides
     @Singleton
-    @Named(CRYOSTAT_AGENT_WEBCLIENT_SSL_VERIFY_HOSTNAME)
+    @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_VERIFY_HOSTNAME)
     public static boolean provideCryostatAgentWebclientVerifyHostname(Config config) {
-        return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_SSL_VERIFY_HOSTNAME, boolean.class);
+        return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_TLS_VERIFY_HOSTNAME, boolean.class);
     }
 
     @Provides
@@ -234,6 +252,69 @@ public abstract class ConfigModule {
     @Named(CRYOSTAT_AGENT_WEBSERVER_PORT)
     public static int provideCryostatAgentWebserverPort(Config config) {
         return config.getValue(CRYOSTAT_AGENT_WEBSERVER_PORT, int.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_VERSION)
+    public static String provideCryostatAgentWebclientTlsVersion(Config config) {
+        return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_TLS_VERSION, String.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBSERVER_TLS_VERSION)
+    public static String provideCryostatAgentWebserverTlsVersion(Config config) {
+        return config.getValue(CRYOSTAT_AGENT_WEBSERVER_TLS_VERSION, String.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_PASS)
+    public static Optional<String> provideCryostatAgentWebserverTlsKeyStorePass(Config config) {
+        return config.getOptionalValue(CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_PASS, String.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_PASS_CHARSET)
+    public static String provideCryostatAgentWebserverTlsKeyStorePassCharset(Config config) {
+        return config.getValue(CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_PASS_CHARSET, String.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_FILE)
+    public static Optional<String> provideCryostatAgentWebserverTlsKeyStoreFile(Config config) {
+        return config.getOptionalValue(CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_FILE, String.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_TYPE)
+    public static String provideCryostatAgentWebserverTlsKeyStoreType(Config config) {
+        return config.getValue(CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_TYPE, String.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBSERVER_TLS_CERT_ALIAS)
+    public static String provideCryostatAgentWebserverTlsCertAlias(Config config) {
+        return config.getValue(CRYOSTAT_AGENT_WEBSERVER_TLS_CERT_ALIAS, String.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBSERVER_TLS_CERT_FILE)
+    public static Optional<String> provideCryostatAgentWebserverTlsCertFile(Config config) {
+        return config.getOptionalValue(CRYOSTAT_AGENT_WEBSERVER_TLS_CERT_FILE, String.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBSERVER_TLS_CERT_TYPE)
+    public static String provideCryostatAgentWebserverTlsCertType(Config config) {
+        return config.getValue(CRYOSTAT_AGENT_WEBSERVER_TLS_CERT_TYPE, String.class);
     }
 
     @Provides
