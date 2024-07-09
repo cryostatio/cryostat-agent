@@ -16,10 +16,12 @@ on:
 env:
   OPENSUSE_UNOFFICIAL_LIBCONTAINERS_KEY_URL: "https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/unstable/xUbuntu_22.04/Release.key"
   OPENSUSE_UNOFFICIAL_LIBCONTAINERS_SOURCE_URL: "https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/unstable/xUbuntu_22.04"
-  CI_USER: redhat-java-monitoring+github_ci
-  CI_REGISTRY: quay.io/redhat-java-monitoring
-  CARRIER_IMG: quay.io/cryostat/cryostat-agent-carrier
-  TEST_APP_IMG: quay.io/redhat-java-monitoring/quarkus-cryostat-agent
+  CARRIER_CI_USER: cryostat+bot
+  CARRIER_CI_REGISTRY: quay.io/cryostat
+  CARRIER_CI_IMG: quay.io/cryostat/cryostat-agent-carrier
+  TEST_APP_CI_USER: redhat-java-monitoring+github_ci
+  TEST_APP_CI_REGISTRY: quay.io/redhat-java-monitoring
+  TEST_APP_CI_IMG: quay.io/redhat-java-monitoring/quarkus-cryostat-agent
 
 jobs:
   build-agent:
@@ -62,7 +64,7 @@ jobs:
       id: buildah-build
       uses: redhat-actions/buildah-build@v2
       with:
-        image: ${{ env.CARRIER_IMG }}
+        image: ${{ env.CARRIER_CI_IMG }}
         archs: amd64, arm64
         tags: ${{ env.agent-version }} ${{env.DATE_TAG}} latest
         containerfiles: |
@@ -73,8 +75,8 @@ jobs:
       with:
         image: cryostat-agent-carrier
         tags: ${{ steps.buildah-build.outputs.tags }}
-        registry: ${{ env.CI_REGISTRY }}
-        username: ${{ env.CI_USER }}
+        registry: ${{ env.CARRIER_CI_REGISTRY }}
+        username: ${{ env.CARRIER_CI_USER }}
         password: ${{ secrets.REPOSITORY_TOKEN }}
     - name: Print image URL
       run: echo "Image pushed to ${{ steps.push-to-quay.outputs.registry-paths }}"
@@ -122,7 +124,7 @@ jobs:
       id: buildah-build
       uses: redhat-actions/buildah-build@v2
       with:
-        image: ${{ env.TEST_APP_IMG }}
+        image: ${{ env.TEST_APP_CI_IMG }}
         archs: amd64, arm64
         tags: ${{ env.agent-version }} ${{env.DATE_TAG}} latest
         context: quarkus-agent
@@ -134,8 +136,8 @@ jobs:
       with:
         image: quarkus-cryostat-agent
         tags: ${{ steps.buildah-build.outputs.tags }}
-        registry: ${{ env.CI_REGISTRY }}
-        username: ${{ env.CI_USER }}
+        registry: ${{ env.TEST_APP_CI_REGISTRY }}
+        username: ${{ env.TEST_APP_CI_USER }}
         password: ${{ secrets.REPOSITORY_TOKEN }}
     - name: Print image URL
       run: echo "Image pushed to ${{ steps.push-to-quay.outputs.registry-paths }}"
