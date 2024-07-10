@@ -19,9 +19,6 @@ env:
   CARRIER_CI_USER: cryostat+bot
   CARRIER_CI_REGISTRY: quay.io/cryostat
   CARRIER_CI_IMG: quay.io/cryostat/cryostat-agent-carrier
-  TEST_APP_CI_USER: redhat-java-monitoring+github_ci
-  TEST_APP_CI_REGISTRY: quay.io/redhat-java-monitoring
-  TEST_APP_CI_IMG: quay.io/redhat-java-monitoring/quarkus-cryostat-agent
 
 jobs:
   build-agent:
@@ -87,66 +84,5 @@ jobs:
         registry: ${{ env.CARRIER_CI_REGISTRY }}
         username: ${{ env.CARRIER_CI_USER }}
         password: ${{ secrets.CARRIER_REPOSITORY_TOKEN }}
-    - name: Print image URL
-      run: echo "Image pushed to ${{ steps.push-to-quay.outputs.registry-paths }}"
-
-  build-quarkus-test-app:
-    needs: [build-agent]
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        java: ['17']
-    env:
-      agent-version: ${{ needs.build-agent.outputs.image-version }}
-    name: Build Java ${{ matrix.java }}
-    steps:
-    - uses: actions/checkout@v4
-      with:
-        submodules: true
-        fetch-depth: 0
-    - name: Get date tag
-      run: echo "DATE_TAG=$(date -uI)" >> "$GITHUB_ENV"
-    - uses: actions/cache@v4
-      with:
-        path: ~/.m2
-        key: ${{ runner.os }}-build-${{ hashFiles('**/pom.xml') }}
-        restore-keys: |
-          ${{ runner.os }}-build-
-          ${{ runner.os }}-
-    - uses: actions/setup-java@v4
-      with:
-        java-version: ${{ matrix.java }}
-        distribution: 'temurin'
-        cache: 'maven'
-    - uses: actions/checkout@v4
-      with:
-        repository: ${{ github.repository_owner }}/test-applications
-        ref: main
-        submodules: true
-        fetch-depth: 0
-    - name: Build application
-      working-directory: quarkus-agent
-      run: ./mvnw -B -U -Dio.cryostat.agent.version=${{ env.agent-version }} clean verify
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    - name: Build container images and manifest
-      id: buildah-build
-      uses: redhat-actions/buildah-build@v2
-      with:
-        image: ${{ env.TEST_APP_CI_IMG }}
-        archs: amd64, arm64
-        tags: ${{ env.agent-version }} ${{env.DATE_TAG}} latest
-        context: quarkus-agent
-        containerfiles: |
-          ./quarkus-agent/src/main/docker/Dockerfile.jvm
-    - name: Push to quay.io
-      id: push-to-quay
-      uses: redhat-actions/push-to-registry@v2
-      with:
-        image: quarkus-cryostat-agent
-        tags: ${{ steps.buildah-build.outputs.tags }}
-        registry: ${{ env.TEST_APP_CI_REGISTRY }}
-        username: ${{ env.TEST_APP_CI_USER }}
-        password: ${{ secrets.TEST_APP_REPOSITORY_TOKEN }}
     - name: Print image URL
       run: echo "Image pushed to ${{ steps.push-to-quay.outputs.registry-paths }}"
