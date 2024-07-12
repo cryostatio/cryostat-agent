@@ -16,9 +16,9 @@ on:
 env:
   OPENSUSE_UNOFFICIAL_LIBCONTAINERS_KEY_URL: "https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/unstable/xUbuntu_22.04/Release.key"
   OPENSUSE_UNOFFICIAL_LIBCONTAINERS_SOURCE_URL: "https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/unstable/xUbuntu_22.04"
-  CARRIER_CI_USER: cryostat+bot
-  CARRIER_CI_REGISTRY: quay.io/cryostat
-  CARRIER_CI_IMG: quay.io/cryostat/cryostat-agent-carrier
+  CI_USER: cryostat+bot
+  CI_REGISTRY: quay.io/cryostat
+  CI_IMG: quay.io/cryostat/cryostat-agent-carrier
 
 jobs:
   build-agent:
@@ -70,7 +70,7 @@ jobs:
       id: buildah-build
       uses: redhat-actions/buildah-build@v2
       with:
-        image: ${{ env.CARRIER_CI_IMG }}
+        image: ${{ env.CI_IMG }}
         archs: amd64, arm64
         tags: ${{ env.agent-version }} ${{env.DATE_TAG}} latest
         containerfiles: |
@@ -81,8 +81,8 @@ jobs:
       with:
         image: cryostat-agent-carrier
         tags: ${{ steps.buildah-build.outputs.tags }}
-        registry: ${{ env.CARRIER_CI_REGISTRY }}
-        username: ${{ env.CARRIER_CI_USER }}
-        password: ${{ secrets.CARRIER_REPOSITORY_TOKEN }}
+        registry: ${{ env.CI_REGISTRY }}
+        username: ${{ env.CI_USER }}
+        password: ${{ secrets.REPOSITORY_TOKEN }}
     - name: Print image URL
       run: echo "Image pushed to ${{ steps.push-to-quay.outputs.registry-paths }}"
