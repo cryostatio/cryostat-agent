@@ -74,7 +74,7 @@ jobs:
         archs: amd64, arm64
         tags: ${{ env.agent-version }} ${{env.DATE_TAG}} latest
         containerfiles: |
-          src/main/container/Containerfile
+          src/main/container/Dockerfile
     - name: Push to quay.io
       id: push-to-quay
       uses: redhat-actions/push-to-registry@v2

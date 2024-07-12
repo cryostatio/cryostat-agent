@@ -9,3 +9,12 @@ updates:
       - "chore"
       - "safe-to-test"
     open-pull-requests-limit: 20
+
+  - package-ecosystem: "docker"
+    directory: "/src/main/container"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "chore"
+      - "safe-to-test"
