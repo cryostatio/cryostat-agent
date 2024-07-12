@@ -18,7 +18,7 @@ env:
   OPENSUSE_UNOFFICIAL_LIBCONTAINERS_SOURCE_URL: "https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/unstable/xUbuntu_22.04"
   CI_USER: cryostat+bot
   CI_REGISTRY: quay.io/cryostat
-  CI_IMG: quay.io/cryostat/cryostat-agent-carrier
+  CI_IMG: quay.io/cryostat/cryostat-agent-init
 
 jobs:
   build-agent:
@@ -44,12 +44,12 @@ jobs:
         key: ${{ runner.os }}-build-${{ hashFiles('**/pom.xml') }}
     - run: mvn -B -U clean install
 
-  build-carrier:
+  build-container:
     needs: [build-agent]
     runs-on: ubuntu-latest
     env:
       agent-version: ${{ needs.build-agent.outputs.image-version }}
-    name: Build carrier image
+    name: Build container image
     steps:
     - uses: actions/checkout@v4
       with:
@@ -79,7 +79,7 @@ jobs:
       id: push-to-quay
       uses: redhat-actions/push-to-registry@v2
       with:
-        image: cryostat-agent-carrier
+        image: cryostat-agent-init
         tags: ${{ steps.buildah-build.outputs.tags }}
         registry: ${{ env.CI_REGISTRY }}
         username: ${{ env.CI_USER }}
