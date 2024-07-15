@@ -21,58 +21,39 @@ env:
   CI_IMG: quay.io/cryostat/cryostat-agent-init
 
 jobs:
-  build-agent:
+  build-container:
     runs-on: ubuntu-latest
     if: ${{ github.repository_owner == 'cryostatio' }}
-    outputs: 
-      image-version: ${{ steps.get-agent-version.outputs.agent-version }}
     steps:
     - uses: actions/checkout@v4
       with:
         submodules: true
         fetch-depth: 0
+    - name: Install qemu
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y qemu-user-static
+    - uses: actions/setup-java@v4
+      with:
+        java-version: '11'
+        distribution: 'temurin'
+    - uses: actions/cache@v4
+      with:
+        path: ~/.m2
+        key: ${{ runner.os }}-build-${{ hashFiles('**/pom.xml') }}
+    - run: mvn -B -U clean install
     - id: get-agent-version
       run: |
         echo "agent-version=$(mvn -q -DforceStdout help:evaluate -Dexpression=project.version)" >> $GITHUB_OUTPUT
-    - uses: actions/setup-java@v4
-      with:
-        java-version: '11'
-        distribution: 'temurin'
-    - uses: actions/cache@v4
-      with:
-        path: ~/.m2
-        key: ${{ runner.os }}-build-${{ hashFiles('**/pom.xml') }}
-    - run: mvn -B -U clean install
-
-  build-container:
-    needs: [build-agent]
-    runs-on: ubuntu-latest
-    env:
-      agent-version: ${{ needs.build-agent.outputs.image-version }}
-    name: Build container image
-    steps:
-    - uses: actions/checkout@v4
-      with:
-        submodules: true
-        fetch-depth: 0
     - name: Get date tag
       run: echo "DATE_TAG=$(date -uI)" >> "$GITHUB_ENV"
-    - uses: actions/setup-java@v4
-      with:
-        java-version: '11'
-        distribution: 'temurin'
-    - uses: actions/cache@v4
-      with:
-        path: ~/.m2
-        key: ${{ runner.os }}-build-${{ hashFiles('**/pom.xml') }}
-    - run: mvn -B -U clean install
     - name: Build container images and manifest
       id: buildah-build
       uses: redhat-actions/buildah-build@v2
       with:
         image: ${{ env.CI_IMG }}
         archs: amd64, arm64
-        tags: ${{ env.agent-version }} ${{env.DATE_TAG}} latest
+        tags: ${{ steps.get-agent-version.outputs.agent-version }} ${{env.DATE_TAG}} latest
         containerfiles: |
           src/main/container/Dockerfile
     - name: Push to quay.io
