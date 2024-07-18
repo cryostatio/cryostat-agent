@@ -335,10 +335,6 @@
                 <shadedPattern>${shade.prefix}.io.cryostat.core</shadedPattern>
               </relocation>
               <relocation>
-                <pattern>io.cryostat.libcryostat</pattern>
-                <shadedPattern>${shade.prefix}.io.cryostat.libcryostat</shadedPattern>
-              </relocation>
-              <relocation>
                 <pattern>org.projectnessie</pattern>
                 <shadedPattern>${shade.prefix}.org.projectnessie</shadedPattern>
               </relocation>
