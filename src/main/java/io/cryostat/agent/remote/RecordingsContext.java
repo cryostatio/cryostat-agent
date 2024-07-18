@@ -36,8 +36,8 @@ import javax.inject.Inject;
 import io.cryostat.agent.FlightRecorderHelper;
 import io.cryostat.agent.harvest.Harvester;
 import io.cryostat.agent.util.StringUtils;
-import io.cryostat.core.serialization.SerializableRecordingDescriptor;
-import io.cryostat.core.templates.MutableTemplateService.InvalidEventTemplateException;
+import io.cryostat.libcryostat.serialization.SerializableRecordingDescriptor;
+import io.cryostat.libcryostat.templates.InvalidEventTemplateException;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;

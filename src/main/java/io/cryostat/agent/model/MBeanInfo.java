@@ -31,11 +31,11 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.Callable;
 
-import io.cryostat.core.net.MBeanMetrics;
-import io.cryostat.core.net.MemoryMetrics;
-import io.cryostat.core.net.OperatingSystemMetrics;
-import io.cryostat.core.net.RuntimeMetrics;
-import io.cryostat.core.net.ThreadMetrics;
+import io.cryostat.libcryostat.net.MBeanMetrics;
+import io.cryostat.libcryostat.net.MemoryMetrics;
+import io.cryostat.libcryostat.net.OperatingSystemMetrics;
+import io.cryostat.libcryostat.net.RuntimeMetrics;
+import io.cryostat.libcryostat.net.ThreadMetrics;
 
 import com.sun.management.UnixOperatingSystemMXBean;
 import org.apache.commons.codec.digest.DigestUtils;

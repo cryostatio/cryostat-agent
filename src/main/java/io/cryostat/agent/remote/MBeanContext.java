@@ -21,7 +21,7 @@ import java.io.OutputStream;
 import javax.inject.Inject;
 
 import io.cryostat.agent.model.MBeanInfo;
-import io.cryostat.core.net.MBeanMetrics;
+import io.cryostat.libcryostat.net.MBeanMetrics;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
