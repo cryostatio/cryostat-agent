@@ -52,6 +52,20 @@
   <url>https://github.com/cryostatio/cryostat-agent/tree/main</url>
 </scm>
 
+<repositories>
+  <repository>
+    <id>s01.oss.sonatype.org-snapshot</id>
+    <url>https://s01.oss.sonatype.org/content/repositories/snapshots/</url>
+    <releases>
+      <enabled>false</enabled>
+    </releases>
+    <snapshots>
+      <enabled>true</enabled>
+      <updatePolicy>always</updatePolicy>
+    </snapshots>
+  </repository>
+</repositories>
+
 <properties>
   <mainClass>io.cryostat.agent.Agent</mainClass>
   <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -77,7 +91,7 @@
   <com.google.dagger.version>2.51.1</com.google.dagger.version>
   <com.google.dagger.compiler.version>${com.google.dagger.version}</com.google.dagger.compiler.version>
 
-  <io.cryostat.core.version>2.30.3</io.cryostat.core.version>
+  <io.cryostat.libcryostat.version>4.0.0-SNAPSHOT</io.cryostat.libcryostat.version>
 
   <org.apache.commons.io.version>2.13.0</org.apache.commons.io.version>
   <org.apache.httpcomponents.httpclient.version>4.5.14</org.apache.httpcomponents.httpclient.version>
@@ -168,9 +182,8 @@
   </dependency>
   <dependency>
     <groupId>io.cryostat</groupId>
-    <!-- This is only used for computing our own JVM's JVM ID - that part could be extracted out of -core -->
-    <artifactId>cryostat-core</artifactId>
-    <version>${io.cryostat.core.version}</version>
+    <artifactId>libcryostat</artifactId>
+    <version>${io.cryostat.libcryostat.version}</version>
     <exclusions>
       <exclusion>
         <groupId>org.slf4j</groupId>
@@ -314,6 +327,10 @@
             <shadedClassifierName>shaded</shadedClassifierName>
             <relocations>
               <relocation>
+                <pattern>io.cryostat.libcryostat</pattern>
+                <shadedPattern>${shade.prefix}.io.cryostat.libcryostat</shadedPattern>
+              </relocation>
+              <relocation>
                 <pattern>io.cryostat.core</pattern>
                 <shadedPattern>${shade.prefix}.io.cryostat.core</shadedPattern>
               </relocation>
@@ -446,7 +463,7 @@
           <trimTrailingWhitespace/>
           <endWithNewline/>
           <importOrder>
-            <order>java,javax,org.openjdk.jmc,io.cryostat,</order>
+            <order>java,javax,io.cryostat,</order>
           </importOrder>
           <removeUnusedImports/>
         </java>

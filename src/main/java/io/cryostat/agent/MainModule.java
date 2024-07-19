@@ -52,8 +52,8 @@ import io.cryostat.agent.harvest.HarvestModule;
 import io.cryostat.agent.remote.RemoteContext;
 import io.cryostat.agent.remote.RemoteModule;
 import io.cryostat.agent.triggers.TriggerModule;
-import io.cryostat.core.JvmIdentifier;
-import io.cryostat.core.net.IDException;
+import io.cryostat.libcryostat.JvmIdentifier;
+import io.cryostat.libcryostat.net.IDException;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
