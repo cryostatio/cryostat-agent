@@ -69,6 +69,7 @@ import org.apache.http.client.HttpClient;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.impl.client.HttpClients;
+import org.apache.http.impl.client.StandardHttpRequestRetryHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -245,7 +246,8 @@ public abstract class MainModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_VERIFY_HOSTNAME)
                     boolean verifyHostname,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_CONNECT_TIMEOUT_MS) int connectTimeout,
-            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_TIMEOUT_MS) int responseTimeout) {
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_TIMEOUT_MS) int responseTimeout,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_RETRY_COUNT) int retryCount) {
         HttpClientBuilder builder =
                 HttpClients.custom()
                         .setSSLContext(sslContext)
@@ -256,7 +258,8 @@ public abstract class MainModule {
                                         .setConnectTimeout(connectTimeout)
                                         .setSocketTimeout(responseTimeout)
                                         .setRedirectsEnabled(true)
-                                        .build());
+                                        .build())
+                        .setRetryHandler(new StandardHttpRequestRetryHandler(retryCount, true));
 
         if (!verifyHostname) {
             builder = builder.setSSLHostnameVerifier((hostname, session) -> true);
