@@ -25,15 +25,17 @@ import java.util.function.Function;
 import io.cryostat.agent.util.StringUtils;
 
 public enum AuthorizationType implements Function<String, String> {
-    NONE(v -> null),
-    BEARER(v -> String.format("Bearer %s", v)),
+    NONE(false, v -> null),
+    BEARER(false, v -> String.format("Bearer %s", v)),
     BASIC(
+            false,
             v ->
                     String.format(
                             "Basic %s",
                             Base64.getEncoder()
                                     .encodeToString(v.getBytes(StandardCharsets.UTF_8)))),
     KUBERNETES(
+            true,
             v -> {
                 try {
                     File file = new File(v);
@@ -45,6 +47,7 @@ public enum AuthorizationType implements Function<String, String> {
                 }
             }),
     AUTO(
+            true,
             v -> {
                 try {
                     String k8s = KUBERNETES.fn.apply(v);
@@ -58,10 +61,17 @@ public enum AuthorizationType implements Function<String, String> {
             }),
     ;
 
+    private final boolean dynamic;
     private final Function<String, String> fn;
 
-    private AuthorizationType(Function<String, String> fn) {
+    private AuthorizationType(boolean dynamic, Function<String, String> fn) {
+        this.dynamic = dynamic;
         this.fn = fn;
+    }
+
+    public boolean isDynamic() {
+        // if the authorization value may change between invocations
+        return this.dynamic;
     }
 
     @Override

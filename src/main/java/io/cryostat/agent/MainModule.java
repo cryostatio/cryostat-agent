@@ -66,11 +66,14 @@ import dagger.Module;
 import dagger.Provides;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
+import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.config.RequestConfig;
+import org.apache.http.client.protocol.HttpClientContext;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.impl.client.StandardHttpRequestRetryHandler;
+import org.apache.http.protocol.HttpContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -330,6 +333,7 @@ public abstract class MainModule {
     @Provides
     @Singleton
     public static HttpClient provideHttpClient(
+            AuthorizationType authorizationType,
             @Named(HTTP_CLIENT_SSL_CTX) SSLContext sslContext,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_VERIFY_HOSTNAME)
                     boolean verifyHostname,
@@ -347,7 +351,38 @@ public abstract class MainModule {
                                         .setSocketTimeout(responseTimeout)
                                         .setRedirectsEnabled(true)
                                         .build())
-                        .setRetryHandler(new StandardHttpRequestRetryHandler(retryCount, true));
+                        .setRetryHandler(
+                                new StandardHttpRequestRetryHandler(retryCount, true) {
+                                    @Override
+                                    public boolean retryRequest(
+                                            IOException exception,
+                                            int executionCount,
+                                            HttpContext context) {
+                                        // if the Authorization header we should send may change
+                                        // over time, ex. we read a Bearer token from a file, then
+                                        // it is possible that we get a 401 or 403 response because
+                                        // the token expired in between the time that we read it
+                                        // from our filesystem and when it was received by the
+                                        // authenticator. So, in this set of conditions, we should
+                                        // refresh our header value and try again right away
+                                        if (authorizationType.isDynamic()) {
+                                            HttpClientContext clientCtx =
+                                                    HttpClientContext.adapt(context);
+                                            if (clientCtx.isRequestSent()) {
+                                                HttpResponse resp = clientCtx.getResponse();
+                                                if (resp != null && resp.getStatusLine() != null) {
+                                                    int sc = resp.getStatusLine().getStatusCode();
+                                                    if (executionCount < 2
+                                                            && (sc == 401 || sc == 403)) {
+                                                        return true;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        return super.retryRequest(
+                                                exception, executionCount, context);
+                                    }
+                                });
 
         if (!verifyHostname) {
             builder = builder.setSSLHostnameVerifier((hostname, session) -> true);

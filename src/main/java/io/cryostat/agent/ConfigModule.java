@@ -313,7 +313,7 @@ public abstract class ConfigModule {
         return truststoreConfigs;
     }
 
-    @Named(CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_TIMEOUT_MS)
+    @Named(CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_RETRY_COUNT)
     public static int provideCryostatAgentWebclientResponseRetryCount(Config config) {
         return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_RETRY_COUNT, int.class);
     }
