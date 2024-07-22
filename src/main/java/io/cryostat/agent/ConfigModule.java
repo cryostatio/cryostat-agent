@@ -30,6 +30,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import javax.inject.Named;
@@ -190,12 +191,12 @@ public abstract class ConfigModule {
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_AUTHORIZATION)
-    public static Optional<String> provideCryostatAgentAuthorization(
+    public static Supplier<Optional<String>> provideCryostatAgentAuthorization(
             Config config,
             AuthorizationType authorizationType,
             @Named(CRYOSTAT_AGENT_AUTHORIZATION_VALUE) Optional<String> authorizationValue) {
         Optional<String> opt = config.getOptionalValue(CRYOSTAT_AGENT_AUTHORIZATION, String.class);
-        return opt.or(() -> authorizationValue.map(authorizationType::apply));
+        return () -> opt.or(() -> authorizationValue.map(authorizationType::apply));
     }
 
     @Provides

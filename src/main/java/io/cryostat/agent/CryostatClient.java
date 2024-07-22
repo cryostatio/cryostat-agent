@@ -35,6 +35,7 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 import io.cryostat.agent.FlightRecorderHelper.ConfigurationInfo;
 import io.cryostat.agent.FlightRecorderHelper.TemplatedRecording;
@@ -80,6 +81,7 @@ public class CryostatClient {
     private final Executor executor;
     private final ObjectMapper mapper;
     private final HttpClient http;
+    private final Supplier<Optional<String>> authorizationSupplier;
 
     private final String appName;
     private final String instanceId;
@@ -91,6 +93,7 @@ public class CryostatClient {
             Executor executor,
             ObjectMapper mapper,
             HttpClient http,
+            Supplier<Optional<String>> authorizationSupplier,
             String instanceId,
             String jvmId,
             String appName,
@@ -99,6 +102,7 @@ public class CryostatClient {
         this.executor = executor;
         this.mapper = mapper;
         this.http = http;
+        this.authorizationSupplier = authorizationSupplier;
         this.instanceId = instanceId;
         this.jvmId = jvmId;
         this.appName = appName;
@@ -450,6 +454,7 @@ public class CryostatClient {
     }
 
     private <T> CompletableFuture<T> supply(HttpRequestBase req, Function<HttpResponse, T> fn) {
+        authorizationSupplier.get().ifPresent(v -> req.addHeader("Authorization", v));
         return CompletableFuture.supplyAsync(() -> fn.apply(executeQuiet(req)), executor)
                 .whenComplete((v, t) -> req.reset());
     }
