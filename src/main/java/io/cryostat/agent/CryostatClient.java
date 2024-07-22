@@ -459,7 +459,7 @@ public class CryostatClient {
         // request. It would be better to attempt to send the request to the server first and see if
         // it responds with an auth challenge, and then send the auth information we have, and use
         // the client auth cache. This flow is supported for Bearer tokens in httpclient 5.
-        authorizationSupplier.get().ifPresent(v -> req.addHeader("Authorization", v));
+        authorizationSupplier.get().ifPresent(v -> req.addHeader(HttpHeaders.AUTHORIZATION, v));
         return CompletableFuture.supplyAsync(() -> fn.apply(executeQuiet(req)), executor)
                 .whenComplete((v, t) -> req.reset());
     }
