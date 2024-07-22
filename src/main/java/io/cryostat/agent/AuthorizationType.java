@@ -24,9 +24,6 @@ import java.util.function.Function;
 
 import io.cryostat.agent.util.StringUtils;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 public enum AuthorizationType implements Function<String, String> {
     NONE(v -> null),
     BEARER(v -> String.format("Bearer %s", v)),
@@ -43,16 +40,19 @@ public enum AuthorizationType implements Function<String, String> {
                     String token = Files.readString(file.toPath()).strip();
                     return String.format("Bearer %s", token);
                 } catch (IOException ioe) {
-                    Logger log = LoggerFactory.getLogger(AuthorizationType.class);
-                    log.warn(String.format("Failed to read serviceaccount token from %s", v), ioe);
-                    return null;
+                    throw new RuntimeException(
+                            String.format("Failed to read serviceaccount token from %s", v), ioe);
                 }
             }),
     AUTO(
             v -> {
-                String k8s = KUBERNETES.fn.apply(v);
-                if (StringUtils.isNotBlank(k8s)) {
-                    return k8s;
+                try {
+                    String k8s = KUBERNETES.fn.apply(v);
+                    if (StringUtils.isNotBlank(k8s)) {
+                        return k8s;
+                    }
+                } catch (Exception e) {
+                    // ignore
                 }
                 return NONE.fn.apply(v);
             }),
