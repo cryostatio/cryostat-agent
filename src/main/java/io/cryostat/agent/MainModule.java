@@ -343,6 +343,7 @@ public abstract class MainModule {
                                         .setExpectContinueEnabled(true)
                                         .setConnectTimeout(connectTimeout)
                                         .setSocketTimeout(responseTimeout)
+                                        .setRedirectsEnabled(true)
                                         .build());
 
         if (!verifyHostname) {
