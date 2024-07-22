@@ -454,6 +454,11 @@ public class CryostatClient {
     }
 
     private <T> CompletableFuture<T> supply(HttpRequestBase req, Function<HttpResponse, T> fn) {
+        // FIXME Apache httpclient 4 does not support Bearer token auth easily, so we explicitly set
+        // the header here. This is a form of preemptive auth - the token is always sent with the
+        // request. It would be better to attempt to send the request to the server first and see if
+        // it responds with an auth challenge, and then send the auth information we have, and use
+        // the client auth cache. This flow is supported for Bearer tokens in httpclient 5.
         authorizationSupplier.get().ifPresent(v -> req.addHeader("Authorization", v));
         return CompletableFuture.supplyAsync(() -> fn.apply(executeQuiet(req)), executor)
                 .whenComplete((v, t) -> req.reset());
