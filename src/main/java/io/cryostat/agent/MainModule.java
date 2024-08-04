@@ -356,7 +356,6 @@ public abstract class MainModule {
         if (!verifyHostname) {
             builder = builder.setSSLHostnameVerifier((hostname, session) -> true);
         }
-
         return builder.build();
     }
 

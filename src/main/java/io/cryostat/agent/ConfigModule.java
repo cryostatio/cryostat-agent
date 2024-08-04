@@ -70,6 +70,18 @@ public abstract class ConfigModule {
             "cryostat.agent.webclient.connect.timeout-ms";
     public static final String CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_TIMEOUT_MS =
             "cryostat.agent.webclient.response.timeout-ms";
+    public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_CERT_ALIAS =
+            "cryostat.agent.webclient.tls.cert.alias";
+    public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_CERT_FILE =
+            "cryostat.agent.webclient.tls.cert.file";
+    public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_CERT_TYPE =
+            "cryostat.agent.webclient.tls.cert.type";
+    public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_KEY_ALIAS =
+            "cryostat.agent.webclient.tls.key.alias";
+    public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_KEY_FILE =
+            "cryostat.agent.webclient.tls.key.file";
+    public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_KEY_TYPE =
+            "cryostat.agent.webclient.tls.key.type";
 
     public static final String CRYOSTAT_AGENT_WEBSERVER_HOST = "cryostat.agent.webserver.host";
     public static final String CRYOSTAT_AGENT_WEBSERVER_PORT = "cryostat.agent.webserver.port";
@@ -238,6 +250,48 @@ public abstract class ConfigModule {
     @Named(CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_TIMEOUT_MS)
     public static int provideCryostatAgentWebclientResponseTimeoutMs(Config config) {
         return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_TIMEOUT_MS, int.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_CERT_ALIAS)
+    public static String provideCryostatAgentWebclientTlsCertAlias(Config config) {
+        return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_TLS_CERT_ALIAS, String.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_CERT_FILE)
+    public static Optional<String> provideCryostatAgentWebclientTlsCertFile(Config config) {
+        return config.getOptionalValue(CRYOSTAT_AGENT_WEBCLIENT_TLS_CERT_FILE, String.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_CERT_TYPE)
+    public static String provideCryostatAgentWebclientTlsCertType(Config config) {
+        return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_TLS_CERT_TYPE, String.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_KEY_ALIAS)
+    public static String provideCryostatAgentWebclientTlsKeyAlias(Config config) {
+        return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_TLS_KEY_ALIAS, String.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_KEY_FILE)
+    public static Optional<String> provideCryostatAgentWebclientTlsKeyFile(Config config) {
+        return config.getOptionalValue(CRYOSTAT_AGENT_WEBCLIENT_TLS_KEY_FILE, String.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_KEY_TYPE)
+    public static String provideCryostatAgentWebclientTlsKeyType(Config config) {
+        return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_TLS_KEY_TYPE, String.class);
     }
 
     @Provides
