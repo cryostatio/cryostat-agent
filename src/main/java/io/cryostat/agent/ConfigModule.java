@@ -232,7 +232,7 @@ public abstract class ConfigModule {
             try {
                 truststoreConfigs.add(builder.build());
             } catch (IllegalStateException e) {
-                log.error("Error building truststore configs: {}", e.getMessage());
+                log.error("Error building truststore config", e);
             }
         }
         return truststoreConfigs;
