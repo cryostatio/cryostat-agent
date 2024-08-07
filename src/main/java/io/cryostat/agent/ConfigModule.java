@@ -171,61 +171,62 @@ public abstract class ConfigModule {
     @Named(CRYOSTAT_AGENT_TRUSTSTORES)
     public static List<TruststoreConfig> provideTruststoreConfigs(Config config) {
         Map<Integer, TruststoreConfig.Builder> truststoreBuilders = new HashMap<>();
+        StreamSupport.stream(config.getPropertyNames().spliterator(), false)
+                .filter(e -> e.startsWith(CRYOSTAT_AGENT_TRUSTSTORES))
+                .forEach(
+                        name -> {
+                            Pattern pattern =
+                                    Pattern.compile(
+                                            "^(cryostat\\.agent\\.truststore\\.cert)\\[(\\d+)\\]\\.(.*)$");
+                            Matcher matcher = pattern.matcher(name);
 
-        List<String> propertyNames =
-                StreamSupport.stream(config.getPropertyNames().spliterator(), false)
-                        .filter(e -> e.startsWith(CRYOSTAT_AGENT_TRUSTSTORES))
-                        .collect(Collectors.toList());
+                            if (matcher.matches()) {
+                                if (matcher.groupCount() < 3) {
+                                    log.error(
+                                            "Invalid truststore config property name format: {}."
+                                                + " Rename to"
+                                                + " 'cryostat.agent.truststore.cert[CERT_NUMBER].CERT_PROPERTY'",
+                                            name);
+                                    return;
+                                }
 
-        for (String name : propertyNames) {
+                                int truststoreNumber = Integer.parseInt(matcher.group(2));
+                                String configProp = matcher.group(3);
 
-            Pattern pattern =
-                    Pattern.compile("^(cryostat\\.agent\\.truststore\\.cert)\\[(\\d+)\\]\\.(.*)$");
-            Matcher matcher = pattern.matcher(name);
+                                TruststoreConfig.Builder truststoreBuilder =
+                                        truststoreBuilders.computeIfAbsent(
+                                                truststoreNumber,
+                                                k -> new TruststoreConfig.Builder());
 
-            if (matcher.matches()) {
-                if (matcher.groupCount() < 3) {
-                    log.error(
-                            "Invalid truststore config property name format: {}. Rename to"
-                                + " 'cryostat.agent.truststore.cert[CERT_NUMBER].CERT_PROPERTY'",
-                            name);
-                    continue;
-                }
+                                String value = config.getValue(name, String.class);
+                                switch (configProp) {
+                                    case "alias":
+                                        truststoreBuilder = truststoreBuilder.withAlias(value);
+                                        break;
+                                    case "path":
+                                        truststoreBuilder = truststoreBuilder.withPath(value);
+                                        break;
+                                    case "type":
+                                        truststoreBuilder = truststoreBuilder.withType(value);
+                                        break;
+                                    default:
+                                        log.error(
+                                                "Truststore config only includes alias, path, and"
+                                                        + " type. Rename this config property: {}",
+                                                name);
+                                        break;
+                                }
+                            } else {
+                                throw new IllegalArgumentException(
+                                        String.format(
+                                                "Invalid truststore config property name format:"
+                                                    + " %s. Make sure the config property matches"
+                                                    + " the following pattern: "
+                                                    + " 'cryostat.agent.truststore.cert[CERT_NUMBER].CERT_PROPERTY'",
+                                                name));
+                            }
+                        });
 
-                int truststoreNumber = Integer.parseInt(matcher.group(2));
-                String configProp = matcher.group(3);
-
-                TruststoreConfig.Builder truststoreBuilder =
-                        truststoreBuilders.computeIfAbsent(
-                                truststoreNumber, k -> new TruststoreConfig.Builder());
-
-                String value = config.getValue(name, String.class);
-                switch (configProp) {
-                    case "alias":
-                        truststoreBuilder = truststoreBuilder.withAlias(value);
-                        break;
-                    case "path":
-                        truststoreBuilder = truststoreBuilder.withPath(value);
-                        break;
-                    case "type":
-                        truststoreBuilder = truststoreBuilder.withType(value);
-                        break;
-                    default:
-                        log.error(
-                                "Truststore config only includes alias, path, and type. Rename this"
-                                        + " config property: {}",
-                                name);
-                        break;
-                }
-            } else {
-                throw new IllegalArgumentException(
-                        String.format(
-                                "Invalid truststore config property name format: %s. Make sure the"
-                                    + " config property matches the following pattern: "
-                                    + " 'cryostat.agent.truststore.cert[CERT_NUMBER].CERT_PROPERTY'",
-                                name));
-            }
-        }
         List<TruststoreConfig> truststoreConfigs = new ArrayList<>();
         for (TruststoreConfig.Builder builder : truststoreBuilders.values()) {
             try {
