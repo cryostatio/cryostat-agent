@@ -177,7 +177,7 @@ public abstract class ConfigModule {
                         name -> {
                             Pattern pattern =
                                     Pattern.compile(
-                                            "^(cryostat\\.agent\\.truststore\\.cert)\\[(\\d+)\\]\\.(.*)$");
+                                            "^(?:cryostat\\.agent\\.truststore\\.cert)\\[(\\d+)\\]\\.(.*)$");
                             Matcher matcher = pattern.matcher(name);
 
                             if (!matcher.matches()) {
@@ -189,8 +189,8 @@ public abstract class ConfigModule {
                                                     + " 'cryostat.agent.truststore.cert[CERT_NUMBER].CERT_PROPERTY'",
                                                 name));
                             }
-                            int truststoreNumber = Integer.parseInt(matcher.group(2));
-                            String configProp = matcher.group(3);
+                            int truststoreNumber = Integer.parseInt(matcher.group(1));
+                            String configProp = matcher.group(2);
 
                             TruststoreConfig.Builder truststoreBuilder =
                                     truststoreBuilders.computeIfAbsent(
