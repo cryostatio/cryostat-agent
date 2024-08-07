@@ -180,22 +180,18 @@ public abstract class MainModule {
             ts.load(null, null);
 
             for (TruststoreConfig truststore : truststores) {
-                String certType = truststore.getType();
-                String certAlias = truststore.getAlias();
-                String certPath = truststore.getPath();
-
                 // load truststore with certificatesCertificate
-                InputStream certFile = new FileInputStream(certPath);
-                CertificateFactory cf = CertificateFactory.getInstance(certType);
+                InputStream certFile = new FileInputStream(truststore.getPath());
+                CertificateFactory cf = CertificateFactory.getInstance(truststore.getType());
                 Certificate cert = cf.generateCertificate(certFile);
-                if (ts.containsAlias(certType)) {
+                if (ts.containsAlias(truststore.getType())) {
                     throw new IllegalStateException(
                             String.format(
                                     "truststore already contains a certificate with alias"
                                             + " \"%s\"",
-                                    certAlias));
+                                    truststore.getAlias()));
                 }
-                ts.setCertificateEntry(certAlias, cert);
+                ts.setCertificateEntry(truststore.getAlias(), cert);
                 certFile.close();
             }
 
