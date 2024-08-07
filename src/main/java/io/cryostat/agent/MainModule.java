@@ -132,7 +132,7 @@ public abstract class MainModule {
     public static SSLContext provideClientSslContext(
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_VERSION) String clientTlsVersion,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUST_ALL) boolean trustAll,
-            @Named(ConfigModule.CRYOSTAT_AGENT_TRUSTSTORES) List<TruststoreConfig> truststores) {
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORES) List<TruststoreConfig> truststores) {
         try {
             if (trustAll) {
                 SSLContext sslCtx = SSLContext.getInstance(clientTlsVersion);
