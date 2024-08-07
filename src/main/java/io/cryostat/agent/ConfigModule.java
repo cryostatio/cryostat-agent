@@ -254,7 +254,8 @@ public abstract class ConfigModule {
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_CERTS)
-    public static List<TruststoreConfig> provideCryostatAgentWecblientTlsTruststoreCerts(Config config) {
+    public static List<TruststoreConfig> provideCryostatAgentWecblientTlsTruststoreCerts(
+            Config config) {
         Map<Integer, TruststoreConfig.Builder> truststoreBuilders = new HashMap<>();
         StreamSupport.stream(config.getPropertyNames().spliterator(), false)
                 .filter(e -> e.startsWith(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_CERTS))
