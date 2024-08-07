@@ -198,7 +198,6 @@ public abstract class ConfigModule {
                 TruststoreConfig.Builder truststoreBuilder =
                         truststoreBuilders.computeIfAbsent(
                                 truststoreNumber, k -> new TruststoreConfig.Builder());
-                ;
 
                 String value = config.getValue(name, String.class);
                 switch (configProp) {
