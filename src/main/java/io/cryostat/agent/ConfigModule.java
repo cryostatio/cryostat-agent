@@ -207,11 +207,12 @@ public abstract class ConfigModule {
                                     truststoreBuilder = truststoreBuilder.withType(value);
                                     break;
                                 default:
-                                    log.error(
-                                            "Truststore config only includes alias, path, and type."
-                                                    + " Rename this config property: {}",
-                                            name);
-                                    break;
+                                    throw new IllegalArgumentException(
+                                            String.format(
+                                                    "Truststore config only includes alias, path,"
+                                                        + " and type. Rename this config property:"
+                                                        + " %s",
+                                                    name));
                             }
                         });
 
