@@ -589,6 +589,9 @@
                       <closeRepository>true</closeRepository>
                       <releaseRepository>true</releaseRepository>
                       <stagingRepositories>target/staging-deploy</stagingRepositories>
+                      <!-- TODO this is needed so that the <repositories> block at the top is accepted,
+                      which we need because of our dependency on -SNAPSHOT versions of libcryostat -->
+                      <verifyPom>false</verifyPom>
                     </maven-central>
                   </nexus2>
                 </maven>
