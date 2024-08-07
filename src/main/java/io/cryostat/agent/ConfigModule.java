@@ -78,7 +78,8 @@ public abstract class ConfigModule {
             "cryostat.agent.webclient.response.timeout-ms";
     public static final String CRYOSTAT_AGENT_TRUSTSTORES = "cryostat.agent.truststore.cert";
     public static final Pattern CRYOSTAT_AGENT_TRUSTSTORE_PATTERN =
-            Pattern.compile("^(?:cryostat\\.agent\\.truststore\\.cert)\\[(\\d+)\\]\\.(.*)$");
+            Pattern.compile(
+                    "^(?:cryostat\\.agent\\.truststore\\.cert)\\[(?<index>\\d+)\\]\\.(?<property>.*)$");
 
     public static final String CRYOSTAT_AGENT_WEBSERVER_HOST = "cryostat.agent.webserver.host";
     public static final String CRYOSTAT_AGENT_WEBSERVER_PORT = "cryostat.agent.webserver.port";
@@ -187,8 +188,8 @@ public abstract class ConfigModule {
                                                     + " 'cryostat.agent.truststore.cert[CERT_NUMBER].CERT_PROPERTY'",
                                                 name));
                             }
-                            int truststoreNumber = Integer.parseInt(matcher.group(1));
-                            String configProp = matcher.group(2);
+                            int truststoreNumber = Integer.parseInt(matcher.group("index"));
+                            String configProp = matcher.group("property");
 
                             TruststoreConfig.Builder truststoreBuilder =
                                     truststoreBuilders.computeIfAbsent(
