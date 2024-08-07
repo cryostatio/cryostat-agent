@@ -32,6 +32,7 @@ import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -77,10 +78,10 @@ import org.slf4j.LoggerFactory;
 
 @Module(
         includes = {
-            ConfigModule.class,
             RemoteModule.class,
             HarvestModule.class,
             TriggerModule.class,
+            ConfigModule.class,
         })
 public abstract class MainModule {
 
@@ -130,34 +131,121 @@ public abstract class MainModule {
     @Named(HTTP_CLIENT_SSL_CTX)
     public static SSLContext provideClientSslContext(
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_VERSION) String clientTlsVersion,
-            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUST_ALL) boolean trustAll) {
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUST_ALL) boolean trustAll,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORES)
+                    List<TruststoreConfig> truststores) {
         try {
-            if (!trustAll) {
-                return SSLContext.getDefault();
+            if (trustAll) {
+                SSLContext sslCtx = SSLContext.getInstance(clientTlsVersion);
+                sslCtx.init(
+                        null,
+                        new TrustManager[] {
+                            new X509TrustManager() {
+                                @Override
+                                public void checkClientTrusted(
+                                        X509Certificate[] chain, String authType)
+                                        throws CertificateException {}
+
+                                @Override
+                                public void checkServerTrusted(
+                                        X509Certificate[] chain, String authType)
+                                        throws CertificateException {}
+
+                                @Override
+                                public X509Certificate[] getAcceptedIssuers() {
+                                    return new X509Certificate[0];
+                                }
+                            }
+                        },
+                        null);
+                return sslCtx;
             }
 
             SSLContext sslCtx = SSLContext.getInstance(clientTlsVersion);
-            sslCtx.init(
-                    null,
-                    new TrustManager[] {
-                        new X509TrustManager() {
-                            @Override
-                            public void checkClientTrusted(X509Certificate[] chain, String authType)
-                                    throws CertificateException {}
 
-                            @Override
-                            public void checkServerTrusted(X509Certificate[] chain, String authType)
-                                    throws CertificateException {}
+            // set up trust manager factory
+            TrustManagerFactory tmf =
+                    TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+            tmf.init((KeyStore) null);
 
-                            @Override
-                            public X509Certificate[] getAcceptedIssuers() {
-                                return new X509Certificate[0];
+            X509TrustManager defaultTrustManager = null;
+            for (TrustManager tm : tmf.getTrustManagers()) {
+                if (tm instanceof X509TrustManager) {
+                    defaultTrustManager = (X509TrustManager) tm;
+                    break;
+                }
+            }
+
+            // initialize truststore
+            KeyStore ts = KeyStore.getInstance(KeyStore.getDefaultType());
+            ts.load(null, null);
+
+            for (TruststoreConfig truststore : truststores) {
+                // load truststore with certificatesCertificate
+                InputStream certFile = new FileInputStream(truststore.getPath());
+                CertificateFactory cf = CertificateFactory.getInstance(truststore.getType());
+                Certificate cert = cf.generateCertificate(certFile);
+                if (ts.containsAlias(truststore.getType())) {
+                    throw new IllegalStateException(
+                            String.format(
+                                    "truststore already contains a certificate with alias"
+                                            + " \"%s\"",
+                                    truststore.getAlias()));
+                }
+                ts.setCertificateEntry(truststore.getAlias(), cert);
+                certFile.close();
+            }
+
+            // set up trust manager factory
+            tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+            tmf.init(ts);
+
+            X509TrustManager customTrustManager = null;
+            for (TrustManager tm : tmf.getTrustManagers()) {
+                if (tm instanceof X509TrustManager) {
+                    customTrustManager = (X509TrustManager) tm;
+                    break;
+                }
+            }
+
+            final X509TrustManager finalDefaultTM = defaultTrustManager;
+            final X509TrustManager finalCustomTM = customTrustManager;
+            X509TrustManager mergedTrustManager =
+                    new X509TrustManager() {
+                        @Override
+                        public void checkClientTrusted(X509Certificate[] chain, String authType)
+                                throws CertificateException {
+                            try {
+                                finalCustomTM.checkClientTrusted(chain, authType);
+                            } catch (CertificateException e) {
+                                finalDefaultTM.checkClientTrusted(chain, authType);
                             }
                         }
-                    },
-                    null);
+
+                        @Override
+                        public void checkServerTrusted(X509Certificate[] chain, String authType)
+                                throws CertificateException {
+                            try {
+                                finalCustomTM.checkServerTrusted(chain, authType);
+                            } catch (CertificateException e) {
+                                finalDefaultTM.checkServerTrusted(chain, authType);
+                            }
+                        }
+
+                        @Override
+                        public X509Certificate[] getAcceptedIssuers() {
+                            return finalDefaultTM.getAcceptedIssuers();
+                        }
+                    };
+
+            // set up HTTPS context
+            sslCtx.init(null, new TrustManager[] {mergedTrustManager}, null);
             return sslCtx;
-        } catch (NoSuchAlgorithmException | KeyManagementException e) {
+        } catch (NoSuchAlgorithmException
+                | KeyManagementException
+                | KeyStoreException
+                | CertificateException
+                | IOException e) {
             throw new RuntimeException(e);
         }
     }
@@ -271,7 +359,6 @@ public abstract class MainModule {
         if (!verifyHostname) {
             builder = builder.setSSLHostnameVerifier((hostname, session) -> true);
         }
-
         return builder.build();
     }
 

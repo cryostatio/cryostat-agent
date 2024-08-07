@@ -25,12 +25,18 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivilegedActionException;
 import java.security.PrivilegedExceptionAction;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Predicate;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
 import javax.inject.Named;
 import javax.inject.Singleton;
@@ -70,6 +76,11 @@ public abstract class ConfigModule {
             "cryostat.agent.webclient.connect.timeout-ms";
     public static final String CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_TIMEOUT_MS =
             "cryostat.agent.webclient.response.timeout-ms";
+    public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORES =
+            "cryostat.agent.webclient.tls.truststore.cert";
+    public static final Pattern CRYOSTAT_AGENT_TRUSTSTORE_PATTERN =
+            Pattern.compile(
+                    "^(?:cryostat\\.agent\\.webclient\\.tls\\.truststore\\.cert)\\[(?<index>\\d+)\\]\\.(?<property>.*)$");
 
     public static final String CRYOSTAT_AGENT_WEBSERVER_HOST = "cryostat.agent.webserver.host";
     public static final String CRYOSTAT_AGENT_WEBSERVER_PORT = "cryostat.agent.webserver.port";
@@ -157,6 +168,64 @@ public abstract class ConfigModule {
         } catch (PrivilegedActionException pae) {
             throw new RuntimeException(pae);
         }
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORES)
+    public static List<TruststoreConfig> provideTruststoreConfigs(Config config) {
+        Map<Integer, TruststoreConfig.Builder> truststoreBuilders = new HashMap<>();
+        StreamSupport.stream(config.getPropertyNames().spliterator(), false)
+                .filter(e -> e.startsWith(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORES))
+                .forEach(
+                        name -> {
+                            Matcher matcher = CRYOSTAT_AGENT_TRUSTSTORE_PATTERN.matcher(name);
+                            if (!matcher.matches()) {
+                                throw new IllegalArgumentException(
+                                        String.format(
+                                                "Invalid truststore config property name format:"
+                                                    + " \"%s\". Make sure the config property"
+                                                    + " matches the following pattern:"
+                                                    + " 'cryostat.agent.truststore.cert[CERT_NUMBER].CERT_PROPERTY'",
+                                                name));
+                            }
+                            int truststoreNumber = Integer.parseInt(matcher.group("index"));
+                            String configProp = matcher.group("property");
+
+                            TruststoreConfig.Builder truststoreBuilder =
+                                    truststoreBuilders.computeIfAbsent(
+                                            truststoreNumber, k -> new TruststoreConfig.Builder());
+
+                            String value = config.getValue(name, String.class);
+                            switch (configProp) {
+                                case "alias":
+                                    truststoreBuilder = truststoreBuilder.withAlias(value);
+                                    break;
+                                case "path":
+                                    truststoreBuilder = truststoreBuilder.withPath(value);
+                                    break;
+                                case "type":
+                                    truststoreBuilder = truststoreBuilder.withType(value);
+                                    break;
+                                default:
+                                    throw new IllegalArgumentException(
+                                            String.format(
+                                                    "Truststore config only includes alias, path,"
+                                                        + " and type. Rename this config property:"
+                                                        + " %s",
+                                                    name));
+                            }
+                        });
+
+        List<TruststoreConfig> truststoreConfigs = new ArrayList<>();
+        for (TruststoreConfig.Builder builder : truststoreBuilders.values()) {
+            try {
+                truststoreConfigs.add(builder.build());
+            } catch (Exception e) {
+                throw new IllegalStateException(e);
+            }
+        }
+        return truststoreConfigs;
     }
 
     @Provides
