@@ -77,6 +77,8 @@ public abstract class ConfigModule {
     public static final String CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_TIMEOUT_MS =
             "cryostat.agent.webclient.response.timeout-ms";
     public static final String CRYOSTAT_AGENT_TRUSTSTORES = "cryostat.agent.truststore.cert";
+    public static final Pattern CRYOSTAT_AGENT_TRUSTSTORE_PATTERN =
+            Pattern.compile("^(?:cryostat\\.agent\\.truststore\\.cert)\\[(\\d+)\\]\\.(.*)$");
 
     public static final String CRYOSTAT_AGENT_WEBSERVER_HOST = "cryostat.agent.webserver.host";
     public static final String CRYOSTAT_AGENT_WEBSERVER_PORT = "cryostat.agent.webserver.port";
@@ -175,11 +177,7 @@ public abstract class ConfigModule {
                 .filter(e -> e.startsWith(CRYOSTAT_AGENT_TRUSTSTORES))
                 .forEach(
                         name -> {
-                            Pattern pattern =
-                                    Pattern.compile(
-                                            "^(?:cryostat\\.agent\\.truststore\\.cert)\\[(\\d+)\\]\\.(.*)$");
-                            Matcher matcher = pattern.matcher(name);
-
+                            Matcher matcher = CRYOSTAT_AGENT_TRUSTSTORE_PATTERN.matcher(name);
                             if (!matcher.matches()) {
                                 throw new IllegalArgumentException(
                                         String.format(
