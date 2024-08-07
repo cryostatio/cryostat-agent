@@ -11,47 +11,8 @@ on:
       - v[0-9]+
       - v[0-9]+.[0-9]+
       - cryostat-v[0-9]+.[0-9]+
-  pull_request_target:
-    types:
-      - opened
-      - reopened
-      - synchronize
-      - labeled
-      - unlabeled
-    branches:
-      - main
-      - v[0-9]+
-      - v[0-9]+.[0-9]+
-      - cryostat-v[0-9]+.[0-9]+
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        JVM_version: ['11', '17', '21']
-    if: ${{ github.repository_owner == 'cryostatio' }}
-    steps:
-    - name: Fail if PR and safe-to-test label NOT applied
-      if: ${{ github.event_name == 'pull_request_target' && !contains(github.event.pull_request.labels.*.name, 'safe-to-test') }}
-      run: exit 1
-    - uses: actions/checkout@v3
-      with:
-        repository: ${{ github.event.pull_request.head.repo.full_name }}
-        ref: ${{ github.event.pull_request.head.ref }}
-        submodules: true
-    - uses: actions/setup-java@v2
-      with:
-        java-version: ${{ matrix.JVM_version }}
-        distribution: 'temurin'
-    - uses: skjolber/maven-cache-github-action@v1
-      with:
-        step: restore
-    - run: mvn -B -U clean verify
-    - uses: skjolber/maven-cache-github-action@v1
-      with:
-        step: save
-
   get-version:
     runs-on: ubuntu-latest
     outputs:
