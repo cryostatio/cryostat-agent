@@ -220,8 +220,8 @@ public abstract class ConfigModule {
         for (TruststoreConfig.Builder builder : truststoreBuilders.values()) {
             try {
                 truststoreConfigs.add(builder.build());
-            } catch (IllegalStateException e) {
-                log.error("Error building truststore config", e);
+            } catch (Exception e) {
+                throw new IllegalStateException(e);
             }
         }
         return truststoreConfigs;
