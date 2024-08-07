@@ -76,7 +76,7 @@ public abstract class ConfigModule {
             "cryostat.agent.webclient.connect.timeout-ms";
     public static final String CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_TIMEOUT_MS =
             "cryostat.agent.webclient.response.timeout-ms";
-    public static final String CRYOSTAT_AGENT_TRUSTSTORES =
+    public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORES =
             "cryostat.agent.webclient.tls.truststore.cert";
     public static final Pattern CRYOSTAT_AGENT_TRUSTSTORE_PATTERN =
             Pattern.compile(
@@ -172,11 +172,11 @@ public abstract class ConfigModule {
 
     @Provides
     @Singleton
-    @Named(CRYOSTAT_AGENT_TRUSTSTORES)
+    @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORES)
     public static List<TruststoreConfig> provideTruststoreConfigs(Config config) {
         Map<Integer, TruststoreConfig.Builder> truststoreBuilders = new HashMap<>();
         StreamSupport.stream(config.getPropertyNames().spliterator(), false)
-                .filter(e -> e.startsWith(CRYOSTAT_AGENT_TRUSTSTORES))
+                .filter(e -> e.startsWith(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORES))
                 .forEach(
                         name -> {
                             Matcher matcher = CRYOSTAT_AGENT_TRUSTSTORE_PATTERN.matcher(name);
