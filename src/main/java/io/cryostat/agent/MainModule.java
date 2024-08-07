@@ -65,7 +65,6 @@ import com.sun.net.httpserver.HttpsServer;
 import dagger.Lazy;
 import dagger.Module;
 import dagger.Provides;
-import org.acme.config.TruststoreConfig;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.http.Header;
@@ -160,12 +159,6 @@ public abstract class MainModule {
                     String certType = truststore.getType();
                     String certAlias = truststore.getAlias();
                     String certPath = truststore.getPath();
-
-                    if (certType == null || certAlias == null || certPath == null) {
-                        throw new IllegalArgumentException(
-                                "The truststore config properties must include a type, alias, and"
-                                        + " path for each certificate provided.");
-                    }
 
                     // load truststore with certificatesCertificate
                     InputStream certFile = new FileInputStream(certPath);

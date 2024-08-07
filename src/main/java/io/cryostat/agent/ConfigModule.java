@@ -33,6 +33,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Predicate;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
@@ -43,7 +45,6 @@ import io.cryostat.agent.util.StringUtils;
 
 import dagger.Module;
 import dagger.Provides;
-import org.acme.config.TruststoreConfig;
 import org.eclipse.microprofile.config.Config;
 import org.eclipse.microprofile.config.ConfigProvider;
 import org.slf4j.Logger;
@@ -75,7 +76,7 @@ public abstract class ConfigModule {
             "cryostat.agent.webclient.connect.timeout-ms";
     public static final String CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_TIMEOUT_MS =
             "cryostat.agent.webclient.response.timeout-ms";
-    public static final String CRYOSTAT_AGENT_TRUSTSTORES = "truststore.cert";
+    public static final String CRYOSTAT_AGENT_TRUSTSTORES = "cryostat.agent.truststore.cert";
 
     public static final String CRYOSTAT_AGENT_WEBSERVER_HOST = "cryostat.agent.webserver.host";
     public static final String CRYOSTAT_AGENT_WEBSERVER_PORT = "cryostat.agent.webserver.port";
@@ -169,7 +170,7 @@ public abstract class ConfigModule {
     @Singleton
     @Named(CRYOSTAT_AGENT_TRUSTSTORES)
     public static List<TruststoreConfig> provideTruststoreConfigs(Config config) {
-        Map<Integer, TruststoreConfig> truststoreMap = new HashMap<>();
+        Map<Integer, TruststoreConfig.Builder> truststoreBuilders = new HashMap<>();
 
         List<String> propertyNames =
                 StreamSupport.stream(config.getPropertyNames().spliterator(), false)
@@ -178,48 +179,63 @@ public abstract class ConfigModule {
 
         for (String name : propertyNames) {
 
-            String[] parts = name.split("\\.");
-            if (parts.length < 3) {
-                log.error(
-                        "Invalid truststore config property name format: {}. Rename to"
-                                + " 'truststore.cert[CERT_NUMBER].CERT_PROPERTY",
-                        name);
-            }
+            Pattern pattern =
+                    Pattern.compile("^(cryostat\\.agent\\.truststore\\.cert)\\[(\\d+)\\]\\.(.*)$");
+            Matcher matcher = pattern.matcher(name);
 
-            int truststoreNumber = 0;
-            try {
-                truststoreNumber = Integer.parseInt(parts[1].substring(5, 6));
-            } catch (IllegalArgumentException e) {
-                log.error(
-                        "Invalid truststore config property name format: {}. Make sure"
-                                + " the certificate number is valid",
-                        name);
-            }
-
-            TruststoreConfig truststore =
-                    truststoreMap.computeIfAbsent(
-                            truststoreNumber, k -> new TruststoreConfig(null, null, null));
-
-            String value = config.getOptionalValue(name, String.class).orElse(null);
-            switch (parts[2]) {
-                case "alias":
-                    truststore.setAlias(value);
-                    break;
-                case "path":
-                    truststore.setPath(value);
-                    break;
-                case "type":
-                    truststore.setType(value);
-                    break;
-                default:
+            if (matcher.matches()) {
+                if (matcher.groupCount() < 3) {
                     log.error(
-                            "Truststore config only includes alias, path, and type. Rename this"
-                                    + " config property: {}",
+                            "Invalid truststore config property name format: {}. Rename to"
+                                + " 'cryostat.agent.truststore.cert[CERT_NUMBER].CERT_PROPERTY'",
                             name);
-                    break;
+                    continue;
+                }
+
+                int truststoreNumber = Integer.parseInt(matcher.group(2));
+                String configProp = matcher.group(3);
+
+                TruststoreConfig.Builder truststoreBuilder =
+                        truststoreBuilders.computeIfAbsent(
+                                truststoreNumber, k -> new TruststoreConfig.Builder());
+                ;
+
+                String value = config.getValue(name, String.class);
+                switch (configProp) {
+                    case "alias":
+                        truststoreBuilder = truststoreBuilder.withAlias(value);
+                        break;
+                    case "path":
+                        truststoreBuilder = truststoreBuilder.withPath(value);
+                        break;
+                    case "type":
+                        truststoreBuilder = truststoreBuilder.withType(value);
+                        break;
+                    default:
+                        log.error(
+                                "Truststore config only includes alias, path, and type. Rename this"
+                                        + " config property: {}",
+                                name);
+                        break;
+                }
+            } else {
+                throw new IllegalArgumentException(
+                        String.format(
+                                "Invalid truststore config property name format: %s. Make sure the"
+                                    + " config property matches the following pattern: "
+                                    + " 'cryostat.agent.truststore.cert[CERT_NUMBER].CERT_PROPERTY'",
+                                name));
             }
         }
-        return new ArrayList<>(truststoreMap.values());
+        List<TruststoreConfig> truststoreConfigs = new ArrayList<>();
+        for (TruststoreConfig.Builder builder : truststoreBuilders.values()) {
+            try {
+                truststoreConfigs.add(builder.build());
+            } catch (IllegalStateException e) {
+                log.error("Error building truststore configs: {}", e.getMessage());
+            }
+        }
+        return truststoreConfigs;
     }
 
     @Provides
