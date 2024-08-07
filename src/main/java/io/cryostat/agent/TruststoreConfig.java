@@ -23,9 +23,18 @@ public class TruststoreConfig {
     private final String type;
 
     private TruststoreConfig(Builder builder) {
-        this.alias = Objects.requireNonNull(builder.alias, "Truststore config properties must include a certificate alias");
-        this.path = Objects.requireNonNull(builder.path, "Truststore config properties must include a certificate path");
-        this.type = Objects.requireNonNull(builder.type, "Truststore config properties must include a certificate type");
+        this.alias =
+                Objects.requireNonNull(
+                        builder.alias,
+                        "Truststore config properties must include a certificate alias");
+        this.path =
+                Objects.requireNonNull(
+                        builder.path,
+                        "Truststore config properties must include a certificate path");
+        this.type =
+                Objects.requireNonNull(
+                        builder.type,
+                        "Truststore config properties must include a certificate type");
     }
 
     public String getAlias() {
@@ -82,7 +91,8 @@ public class TruststoreConfig {
             return false;
         }
         TruststoreConfig other = (TruststoreConfig) obj;
-        return Objects.equals(alias, other.alias) && Objects.equals(path, other.path)
+        return Objects.equals(alias, other.alias)
+                && Objects.equals(path, other.path)
                 && Objects.equals(type, other.type);
     }
 }
