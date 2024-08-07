@@ -25,12 +25,16 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivilegedActionException;
 import java.security.PrivilegedExceptionAction;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
 import javax.inject.Named;
 import javax.inject.Singleton;
@@ -39,6 +43,7 @@ import io.cryostat.agent.util.StringUtils;
 
 import dagger.Module;
 import dagger.Provides;
+import org.acme.config.TruststoreConfig;
 import org.eclipse.microprofile.config.Config;
 import org.eclipse.microprofile.config.ConfigProvider;
 import org.slf4j.Logger;
@@ -70,18 +75,7 @@ public abstract class ConfigModule {
             "cryostat.agent.webclient.connect.timeout-ms";
     public static final String CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_TIMEOUT_MS =
             "cryostat.agent.webclient.response.timeout-ms";
-    public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_CERT_ALIAS =
-            "cryostat.agent.webclient.tls.cert.alias";
-    public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_CERT_FILE =
-            "cryostat.agent.webclient.tls.cert.file";
-    public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_CERT_TYPE =
-            "cryostat.agent.webclient.tls.cert.type";
-    public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_KEY_ALIAS =
-            "cryostat.agent.webclient.tls.key.alias";
-    public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_KEY_FILE =
-            "cryostat.agent.webclient.tls.key.file";
-    public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_KEY_TYPE =
-            "cryostat.agent.webclient.tls.key.type";
+    public static final String CRYOSTAT_AGENT_TRUSTSTORES = "truststore.cert";
 
     public static final String CRYOSTAT_AGENT_WEBSERVER_HOST = "cryostat.agent.webserver.host";
     public static final String CRYOSTAT_AGENT_WEBSERVER_PORT = "cryostat.agent.webserver.port";
@@ -172,6 +166,63 @@ public abstract class ConfigModule {
     }
 
     @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_TRUSTSTORES)
+    public static List<TruststoreConfig> provideTruststoreConfigs(Config config) {
+        Map<Integer, TruststoreConfig> truststoreMap = new HashMap<>();
+
+        List<String> propertyNames =
+                StreamSupport.stream(config.getPropertyNames().spliterator(), false)
+                        .filter(e -> e.startsWith(CRYOSTAT_AGENT_TRUSTSTORES))
+                        .collect(Collectors.toList());
+
+        for (String name : propertyNames) {
+
+            String[] parts = name.split("\\.");
+            if (parts.length < 3) {
+                log.error(
+                        "Invalid truststore config property name format: {}. Rename to"
+                                + " 'truststore.cert[CERT_NUMBER].CERT_PROPERTY",
+                        name);
+            }
+
+            int truststoreNumber = 0;
+            try {
+                truststoreNumber = Integer.parseInt(parts[1].substring(5, 6));
+            } catch (IllegalArgumentException e) {
+                log.error(
+                        "Invalid truststore config property name format: {}. Make sure"
+                                + " the certificate number is valid",
+                        name);
+            }
+
+            TruststoreConfig truststore =
+                    truststoreMap.computeIfAbsent(
+                            truststoreNumber, k -> new TruststoreConfig(null, null, null));
+
+            String value = config.getOptionalValue(name, String.class).orElse(null);
+            switch (parts[2]) {
+                case "alias":
+                    truststore.setAlias(value);
+                    break;
+                case "path":
+                    truststore.setPath(value);
+                    break;
+                case "type":
+                    truststore.setType(value);
+                    break;
+                default:
+                    log.error(
+                            "Truststore config only includes alias, path, and type. Rename this"
+                                    + " config property: {}",
+                            name);
+                    break;
+            }
+        }
+        return new ArrayList<>(truststoreMap.values());
+    }
+
+    @Provides
     @Named(CRYOSTAT_AGENT_BASEURI_RANGE)
     public static URIRange provideUriRange(Config config) {
         return URIRange.fromString(config.getValue(CRYOSTAT_AGENT_BASEURI_RANGE, String.class));
@@ -250,48 +301,6 @@ public abstract class ConfigModule {
     @Named(CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_TIMEOUT_MS)
     public static int provideCryostatAgentWebclientResponseTimeoutMs(Config config) {
         return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_TIMEOUT_MS, int.class);
-    }
-
-    @Provides
-    @Singleton
-    @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_CERT_ALIAS)
-    public static String provideCryostatAgentWebclientTlsCertAlias(Config config) {
-        return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_TLS_CERT_ALIAS, String.class);
-    }
-
-    @Provides
-    @Singleton
-    @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_CERT_FILE)
-    public static Optional<String> provideCryostatAgentWebclientTlsCertFile(Config config) {
-        return config.getOptionalValue(CRYOSTAT_AGENT_WEBCLIENT_TLS_CERT_FILE, String.class);
-    }
-
-    @Provides
-    @Singleton
-    @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_CERT_TYPE)
-    public static String provideCryostatAgentWebclientTlsCertType(Config config) {
-        return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_TLS_CERT_TYPE, String.class);
-    }
-
-    @Provides
-    @Singleton
-    @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_KEY_ALIAS)
-    public static String provideCryostatAgentWebclientTlsKeyAlias(Config config) {
-        return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_TLS_KEY_ALIAS, String.class);
-    }
-
-    @Provides
-    @Singleton
-    @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_KEY_FILE)
-    public static Optional<String> provideCryostatAgentWebclientTlsKeyFile(Config config) {
-        return config.getOptionalValue(CRYOSTAT_AGENT_WEBCLIENT_TLS_KEY_FILE, String.class);
-    }
-
-    @Provides
-    @Singleton
-    @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_KEY_TYPE)
-    public static String provideCryostatAgentWebclientTlsKeyType(Config config) {
-        return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_TLS_KEY_TYPE, String.class);
     }
 
     @Provides

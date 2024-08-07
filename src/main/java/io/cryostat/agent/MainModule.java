@@ -32,6 +32,7 @@ import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -64,6 +65,7 @@ import com.sun.net.httpserver.HttpsServer;
 import dagger.Lazy;
 import dagger.Module;
 import dagger.Provides;
+import org.acme.config.TruststoreConfig;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.http.Header;
@@ -77,10 +79,10 @@ import org.slf4j.LoggerFactory;
 
 @Module(
         includes = {
-            ConfigModule.class,
             RemoteModule.class,
             HarvestModule.class,
             TriggerModule.class,
+            ConfigModule.class,
         })
 public abstract class MainModule {
 
@@ -131,12 +133,10 @@ public abstract class MainModule {
     public static SSLContext provideClientSslContext(
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_VERSION) String clientTlsVersion,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUST_ALL) boolean trustAll,
-            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CERT_ALIAS) String certAlias,
-            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CERT_FILE)
-                    Optional<String> certFilePath,
-            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CERT_TYPE) String certType) {
+            @Named(ConfigModule.CRYOSTAT_AGENT_TRUSTSTORES) List<TruststoreConfig> truststores) {
         try {
             if (!trustAll) {
+
                 SSLContext sslCtx = SSLContext.getInstance(clientTlsVersion);
 
                 // set up trust manager factory
@@ -156,19 +156,31 @@ public abstract class MainModule {
                 KeyStore ts = KeyStore.getInstance(KeyStore.getDefaultType());
                 ts.load(null, null);
 
-                // load truststore with certificatesCertificate
-                InputStream certFile = new FileInputStream(certFilePath.get());
-                CertificateFactory cf = CertificateFactory.getInstance(certType);
-                Certificate cert = cf.generateCertificate(certFile);
-                if (ts.containsAlias(certAlias)) {
-                    throw new IllegalStateException(
-                            String.format(
-                                    "truststore already contains a certificate with alias"
-                                            + " \"%s\"",
-                                    certAlias));
+                for (TruststoreConfig truststore : truststores) {
+                    String certType = truststore.getType();
+                    String certAlias = truststore.getAlias();
+                    String certPath = truststore.getPath();
+
+                    if (certType == null || certAlias == null || certPath == null) {
+                        throw new IllegalArgumentException(
+                                "The truststore config properties must include a type, alias, and"
+                                        + " path for each certificate provided.");
+                    }
+
+                    // load truststore with certificatesCertificate
+                    InputStream certFile = new FileInputStream(certPath);
+                    CertificateFactory cf = CertificateFactory.getInstance(certType);
+                    Certificate cert = cf.generateCertificate(certFile);
+                    if (ts.containsAlias(certType)) {
+                        throw new IllegalStateException(
+                                String.format(
+                                        "truststore already contains a certificate with alias"
+                                                + " \"%s\"",
+                                        certAlias));
+                    }
+                    ts.setCertificateEntry(certAlias, cert);
+                    certFile.close();
                 }
-                ts.setCertificateEntry(certAlias, cert);
-                certFile.close();
 
                 // set up trust manager factory
                 tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
@@ -240,9 +252,9 @@ public abstract class MainModule {
             return sslCtx;
         } catch (NoSuchAlgorithmException
                 | KeyManagementException
-                | IOException
+                | KeyStoreException
                 | CertificateException
-                | KeyStoreException e) {
+                | IOException e) {
             throw new RuntimeException(e);
         }
     }
