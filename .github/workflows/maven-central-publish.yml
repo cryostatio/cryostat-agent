@@ -2,17 +2,12 @@
 name: Publish a new Maven Central release
 
 on:
-  workflow_dispatch:
-    # inputs:
-    #   version:
-    #     description: 'Release version'
-    #     required: true
-  push:
-    branches:
-      - main
-      - v[0-9]+
-      - v[0-9]+.[0-9]+
-      - cryostat-v[0-9]+.[0-9]+
+  workflow_call:
+    inputs:
+      publish-cmd:
+        description: 'Command to perform publish'
+        required: true
+        type: string
 
 jobs:
   build:
@@ -41,4 +36,4 @@ jobs:
           JRELEASER_NEXUS2_USERNAME: ${{ secrets.MAVEN_CENTRAL_NEXUS2_USERNAME }}
           JRELEASER_NEXUS2_PASSWORD: ${{ secrets.MAVEN_CENTRAL_NEXUS2_PASSWORD }}
           JRELEASER_GITHUB_TOKEN: ${{ secrets.SUBMODULE_TOKEN }}
-        run: ./release.sh
+        run: ${{ inputs.publish-cmd }}

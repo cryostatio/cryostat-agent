@@ -51,3 +51,22 @@ jobs:
     - uses: skjolber/maven-cache-github-action@v1
       with:
         step: save
+
+  get-version:
+    runs-on: ubuntu-latest
+    outputs:
+      project-version: ${{ steps.get-version.outputs.project-version }}
+    steps:
+    - uses: actions/checkout@v4
+    - id: get-version
+      run: |
+        PROJECT_VERSION="$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)"
+        echo "project-version=${PROJECT_VERSION}" >> "${GITHUB_OUTPUT}"
+
+  publish-snapshot:
+    needs: get-version
+    uses: ./.github/workflows/maven-central-publish.yml
+    secrets: inherit
+    with:
+      publish-cmd: './release-snapshot.sh'
+    if: ${{ github.repository_owner == 'cryostatio' && endsWith(needs.get-version.outputs.project-version, '-SNAPSHOT') }}
