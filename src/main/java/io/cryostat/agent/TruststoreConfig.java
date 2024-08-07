@@ -64,4 +64,25 @@ public class TruststoreConfig {
             return new TruststoreConfig(this);
         }
     }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(alias, path, type);
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) {
+            return true;
+        }
+        if (obj == null) {
+            return false;
+        }
+        if (getClass() != obj.getClass()) {
+            return false;
+        }
+        TruststoreConfig other = (TruststoreConfig) obj;
+        return Objects.equals(alias, other.alias) && Objects.equals(path, other.path)
+                && Objects.equals(type, other.type);
+    }
 }
