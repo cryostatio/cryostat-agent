@@ -15,15 +15,17 @@
  */
 package io.cryostat.agent;
 
+import java.util.Objects;
+
 public class TruststoreConfig {
     private final String alias;
     private final String path;
     private final String type;
 
-    public TruststoreConfig(Builder builder) {
-        this.alias = builder.alias;
-        this.path = builder.path;
-        this.type = builder.type;
+    private TruststoreConfig(Builder builder) {
+        this.alias = Objects.requireNonNull(builder.alias, "Truststore config properties must include a certificate alias");
+        this.path = Objects.requireNonNull(builder.path, "Truststore config properties must include a certificate path");
+        this.type = Objects.requireNonNull(builder.type, "Truststore config properties must include a certificate type");
     }
 
     public String getAlias() {
@@ -59,11 +61,6 @@ public class TruststoreConfig {
         }
 
         public TruststoreConfig build() {
-            if (this.alias == null || this.path == null || this.type == null) {
-                throw new IllegalArgumentException(
-                        "The truststore config properties must include a type, alias, and"
-                                + " path for each certificate provided");
-            }
             return new TruststoreConfig(this);
         }
     }
