@@ -76,10 +76,11 @@ public abstract class ConfigModule {
             "cryostat.agent.webclient.connect.timeout-ms";
     public static final String CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_TIMEOUT_MS =
             "cryostat.agent.webclient.response.timeout-ms";
-    public static final String CRYOSTAT_AGENT_TRUSTSTORES = "cryostat.agent.truststore.cert";
+    public static final String CRYOSTAT_AGENT_TRUSTSTORES =
+            "cryostat.agent.webclient.tls.truststore.cert";
     public static final Pattern CRYOSTAT_AGENT_TRUSTSTORE_PATTERN =
             Pattern.compile(
-                    "^(?:cryostat\\.agent\\.truststore\\.cert)\\[(?<index>\\d+)\\]\\.(?<property>.*)$");
+                    "^(?:cryostat\\.agent\\.webclient\\.tls\\.truststore\\.cert)\\[(?<index>\\d+)\\]\\.(?<property>.*)$");
 
     public static final String CRYOSTAT_AGENT_WEBSERVER_HOST = "cryostat.agent.webserver.host";
     public static final String CRYOSTAT_AGENT_WEBSERVER_PORT = "cryostat.agent.webserver.port";
