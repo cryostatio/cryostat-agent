@@ -102,7 +102,7 @@
   <org.projectnessie.cel.bom.version>0.4.4</org.projectnessie.cel.bom.version>
   <com.google.protobuf-java.version>3.25.2</com.google.protobuf-java.version>
   <info.picocli.version>4.7.4</info.picocli.version>
-  <com.redhat.insights.agent.version>1.0.1</com.redhat.insights.agent.version>
+  <com.redhat.insights.agent.version>1.0.2</com.redhat.insights.agent.version>
 
   <com.github.spotbugs.version>4.8.6</com.github.spotbugs.version>
   <com.github.spotbugs.plugin.version>4.8.6.2</com.github.spotbugs.plugin.version>
