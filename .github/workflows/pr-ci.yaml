@@ -1,4 +1,4 @@
-name: CI build and push
+name: PR CI build
 
 concurrency:
   group: ci-${{ github.run_id }}
