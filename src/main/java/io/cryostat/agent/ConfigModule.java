@@ -49,7 +49,6 @@ import io.cryostat.agent.util.StringUtils;
 
 import dagger.Module;
 import dagger.Provides;
-
 import org.apache.commons.io.IOUtils;
 import org.eclipse.microprofile.config.Config;
 import org.eclipse.microprofile.config.ConfigProvider;
