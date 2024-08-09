@@ -183,6 +183,7 @@ public abstract class MainModule {
             }
 
             KeyStore ts = KeyStore.getInstance(truststoreType);
+            ts.load(null, null);
 
             // initialize truststore with user provided path and pass
             if (truststorePath.isEmpty() && truststorePass.isEmpty()) {
@@ -191,23 +192,30 @@ public abstract class MainModule {
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }
+            } else if (truststorePath.isEmpty() || truststorePass.isEmpty()) {
+                throw new IllegalArgumentException(
+                        String.format(
+                                "To import a truststore, provide both the path to the truststore"
+                                    + " and the pass, or a path to a file containing the pass"));
             }
 
             // initialize truststore with user provided certs
             for (TruststoreConfig truststore : truststoreCerts) {
                 // load truststore with certificatesCertificate
-                InputStream certFile = new FileInputStream(truststore.getPath());
-                CertificateFactory cf = CertificateFactory.getInstance(truststore.getType());
-                Certificate cert = cf.generateCertificate(certFile);
-                if (ts.containsAlias(truststore.getType())) {
-                    throw new IllegalStateException(
-                            String.format(
-                                    "truststore already contains a certificate with alias"
-                                            + " \"%s\"",
-                                    truststore.getAlias()));
+                try (InputStream certFile = new FileInputStream(truststore.getPath())) {
+                    CertificateFactory cf = CertificateFactory.getInstance(truststore.getType());
+                    Certificate cert = cf.generateCertificate(certFile);
+                    if (ts.containsAlias(truststore.getType())) {
+                        throw new IllegalStateException(
+                                String.format(
+                                        "truststore already contains a certificate with alias"
+                                                + " \"%s\"",
+                                        truststore.getAlias()));
+                    }
+                    ts.setCertificateEntry(truststore.getAlias(), cert);
+                } catch (CertificateException e) {
+                    throw new RuntimeException(e);
                 }
-                ts.setCertificateEntry(truststore.getAlias(), cert);
-                certFile.close();
             }
 
             // set up trust manager factory
