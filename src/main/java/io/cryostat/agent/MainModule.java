@@ -133,8 +133,11 @@ public abstract class MainModule {
     public static SSLContext provideClientSslContext(
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_VERSION) String clientTlsVersion,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUST_ALL) boolean trustAll,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PATH) Optional<String> truststorePath,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS) Optional<String> truststorePass,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_TYPE) String truststoreType,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_CERTS)
-                    List<TruststoreConfig> truststores) {
+                    List<TruststoreConfig> truststoreCerts) {
         try {
             if (trustAll) {
                 SSLContext sslCtx = SSLContext.getInstance(clientTlsVersion);
@@ -177,11 +180,19 @@ public abstract class MainModule {
                 }
             }
 
-            // initialize truststore
-            KeyStore ts = KeyStore.getInstance(KeyStore.getDefaultType());
-            ts.load(null, null);
+            KeyStore ts = KeyStore.getInstance(truststoreType);
 
-            for (TruststoreConfig truststore : truststores) {
+            // initialize truststore with user provided path and pass
+            if (truststorePath.isEmpty() && truststorePass.isEmpty()) {
+                try (InputStream truststore = new FileInputStream(truststorePath.get())) {
+                    ts.load(truststore, truststorePass.get().toCharArray());
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+
+            //initialize truststore with user provided certs
+            for (TruststoreConfig truststore : truststoreCerts) {
                 // load truststore with certificatesCertificate
                 InputStream certFile = new FileInputStream(truststore.getPath());
                 CertificateFactory cf = CertificateFactory.getInstance(truststore.getType());
