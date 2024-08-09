@@ -16,7 +16,6 @@
 package io.cryostat.agent;
 
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.URI;
@@ -50,7 +49,6 @@ import io.cryostat.agent.util.StringUtils;
 
 import dagger.Module;
 import dagger.Provides;
-
 import org.apache.commons.io.IOUtils;
 import org.eclipse.microprofile.config.Config;
 import org.eclipse.microprofile.config.ConfigProvider;
@@ -280,8 +278,12 @@ public abstract class ConfigModule {
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS_FILE)
-    public static Optional<String> provideCryostatAgentWebclientTlsTruststorePassFromFile(Config config, @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS_CHARSET) String passCharset) {
-        Optional<String> truststorePassFile = config.getOptionalValue(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS_FILE, String.class);
+    public static Optional<String> provideCryostatAgentWebclientTlsTruststorePassFromFile(
+            Config config,
+            @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS_CHARSET) String passCharset) {
+        Optional<String> truststorePassFile =
+                config.getOptionalValue(
+                        CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS_FILE, String.class);
         Optional<String> password = Optional.empty();
         try (FileInputStream passFile = new FileInputStream(truststorePassFile.get())) {
             String pass = IOUtils.toString(passFile, Charset.forName(passCharset));
@@ -303,8 +305,12 @@ public abstract class ConfigModule {
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS)
-    public static Optional<String> provideCryostatAgentWebclientTlsTruststorePass(Config config, @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS_FILE) Optional<String> truststorePass) {
-        Optional<String> opt = config.getOptionalValue(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS, String.class);
+    public static Optional<String> provideCryostatAgentWebclientTlsTruststorePass(
+            Config config,
+            @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS_FILE)
+                    Optional<String> truststorePass) {
+        Optional<String> opt =
+                config.getOptionalValue(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS, String.class);
         return opt.or(() -> truststorePass);
     }
 

@@ -133,8 +133,10 @@ public abstract class MainModule {
     public static SSLContext provideClientSslContext(
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_VERSION) String clientTlsVersion,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUST_ALL) boolean trustAll,
-            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PATH) Optional<String> truststorePath,
-            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS) Optional<String> truststorePass,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PATH)
+                    Optional<String> truststorePath,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS)
+                    Optional<String> truststorePass,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_TYPE) String truststoreType,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_CERTS)
                     List<TruststoreConfig> truststoreCerts) {
@@ -191,7 +193,7 @@ public abstract class MainModule {
                 }
             }
 
-            //initialize truststore with user provided certs
+            // initialize truststore with user provided certs
             for (TruststoreConfig truststore : truststoreCerts) {
                 // load truststore with certificatesCertificate
                 InputStream certFile = new FileInputStream(truststore.getPath());
