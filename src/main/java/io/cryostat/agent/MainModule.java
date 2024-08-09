@@ -186,13 +186,13 @@ public abstract class MainModule {
             ts.load(null, null);
 
             // initialize truststore with user provided path and pass
-            if (truststorePath.isEmpty() && truststorePass.isEmpty()) {
+            if (!truststorePath.isEmpty() && !truststorePass.isEmpty()) {
                 try (InputStream truststore = new FileInputStream(truststorePath.get())) {
                     ts.load(truststore, truststorePass.get().toCharArray());
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }
-            } else if (truststorePath.isEmpty() || truststorePass.isEmpty()) {
+            } else if (!truststorePath.isEmpty() || !truststorePass.isEmpty()) {
                 throw new IllegalArgumentException(
                         String.format(
                                 "To import a truststore, provide both the path to the truststore"

@@ -33,6 +33,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Predicate;
@@ -289,6 +290,8 @@ public abstract class ConfigModule {
             String pass = IOUtils.toString(passFile, Charset.forName(passCharset));
             pass = pass.substring(0, pass.length() - 1);
             password = Optional.ofNullable(pass);
+        } catch (NoSuchElementException e) {
+            return password;
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -325,8 +328,16 @@ public abstract class ConfigModule {
     @Singleton
     @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_CERTS)
     public static List<TruststoreConfig> provideCryostatAgentWecblientTlsTruststoreCerts(
-            Config config) {
+            Config config,
+            @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS) Optional<String> truststorePass,
+            @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PATH) Optional<String> truststorePath) {
         Map<Integer, TruststoreConfig.Builder> truststoreBuilders = new HashMap<>();
+        List<TruststoreConfig> truststoreConfigs = new ArrayList<>();
+
+        if (!truststorePass.isEmpty() || !truststorePath.isEmpty()) {
+            return truststoreConfigs;
+        }
+
         StreamSupport.stream(config.getPropertyNames().spliterator(), false)
                 .filter(e -> e.startsWith(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_CERTS))
                 .forEach(
@@ -369,7 +380,6 @@ public abstract class ConfigModule {
                             }
                         });
 
-        List<TruststoreConfig> truststoreConfigs = new ArrayList<>();
         for (TruststoreConfig.Builder builder : truststoreBuilders.values()) {
             try {
                 truststoreConfigs.add(builder.build());
