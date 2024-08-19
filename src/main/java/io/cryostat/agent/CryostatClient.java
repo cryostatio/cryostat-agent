@@ -73,8 +73,8 @@ import org.slf4j.LoggerFactory;
 
 public class CryostatClient {
 
-    private static final String DISCOVERY_API_PATH = "/api/v2.2/discovery";
-    private static final String CREDENTIALS_API_PATH = "/api/v2.2/credentials";
+    private static final String DISCOVERY_API_PATH = "/api/v4/discovery";
+    private static final String CREDENTIALS_API_PATH = "/api/v4/credentials";
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
