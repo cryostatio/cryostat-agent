@@ -31,14 +31,13 @@ import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 
 import javax.inject.Named;
 import javax.inject.Singleton;
@@ -67,12 +66,14 @@ import dagger.Module;
 import dagger.Provides;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
-import org.apache.http.Header;
+import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.config.RequestConfig;
+import org.apache.http.client.protocol.HttpClientContext;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.impl.client.HttpClients;
-import org.apache.http.message.BasicHeader;
+import org.apache.http.impl.client.StandardHttpRequestRetryHandler;
+import org.apache.http.protocol.HttpContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -332,21 +333,15 @@ public abstract class MainModule {
     @Provides
     @Singleton
     public static HttpClient provideHttpClient(
-            @Named(HTTP_CLIENT_SSL_CTX) SSLContext sslContext,
             AuthorizationType authorizationType,
-            @Named(ConfigModule.CRYOSTAT_AGENT_AUTHORIZATION) Optional<String> authorization,
+            @Named(HTTP_CLIENT_SSL_CTX) SSLContext sslContext,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_VERIFY_HOSTNAME)
                     boolean verifyHostname,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_CONNECT_TIMEOUT_MS) int connectTimeout,
-            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_TIMEOUT_MS) int responseTimeout) {
-        Set<Header> headers = new HashSet<>();
-        authorization
-                .filter(Objects::nonNull)
-                .map(v -> new BasicHeader("Authorization", v))
-                .ifPresent(headers::add);
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_TIMEOUT_MS) int responseTimeout,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_RETRY_COUNT) int retryCount) {
         HttpClientBuilder builder =
                 HttpClients.custom()
-                        .setDefaultHeaders(headers)
                         .setSSLContext(sslContext)
                         .setDefaultRequestConfig(
                                 RequestConfig.custom()
@@ -354,7 +349,40 @@ public abstract class MainModule {
                                         .setExpectContinueEnabled(true)
                                         .setConnectTimeout(connectTimeout)
                                         .setSocketTimeout(responseTimeout)
-                                        .build());
+                                        .setRedirectsEnabled(true)
+                                        .build())
+                        .setRetryHandler(
+                                new StandardHttpRequestRetryHandler(retryCount, true) {
+                                    @Override
+                                    public boolean retryRequest(
+                                            IOException exception,
+                                            int executionCount,
+                                            HttpContext context) {
+                                        // if the Authorization header we should send may change
+                                        // over time, ex. we read a Bearer token from a file, then
+                                        // it is possible that we get a 401 or 403 response because
+                                        // the token expired in between the time that we read it
+                                        // from our filesystem and when it was received by the
+                                        // authenticator. So, in this set of conditions, we should
+                                        // refresh our header value and try again right away
+                                        if (authorizationType.isDynamic()) {
+                                            HttpClientContext clientCtx =
+                                                    HttpClientContext.adapt(context);
+                                            if (clientCtx.isRequestSent()) {
+                                                HttpResponse resp = clientCtx.getResponse();
+                                                if (resp != null && resp.getStatusLine() != null) {
+                                                    int sc = resp.getStatusLine().getStatusCode();
+                                                    if (executionCount < 2
+                                                            && (sc == 401 || sc == 403)) {
+                                                        return true;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        return super.retryRequest(
+                                                exception, executionCount, context);
+                                    }
+                                });
 
         if (!verifyHostname) {
             builder = builder.setSSLHostnameVerifier((hostname, session) -> true);
@@ -412,13 +440,23 @@ public abstract class MainModule {
             ScheduledExecutorService executor,
             ObjectMapper objectMapper,
             HttpClient http,
+            @Named(ConfigModule.CRYOSTAT_AGENT_AUTHORIZATION)
+                    Supplier<Optional<String>> authorizationSupplier,
             @Named(ConfigModule.CRYOSTAT_AGENT_INSTANCE_ID) String instanceId,
             @Named(JVM_ID) String jvmId,
             @Named(ConfigModule.CRYOSTAT_AGENT_APP_NAME) String appName,
             @Named(ConfigModule.CRYOSTAT_AGENT_BASEURI) URI baseUri,
             @Named(ConfigModule.CRYOSTAT_AGENT_REALM) String realm) {
         return new CryostatClient(
-                executor, objectMapper, http, instanceId, jvmId, appName, baseUri, realm);
+                executor,
+                objectMapper,
+                http,
+                authorizationSupplier,
+                instanceId,
+                jvmId,
+                appName,
+                baseUri,
+                realm);
     }
 
     @Provides

@@ -24,44 +24,54 @@ import java.util.function.Function;
 
 import io.cryostat.agent.util.StringUtils;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 public enum AuthorizationType implements Function<String, String> {
-    NONE(v -> null),
-    BEARER(v -> String.format("Bearer %s", v)),
+    NONE(false, v -> null),
+    BEARER(false, v -> String.format("Bearer %s", v)),
     BASIC(
+            false,
             v ->
                     String.format(
                             "Basic %s",
                             Base64.getEncoder()
                                     .encodeToString(v.getBytes(StandardCharsets.UTF_8)))),
     KUBERNETES(
+            true,
             v -> {
                 try {
                     File file = new File(v);
                     String token = Files.readString(file.toPath()).strip();
                     return String.format("Bearer %s", token);
                 } catch (IOException ioe) {
-                    Logger log = LoggerFactory.getLogger(AuthorizationType.class);
-                    log.warn(String.format("Failed to read serviceaccount token from %s", v), ioe);
-                    return null;
+                    throw new RuntimeException(
+                            String.format("Failed to read serviceaccount token from %s", v), ioe);
                 }
             }),
     AUTO(
+            true,
             v -> {
-                String k8s = KUBERNETES.fn.apply(v);
-                if (StringUtils.isNotBlank(k8s)) {
-                    return k8s;
+                try {
+                    String k8s = KUBERNETES.fn.apply(v);
+                    if (StringUtils.isNotBlank(k8s)) {
+                        return k8s;
+                    }
+                } catch (Exception e) {
+                    // ignore
                 }
                 return NONE.fn.apply(v);
             }),
     ;
 
+    private final boolean dynamic;
     private final Function<String, String> fn;
 
-    private AuthorizationType(Function<String, String> fn) {
+    private AuthorizationType(boolean dynamic, Function<String, String> fn) {
+        this.dynamic = dynamic;
         this.fn = fn;
+    }
+
+    public boolean isDynamic() {
+        // if the authorization value may change between invocations
+        return this.dynamic;
     }
 
     @Override

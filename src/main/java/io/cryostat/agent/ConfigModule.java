@@ -33,6 +33,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -81,6 +82,8 @@ public abstract class ConfigModule {
     public static final Pattern CRYOSTAT_AGENT_TRUSTSTORE_PATTERN =
             Pattern.compile(
                     "^(?:cryostat\\.agent\\.webclient\\.tls\\.truststore\\.cert)\\[(?<index>\\d+)\\]\\.(?<property>.*)$");
+    public static final String CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_RETRY_COUNT =
+            "cryostat.agent.webclient.response.retry-count";
 
     public static final String CRYOSTAT_AGENT_WEBSERVER_HOST = "cryostat.agent.webserver.host";
     public static final String CRYOSTAT_AGENT_WEBSERVER_PORT = "cryostat.agent.webserver.port";
@@ -201,12 +204,12 @@ public abstract class ConfigModule {
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_AUTHORIZATION)
-    public static Optional<String> provideCryostatAgentAuthorization(
+    public static Supplier<Optional<String>> provideCryostatAgentAuthorization(
             Config config,
             AuthorizationType authorizationType,
             @Named(CRYOSTAT_AGENT_AUTHORIZATION_VALUE) Optional<String> authorizationValue) {
         Optional<String> opt = config.getOptionalValue(CRYOSTAT_AGENT_AUTHORIZATION, String.class);
-        return opt.or(() -> authorizationValue.map(authorizationType::apply));
+        return () -> opt.or(() -> authorizationValue.map(authorizationType::apply));
     }
 
     @Provides
@@ -308,6 +311,13 @@ public abstract class ConfigModule {
             }
         }
         return truststoreConfigs;
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_RETRY_COUNT)
+    public static int provideCryostatAgentWebclientResponseRetryCount(Config config) {
+        return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_RETRY_COUNT, int.class);
     }
 
     @Provides
