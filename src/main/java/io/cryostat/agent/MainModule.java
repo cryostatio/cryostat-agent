@@ -48,6 +48,7 @@ import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
 
+import io.cryostat.agent.ConfigModule.ByteBuffer;
 import io.cryostat.agent.harvest.HarvestModule;
 import io.cryostat.agent.remote.RemoteContext;
 import io.cryostat.agent.remote.RemoteModule;
@@ -136,7 +137,9 @@ public abstract class MainModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PATH)
                     Optional<String> truststorePath,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS)
-                    Optional<String> truststorePass,
+                    Optional<ByteBuffer> truststorePass,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS_CHARSET)
+                    String passCharset,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_TYPE) String truststoreType,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_CERTS)
                     List<TruststoreConfig> truststoreCerts) {
@@ -188,7 +191,8 @@ public abstract class MainModule {
             // initialize truststore with user provided path and pass
             if (!truststorePath.isEmpty() && !truststorePass.isEmpty()) {
                 try (InputStream truststore = new FileInputStream(truststorePath.get())) {
-                    ts.load(truststore, truststorePass.get().toCharArray());
+                    ts.load(truststore, truststorePass.get().get(passCharset).toCharArray());
+                    truststorePass.get().clear();
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }

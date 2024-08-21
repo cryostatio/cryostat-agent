@@ -33,7 +33,6 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Predicate;
@@ -279,23 +278,21 @@ public abstract class ConfigModule {
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS_FILE)
-    public static Optional<String> provideCryostatAgentWebclientTlsTruststorePassFromFile(
+    public static Optional<ByteBuffer> provideCryostatAgentWebclientTlsTruststorePassFromFile(
             Config config,
             @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS_CHARSET) String passCharset) {
         Optional<String> truststorePassFile =
                 config.getOptionalValue(
                         CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS_FILE, String.class);
-        Optional<String> password = Optional.empty();
+        if (truststorePassFile.isEmpty()) {
+            return Optional.empty();
+        }
         try (FileInputStream passFile = new FileInputStream(truststorePassFile.get())) {
-            String pass = IOUtils.toString(passFile, Charset.forName(passCharset));
-            pass = pass.substring(0, pass.length() - 1);
-            password = Optional.ofNullable(pass);
-        } catch (NoSuchElementException e) {
-            return password;
+            String pass = IOUtils.toString(passFile, Charset.forName(passCharset)).trim();
+            return Optional.ofNullable(new ByteBuffer(pass, passCharset));
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-        return password;
     }
 
     @Provides
@@ -308,13 +305,16 @@ public abstract class ConfigModule {
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS)
-    public static Optional<String> provideCryostatAgentWebclientTlsTruststorePass(
+    public static Optional<ByteBuffer> provideCryostatAgentWebclientTlsTruststorePass(
             Config config,
             @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS_FILE)
-                    Optional<String> truststorePass) {
+                    Optional<ByteBuffer> truststorePass) {
         Optional<String> opt =
                 config.getOptionalValue(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS, String.class);
-        return opt.or(() -> truststorePass);
+        if (opt.isEmpty()) {
+            return truststorePass;
+        }
+        return Optional.ofNullable(new ByteBuffer(opt.get(), "utf-8"));
     }
 
     @Provides
@@ -329,7 +329,8 @@ public abstract class ConfigModule {
     @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_CERTS)
     public static List<TruststoreConfig> provideCryostatAgentWecblientTlsTruststoreCerts(
             Config config,
-            @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS) Optional<String> truststorePass,
+            @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS)
+                    Optional<ByteBuffer> truststorePass,
             @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PATH) Optional<String> truststorePath) {
         Map<Integer, TruststoreConfig.Builder> truststoreBuilders = new HashMap<>();
         List<TruststoreConfig> truststoreConfigs = new ArrayList<>();
@@ -717,6 +718,26 @@ public abstract class ConfigModule {
                 }
             }
             return SITE_LOCAL;
+        }
+    }
+
+    public static class ByteBuffer {
+        private final byte[] buf;
+
+        public ByteBuffer(int len) {
+            this.buf = new byte[len];
+        }
+
+        public ByteBuffer(String s, String charset) {
+            this.buf = Arrays.copyOf(s.getBytes(Charset.forName(charset)), s.length());
+        }
+
+        public String get(String charset) {
+            return new String(this.buf, Charset.forName(charset));
+        }
+
+        public void clear() {
+            Arrays.fill(this.buf, (byte) 0);
         }
     }
 }
