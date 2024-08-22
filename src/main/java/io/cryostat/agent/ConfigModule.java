@@ -49,7 +49,6 @@ import io.cryostat.agent.util.StringUtils;
 
 import dagger.Module;
 import dagger.Provides;
-import org.apache.commons.io.IOUtils;
 import org.eclipse.microprofile.config.Config;
 import org.eclipse.microprofile.config.ConfigProvider;
 import org.slf4j.Logger;
@@ -279,8 +278,7 @@ public abstract class ConfigModule {
     @Singleton
     @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS_FILE)
     public static Optional<ByteBuffer> provideCryostatAgentWebclientTlsTruststorePassFromFile(
-            Config config,
-            @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS_CHARSET) String passCharset) {
+            Config config) {
         Optional<String> truststorePassFile =
                 config.getOptionalValue(
                         CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS_FILE, String.class);
@@ -288,8 +286,8 @@ public abstract class ConfigModule {
             return Optional.empty();
         }
         try (FileInputStream passFile = new FileInputStream(truststorePassFile.get())) {
-            String pass = IOUtils.toString(passFile, Charset.forName(passCharset)).trim();
-            return Optional.ofNullable(new ByteBuffer(pass, passCharset));
+            byte[] pass = passFile.readAllBytes();
+            return Optional.of(new ByteBuffer(pass));
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -308,13 +306,14 @@ public abstract class ConfigModule {
     public static Optional<ByteBuffer> provideCryostatAgentWebclientTlsTruststorePass(
             Config config,
             @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS_FILE)
-                    Optional<ByteBuffer> truststorePass) {
+                    Optional<ByteBuffer> truststorePass,
+            @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS_CHARSET) String passCharset) {
         Optional<String> opt =
                 config.getOptionalValue(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS, String.class);
         if (opt.isEmpty()) {
             return truststorePass;
         }
-        return Optional.ofNullable(new ByteBuffer(opt.get(), "utf-8"));
+        return Optional.of(new ByteBuffer(opt.get(), passCharset));
     }
 
     @Provides
@@ -726,6 +725,10 @@ public abstract class ConfigModule {
 
         public ByteBuffer(int len) {
             this.buf = new byte[len];
+        }
+
+        public ByteBuffer(byte[] s) {
+            this.buf = Arrays.copyOf(s, s.length);
         }
 
         public ByteBuffer(String s, String charset) {
