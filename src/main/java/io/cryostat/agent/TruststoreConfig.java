@@ -26,15 +26,18 @@ public class TruststoreConfig {
         this.alias =
                 Objects.requireNonNull(
                         builder.alias,
-                        "Truststore config properties must include a certificate alias");
+                        "Imported certs for the agent's truststore must include a certificate"
+                                + " alias");
         this.path =
                 Objects.requireNonNull(
                         builder.path,
-                        "Truststore config properties must include a certificate path");
+                        "Imported certs for the agent's truststore must include a certificate"
+                                + " path");
         this.type =
                 Objects.requireNonNull(
                         builder.type,
-                        "Truststore config properties must include a certificate type");
+                        "Imported certs for the agent's truststore must include a certificate"
+                                + " type");
     }
 
     public String getAlias() {

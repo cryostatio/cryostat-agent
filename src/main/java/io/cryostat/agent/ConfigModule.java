@@ -15,11 +15,14 @@
  */
 package io.cryostat.agent;
 
+import java.io.FileInputStream;
+import java.io.IOException;
 import java.net.InetAddress;
 import java.net.URI;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.net.UnknownHostException;
+import java.nio.charset.Charset;
 import java.security.AccessController;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -77,6 +80,16 @@ public abstract class ConfigModule {
             "cryostat.agent.webclient.connect.timeout-ms";
     public static final String CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_TIMEOUT_MS =
             "cryostat.agent.webclient.response.timeout-ms";
+    public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PATH =
+            "cryostat.agent.webclient.tls.truststore.path";
+    public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS_FILE =
+            "cryostat.agent.webclient.tls.truststore.pass.file";
+    public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS_CHARSET =
+            "cryostat.agent.webclient.tls.truststore.pass-charset";
+    public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS =
+            "cryostat.agent.webclient.tls.truststore.pass";
+    public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_TYPE =
+            "cryostat.agent.webclient.tls.truststore.type";
     public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_CERTS =
             "cryostat.agent.webclient.tls.truststore.cert";
     public static final Pattern CRYOSTAT_AGENT_TRUSTSTORE_PATTERN =
@@ -256,10 +269,76 @@ public abstract class ConfigModule {
 
     @Provides
     @Singleton
+    @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PATH)
+    public static Optional<String> provideCryostatAgentWebclientTlsTruststorePath(Config config) {
+        return config.getOptionalValue(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PATH, String.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS_FILE)
+    public static Optional<BytePass> provideCryostatAgentWebclientTlsTruststorePassFromFile(
+            Config config) {
+        Optional<String> truststorePassFile =
+                config.getOptionalValue(
+                        CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS_FILE, String.class);
+        if (truststorePassFile.isEmpty()) {
+            return Optional.empty();
+        }
+        try (FileInputStream passFile = new FileInputStream(truststorePassFile.get())) {
+            byte[] pass = passFile.readAllBytes();
+            Optional<BytePass> bytePass = Optional.of(new BytePass(pass));
+            Arrays.fill(pass, (byte) 0);
+            return bytePass;
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS_CHARSET)
+    public static String provideCryostatAgentWebclientTlsTruststorePassCharset(Config config) {
+        return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS_CHARSET, String.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS)
+    public static Optional<BytePass> provideCryostatAgentWebclientTlsTruststorePass(
+            Config config,
+            @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS_FILE)
+                    Optional<BytePass> truststorePass,
+            @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS_CHARSET) String passCharset) {
+        Optional<String> opt =
+                config.getOptionalValue(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS, String.class);
+        if (opt.isEmpty()) {
+            return truststorePass;
+        }
+        return Optional.of(new BytePass(opt.get(), passCharset));
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_TYPE)
+    public static String provideCryostatAgentWebclientTlsTruststoreType(Config config) {
+        return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_TYPE, String.class);
+    }
+
+    @Provides
+    @Singleton
     @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_CERTS)
     public static List<TruststoreConfig> provideCryostatAgentWecblientTlsTruststoreCerts(
-            Config config) {
+            Config config,
+            @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS) Optional<BytePass> truststorePass,
+            @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PATH) Optional<String> truststorePath) {
         Map<Integer, TruststoreConfig.Builder> truststoreBuilders = new HashMap<>();
+        List<TruststoreConfig> truststoreConfigs = new ArrayList<>();
+
+        if (!truststorePass.isEmpty() || !truststorePath.isEmpty()) {
+            return truststoreConfigs;
+        }
+
         StreamSupport.stream(config.getPropertyNames().spliterator(), false)
                 .filter(e -> e.startsWith(CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_CERTS))
                 .forEach(
@@ -302,7 +381,6 @@ public abstract class ConfigModule {
                             }
                         });
 
-        List<TruststoreConfig> truststoreConfigs = new ArrayList<>();
         for (TruststoreConfig.Builder builder : truststoreBuilders.values()) {
             try {
                 truststoreConfigs.add(builder.build());
@@ -640,6 +718,30 @@ public abstract class ConfigModule {
                 }
             }
             return SITE_LOCAL;
+        }
+    }
+
+    public static class BytePass {
+        private final byte[] buf;
+
+        public BytePass(int len) {
+            this.buf = new byte[len];
+        }
+
+        public BytePass(byte[] s) {
+            this.buf = Arrays.copyOf(s, s.length);
+        }
+
+        public BytePass(String s, String charset) {
+            this.buf = Arrays.copyOf(s.getBytes(Charset.forName(charset)), s.length());
+        }
+
+        public byte[] get() {
+            return Arrays.copyOf(this.buf, this.buf.length);
+        }
+
+        public void clear() {
+            Arrays.fill(this.buf, (byte) 0);
         }
     }
 }

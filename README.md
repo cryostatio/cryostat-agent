@@ -176,7 +176,12 @@ and how it advertises itself to a Cryostat server instance. Properties that requ
 - [ ] `cryostat.agent.webclient.tls.version` [`String`]: the version of TLS used for the Agent's client SSL context. Default `TLSv1.2`.
 - [ ] `cryostat.agent.webclient.tls.trust-all` [`boolean`]: control whether the agent trusts all certificates presented by the Cryostat server. Default `false`. This should only be overridden for development and testing purposes, never in production.
 - [ ] `cryostat.agent.webclient.tls.verify-hostname` [`boolean`]: control whether the agent verifies hostnames on certificates presented by the Cryostat server. Default `true`. This should only be overridden for development and testing purposes, never in production.
-- [ ] `cryostat.agent.webclient.tls.trustore.certs` [`list`]: the list of truststoreConfig objects with alias, path, and type properties for certificates to be stored in the agent's truststore. For example, 'cryostat.agent.webclient.tls.truststore.certs[0].type' would be the type of the first certificate in this list. A truststoreConfig object must contain all three properties to be a valid certificate entry. 
+- [ ] `cryostat.agent.webclient.tls.trustore.certs` [`list`]: the list of truststoreConfig objects with alias, path, and type properties for certificates to be stored in the agent's truststore. For example, 'cryostat.agent.webclient.tls.truststore.certs[0].type' would be the type of the first certificate in this list. A truststoreConfig object must contain all three properties to be a valid certificate entry.
+- [ ] `cryostat.agent.webclient.tls.truststore.type` [`String`]: the type of truststore used for the agent's client truststore. Default `JKS`.
+- [ ] `cryostat.agent.webclient.tls.truststore.path` [`String`]: the filepath to the agent's webclient truststore. This takes precedent over `cryostat.agent.webclient.tls.truststore.certs` and must be configured with the truststore's pass with `cryostat.agent.webclient.tls.truststore.pass.file` or `cryostat.agent.webclient.tls.truststore.pass`.
+- [ ] `cryostat.agent.webclient.tls.truststore.pass.file` [`String`]: the filepath to the agent's client truststore's password
+- [ ] `cryostat.agent.webclient.tls.truststore.pass.charset` [`String`]: the character set used by the agent's client truststore's password. Default `utf-8`.
+- [ ] `cryostat.agent.webclient.tls.truststore.pass` [`String`]: the String format of the agent's client truststore's pass
 - [ ] `cryostat.agent.webclient.connect.timeout-ms` [`long`]: the duration in milliseconds to wait for HTTP requests to the Cryostat server to connect. Default `1000`.
 - [ ] `cryostat.agent.webclient.response.timeout-ms` [`long`]: the duration in milliseconds to wait for HTTP requests to the Cryostat server to respond. Default `1000`.
 - [ ] `cryostat.agent.webserver.host` [`String`]: the internal hostname or IP address for the embedded webserver to bind to. Default `0.0.0.0`.
@@ -184,7 +189,7 @@ and how it advertises itself to a Cryostat server instance. Properties that requ
 - [ ] `cryostat.agent.webserver.tls.version` [`String`]: the version of TLS used for the Agent's server SSL context. Default `TLSv1.2`.
 - [ ] `cryostat.agent.webserver.tls.keystore.pass` [`String`]: the filepath to the HTTPS server keystore's password
 - [ ] `cryostat.agent.webserver.tls.keystore.pass.charset` [`String`]: the character set used by the HTTPS server keystore's password. Default `utf-8`.
-- [ ] `cryostat.agent.webserver.tls.keystore.file` [`String`]: the file path to the HTTPS server keystore
+- [ ] `cryostat.agent.webserver.tls.keystore.file` [`String`]: the filepath to the HTTPS server keystore
 - [ ] `cryostat.agent.webserver.tls.keystore.type` [`String`]: the type of keystore used for the Agent's HTTPS server. Default `PKCS12`.
 - [ ] `cryostat.agent.webserver.tls.cert.alias` [`String`]: the alias for the certificate stored in the HTTPS server keystore. Default `serverCert`.
 - [ ] `cryostat.agent.webserver.tls.cert.file` [`String`]: the filepath to the certificate to be stored by the HTTPS server keystore

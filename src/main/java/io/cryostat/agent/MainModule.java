@@ -20,7 +20,10 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.URI;
+import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
 import java.nio.charset.Charset;
+import java.nio.charset.CharsetDecoder;
 import java.security.KeyManagementException;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
@@ -48,6 +51,7 @@ import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
 
+import io.cryostat.agent.ConfigModule.BytePass;
 import io.cryostat.agent.harvest.HarvestModule;
 import io.cryostat.agent.remote.RemoteContext;
 import io.cryostat.agent.remote.RemoteModule;
@@ -133,8 +137,15 @@ public abstract class MainModule {
     public static SSLContext provideClientSslContext(
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_VERSION) String clientTlsVersion,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUST_ALL) boolean trustAll,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PATH)
+                    Optional<String> truststorePath,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS)
+                    Optional<BytePass> truststorePass,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS_CHARSET)
+                    String passCharset,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_TYPE) String truststoreType,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_CERTS)
-                    List<TruststoreConfig> truststores) {
+                    List<TruststoreConfig> truststoreCerts) {
         try {
             if (trustAll) {
                 SSLContext sslCtx = SSLContext.getInstance(clientTlsVersion);
@@ -177,24 +188,48 @@ public abstract class MainModule {
                 }
             }
 
-            // initialize truststore
-            KeyStore ts = KeyStore.getInstance(KeyStore.getDefaultType());
+            KeyStore ts = KeyStore.getInstance(truststoreType);
             ts.load(null, null);
 
-            for (TruststoreConfig truststore : truststores) {
-                // load truststore with certificatesCertificate
-                InputStream certFile = new FileInputStream(truststore.getPath());
-                CertificateFactory cf = CertificateFactory.getInstance(truststore.getType());
-                Certificate cert = cf.generateCertificate(certFile);
-                if (ts.containsAlias(truststore.getType())) {
-                    throw new IllegalStateException(
-                            String.format(
-                                    "truststore already contains a certificate with alias"
-                                            + " \"%s\"",
-                                    truststore.getAlias()));
+            // initialize truststore with user provided path and pass
+            if (!truststorePath.isEmpty() && !truststorePass.isEmpty()) {
+                Charset charset = Charset.forName(passCharset);
+                CharsetDecoder decoder = charset.newDecoder();
+                ByteBuffer byteBuffer = ByteBuffer.wrap(truststorePass.get().get());
+                CharBuffer charBuffer = decoder.decode(byteBuffer);
+                try (InputStream truststore = new FileInputStream(truststorePath.get())) {
+                    ts.load(truststore, charBuffer.array());
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                } finally {
+                    byteBuffer.clear();
+                    charBuffer.clear();
+                    truststorePass.get().clear();
                 }
-                ts.setCertificateEntry(truststore.getAlias(), cert);
-                certFile.close();
+            } else if (!truststorePath.isEmpty() || !truststorePass.isEmpty()) {
+                throw new IllegalArgumentException(
+                        String.format(
+                                "To import a truststore, provide both the path to the truststore"
+                                    + " and the pass, or a path to a file containing the pass"));
+            }
+
+            // initialize truststore with user provided certs
+            for (TruststoreConfig truststore : truststoreCerts) {
+                // load truststore with certificatesCertificate
+                try (InputStream certFile = new FileInputStream(truststore.getPath())) {
+                    CertificateFactory cf = CertificateFactory.getInstance(truststore.getType());
+                    Certificate cert = cf.generateCertificate(certFile);
+                    if (ts.containsAlias(truststore.getType())) {
+                        throw new IllegalStateException(
+                                String.format(
+                                        "truststore already contains a certificate with alias"
+                                                + " \"%s\"",
+                                        truststore.getAlias()));
+                    }
+                    ts.setCertificateEntry(truststore.getAlias(), cert);
+                } catch (CertificateException e) {
+                    throw new RuntimeException(e);
+                }
             }
 
             // set up trust manager factory
