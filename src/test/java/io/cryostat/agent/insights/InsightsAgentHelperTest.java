@@ -82,7 +82,7 @@ public class InsightsAgentHelperTest {
 
         Map<String, String> env =
                 Collections.singletonMap("INSIGHTS_SVC", "http://insights-proxy.example.com:8080");
-        when(pluginInfo.getEnv()).thenReturn(env);
+        when(pluginInfo.getEnvAsMap()).thenReturn(env);
 
         this.helper = new InsightsAgentHelper(config, instrumentation);
     }
@@ -101,7 +101,7 @@ public class InsightsAgentHelperTest {
 
     @Test
     void testInsightsDisabled() {
-        when(pluginInfo.getEnv()).thenReturn(Collections.emptyMap());
+        when(pluginInfo.getEnvAsMap()).thenReturn(Collections.emptyMap());
         Assertions.assertFalse(helper.isInsightsEnabled(pluginInfo));
     }
 

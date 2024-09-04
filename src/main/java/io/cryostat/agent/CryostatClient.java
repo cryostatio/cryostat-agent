@@ -48,7 +48,6 @@ import io.cryostat.agent.model.RegistrationInfo;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import jdk.jfr.Recording;
 import org.apache.commons.io.FileUtils;
@@ -160,18 +159,7 @@ public class CryostatClient {
                     .thenApply(
                             res -> {
                                 try (InputStream is = res.getEntity().getContent()) {
-                                    return mapper.readValue(is, ObjectNode.class);
-                                } catch (IOException e) {
-                                    log.error("Unable to parse response as JSON", e);
-                                    throw new RegistrationException(e);
-                                }
-                            })
-                    .thenApply(
-                            node -> {
-                                try {
-                                    return mapper.readValue(
-                                            node.get("data").get("result").toString(),
-                                            PluginInfo.class);
+                                    return mapper.readValue(is, PluginInfo.class);
                                 } catch (IOException e) {
                                     log.error("Unable to parse response as JSON", e);
                                     throw new RegistrationException(e);
@@ -231,18 +219,8 @@ public class CryostatClient {
                 .thenApply(
                         res -> {
                             try (InputStream is = res.getEntity().getContent()) {
-                                return mapper.readValue(is, ObjectNode.class);
-                            } catch (IOException e) {
-                                log.error("Unable to parse response as JSON", e);
-                                throw new RegistrationException(e);
-                            }
-                        })
-                .thenApply(
-                        node -> {
-                            try {
                                 return mapper.readValue(
-                                        node.get("data").get("result").toString(),
-                                        new TypeReference<List<StoredCredential>>() {});
+                                        is, new TypeReference<List<StoredCredential>>() {});
                             } catch (IOException e) {
                                 log.error("Unable to parse response as JSON", e);
                                 throw new RegistrationException(e);
