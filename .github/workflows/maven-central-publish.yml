@@ -24,7 +24,7 @@ jobs:
           distribution: 'temurin'
           cache: maven
       - name: Run a build of the code base before release
-        run: ./mvnw --batch-mode --no-transfer-progress clean install
+        run: ./mvnw --batch-mode --no-transfer-progress -Psnapshots clean install
       # - name: Set release version
       #   run: ./mvnw --batch-mode --no-transfer-progress versions:set -DnewVersion=${{ github.event.inputs.version }}
       - name: Release with JReleaser

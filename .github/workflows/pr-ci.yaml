@@ -41,7 +41,7 @@ jobs:
     - uses: skjolber/maven-cache-github-action@v1
       with:
         step: restore
-    - run: mvn -B -U clean verify
+    - run: mvn -Psnapshots -B -U clean verify
     - uses: skjolber/maven-cache-github-action@v1
       with:
         step: save
