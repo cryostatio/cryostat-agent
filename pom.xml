@@ -84,7 +84,7 @@
   <org.apache.httpcomponents.httpmime.version>${org.apache.httpcomponents.httpclient.version}</org.apache.httpcomponents.httpmime.version>
   <com.fasterxml.jackson.version>2.17.2</com.fasterxml.jackson.version>
   <io.smallrye.config.version>3.5.4</io.smallrye.config.version>
-  <org.slf4j.version>2.0.13</org.slf4j.version>
+  <org.slf4j.version>2.0.16</org.slf4j.version>
   <org.projectnessie.cel.bom.version>0.4.4</org.projectnessie.cel.bom.version>
   <com.google.protobuf-java.version>3.25.2</com.google.protobuf-java.version>
   <info.picocli.version>4.7.4</info.picocli.version>
