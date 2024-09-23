@@ -136,6 +136,34 @@ public abstract class MainModule {
                 remoteContexts, cryostat, http, digest, user, passLength, callback, registration);
     }
 
+    private static Optional<CharBuffer> readPass(
+            Optional<String> pass, Optional<String> passFile, String passFileCharset)
+            throws IOException {
+        CharBuffer cb = null;
+        if (passFile.isPresent()) {
+            byte[] bytes = null;
+            try {
+                bytes = Files.readAllBytes(Path.of(passFile.get()));
+                cb = Charset.forName(passFileCharset).decode(ByteBuffer.wrap(bytes));
+            } finally {
+                if (bytes != null) {
+                    Arrays.fill(bytes, (byte) 0);
+                }
+            }
+        } else if (pass.isPresent()) {
+            cb = CharBuffer.wrap(pass.get().toCharArray());
+        }
+        return Optional.ofNullable(cb);
+    }
+
+    private static void clearBuffer(Optional<CharBuffer> cb) {
+        if (cb == null) {
+            return;
+        }
+        cb.ifPresent(c -> Arrays.fill(c.array(), '\0'));
+        cb.ifPresent(CharBuffer::clear);
+    }
+
     @Provides
     @Singleton
     @Named(HTTP_CLIENT_SSL_CTX)
@@ -155,49 +183,45 @@ public abstract class MainModule {
                     Optional<String> clientAuthKeystorePath,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEYSTORE_TYPE)
                     String clientAuthKeystoreType,
-            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEYSTORE_PASS)
-                    Optional<String> clientAuthKeystorePass,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEYSTORE_CERTS)
                     Optional<String> clientAuthKeystoreCert,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEYSTORE_PASS)
+                    Optional<String> clientAuthKeystorePass,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEYSTORE_PASS_FILE)
                     Optional<String> clientAuthKeystorePassFile,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEYSTORE_PASS_CHARSET)
-                    String clientAuthKeystorePassFileCharset) {
+                    String clientAuthKeystorePassFileCharset,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_PASS)
+                    Optional<String> clientAuthKeyPass,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_PASS_FILE)
+                    Optional<String> clientAuthKeyPassFile,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_PASS_CHARSET)
+                    String clientAuthKeyPassFileCharset) {
         try {
             var builder = SSLContexts.custom().setProtocol(clientTlsVersion);
+
+            // set up TLS client certificate for authentication
             if (clientAuthKeystorePath.isPresent()) {
                 Path clientAuthCert = Path.of(clientAuthKeystorePath.get());
-                if (clientAuthKeystorePassFile.isPresent()) {
-                    ByteBuffer bbuf = ByteBuffer.allocate(8192);
-                    CharBuffer cbuf = null;
-                    try {
-                        bbuf.put(Files.readAllBytes(Path.of(clientAuthKeystorePassFile.get())));
-                        cbuf = Charset.forName(clientAuthKeystorePassFileCharset).decode(bbuf);
-                        builder =
-                                builder.loadKeyMaterial(
-                                        // FIXME this assumes the keystore and key have the same
-                                        // password
-                                        clientAuthCert.toFile(), cbuf.array(), cbuf.array());
-                    } finally {
-                        Arrays.fill(bbuf.array(), (byte) 0);
-                        bbuf.clear();
-                        if (cbuf != null) {
-                            Arrays.fill(cbuf.array(), '\0');
-                            cbuf.clear();
-                        }
-                    }
-                } else if (clientAuthKeystorePass.isPresent()) {
-                    char[] chars = new char[0];
-                    try {
-                        chars = clientAuthKeystorePass.get().toCharArray();
-                        // FIXME this assumes the keystore and key have the same password
-                        builder = builder.loadKeyMaterial(clientAuthCert.toFile(), chars, chars);
-                    } finally {
-                        Arrays.fill(chars, '\0');
-                    }
-                } else {
-                    // FIXME this assumes the keystore and key have the same password (none)
-                    builder = builder.loadKeyMaterial(clientAuthCert.toFile(), null, null);
+                Optional<CharBuffer> ksPass =
+                        readPass(
+                                clientAuthKeystorePass,
+                                clientAuthKeystorePassFile,
+                                clientAuthKeystorePassFileCharset);
+                Optional<CharBuffer> keyPass =
+                        readPass(
+                                clientAuthKeyPass,
+                                clientAuthKeyPassFile,
+                                clientAuthKeyPassFileCharset);
+                try {
+                    builder =
+                            builder.loadKeyMaterial(
+                                    clientAuthCert.toFile(),
+                                    ksPass.map(CharBuffer::array).orElse(null),
+                                    keyPass.map(CharBuffer::array).orElse(null));
+                } finally {
+                    clearBuffer(ksPass);
+                    clearBuffer(keyPass);
                 }
             }
 
