@@ -442,17 +442,17 @@ public abstract class ConfigModule {
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEYSTORE_TYPE)
-    public static Optional<String> provideCryostatAgentWebclientTlsClientAuthKeystoreType(
-            Config config) {
-        return config.getOptionalValue(
+    public static String provideCryostatAgentWebclientTlsClientAuthKeystoreType(Config config) {
+        return config.getValue(
                 CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEYSTORE_TYPE, String.class);
     }
 
     @Provides
     @Singleton
-    @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEYSTORE_TYPE)
-    public static String provideCryostatAgentWebclientTlsClientAuthKeystoreCert(Config config) {
-        return config.getValue(
+    @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEYSTORE_CERTS)
+    public static Optional<String> provideCryostatAgentWebclientTlsClientAuthKeystoreCert(
+            Config config) {
+        return config.getOptionalValue(
                 CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEYSTORE_CERTS, String.class);
     }
 
