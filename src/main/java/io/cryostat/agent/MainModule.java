@@ -24,6 +24,8 @@ import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.CharsetDecoder;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.KeyManagementException;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
@@ -34,6 +36,7 @@ import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -74,10 +77,12 @@ import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.protocol.HttpClientContext;
+import org.apache.http.conn.ssl.NoopHostnameVerifier;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.impl.client.StandardHttpRequestRetryHandler;
 import org.apache.http.protocol.HttpContext;
+import org.apache.http.ssl.SSLContexts;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -145,35 +150,52 @@ public abstract class MainModule {
                     String passCharset,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_TYPE) String truststoreType,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_CERTS)
-                    List<TruststoreConfig> truststoreCerts) {
+                    List<TruststoreConfig> truststoreCerts,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEYSTORE_PATH)
+                    Optional<String> clientAuthKeystorePath,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEYSTORE_TYPE)
+                    String clientAuthKeystoreType,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEYSTORE_PASS)
+                    Optional<String> clientAuthKeystorePass,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEYSTORE_CERTS)
+                    Optional<String> clientAuthKeystoreCert,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEYSTORE_PASS_FILE)
+                    Optional<String> clientAuthKeystorePassFile,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEYSTORE_PASS_CHARSET)
+                    String clientAuthKeystorePassFileCharset) {
         try {
-            if (trustAll) {
-                SSLContext sslCtx = SSLContext.getInstance(clientTlsVersion);
-                sslCtx.init(
-                        null,
-                        new TrustManager[] {
-                            new X509TrustManager() {
-                                @Override
-                                public void checkClientTrusted(
-                                        X509Certificate[] chain, String authType)
-                                        throws CertificateException {}
-
-                                @Override
-                                public void checkServerTrusted(
-                                        X509Certificate[] chain, String authType)
-                                        throws CertificateException {}
-
-                                @Override
-                                public X509Certificate[] getAcceptedIssuers() {
-                                    return new X509Certificate[0];
-                                }
-                            }
-                        },
-                        null);
-                return sslCtx;
+            var builder = SSLContexts.custom().setProtocol(clientTlsVersion);
+            if (clientAuthKeystorePath.isPresent()) {
+                Path clientAuthCert = Path.of(clientAuthKeystorePath.get());
+                if (clientAuthKeystorePassFile.isPresent()) {
+                    ByteBuffer bbuf = ByteBuffer.allocate(8192);
+                    CharBuffer cbuf = null;
+                    try {
+                        bbuf.put(Files.readAllBytes(Path.of(clientAuthKeystorePassFile.get())));
+                        cbuf = Charset.forName(clientAuthKeystorePassFileCharset).decode(bbuf);
+                        builder =
+                                builder.loadKeyMaterial(
+                                        clientAuthCert.toFile(), cbuf.array(), null);
+                    } finally {
+                        Arrays.fill(bbuf.array(), (byte) 0);
+                        bbuf.clear();
+                        if (cbuf != null) {
+                            Arrays.fill(cbuf.array(), '\0');
+                            cbuf.clear();
+                        }
+                    }
+                } else if (clientAuthKeystorePass.isPresent()) {
+                    char[] chars = new char[0];
+                    try {
+                        chars = clientAuthKeystorePass.get().toCharArray();
+                        builder = builder.loadKeyMaterial(clientAuthCert.toFile(), chars, null);
+                    } finally {
+                        Arrays.fill(chars, '\0');
+                    }
+                } else {
+                    builder = builder.loadKeyMaterial(clientAuthCert.toFile(), null, null);
+                }
             }
-
-            SSLContext sslCtx = SSLContext.getInstance(clientTlsVersion);
 
             // set up trust manager factory
             TrustManagerFactory tmf =
@@ -181,6 +203,7 @@ public abstract class MainModule {
             tmf.init((KeyStore) null);
 
             X509TrustManager defaultTrustManager = null;
+            X509TrustManager customTrustManager = null;
             for (TrustManager tm : tmf.getTrustManagers()) {
                 if (tm instanceof X509TrustManager) {
                     defaultTrustManager = (X509TrustManager) tm;
@@ -191,56 +214,64 @@ public abstract class MainModule {
             KeyStore ts = KeyStore.getInstance(truststoreType);
             ts.load(null, null);
 
-            // initialize truststore with user provided path and pass
-            if (!truststorePath.isEmpty() && !truststorePass.isEmpty()) {
-                Charset charset = Charset.forName(passCharset);
-                CharsetDecoder decoder = charset.newDecoder();
-                ByteBuffer byteBuffer = ByteBuffer.wrap(truststorePass.get().get());
-                CharBuffer charBuffer = decoder.decode(byteBuffer);
-                try (InputStream truststore = new FileInputStream(truststorePath.get())) {
-                    ts.load(truststore, charBuffer.array());
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                } finally {
-                    byteBuffer.clear();
-                    charBuffer.clear();
-                    truststorePass.get().clear();
-                }
-            } else if (!truststorePath.isEmpty() || !truststorePass.isEmpty()) {
-                throw new IllegalArgumentException(
-                        String.format(
-                                "To import a truststore, provide both the path to the truststore"
-                                    + " and the pass, or a path to a file containing the pass"));
-            }
-
-            // initialize truststore with user provided certs
-            for (TruststoreConfig truststore : truststoreCerts) {
-                // load truststore with certificatesCertificate
-                try (InputStream certFile = new FileInputStream(truststore.getPath())) {
-                    CertificateFactory cf = CertificateFactory.getInstance(truststore.getType());
-                    Certificate cert = cf.generateCertificate(certFile);
-                    if (ts.containsAlias(truststore.getType())) {
-                        throw new IllegalStateException(
-                                String.format(
-                                        "truststore already contains a certificate with alias"
-                                                + " \"%s\"",
-                                        truststore.getAlias()));
+            if (trustAll) {
+                builder =
+                        builder.loadTrustMaterial(
+                                (X509Certificate[] chain, String authType) -> true);
+            } else {
+                // initialize truststore with user provided path and pass
+                if (!truststorePath.isEmpty() && !truststorePass.isEmpty()) {
+                    Charset charset = Charset.forName(passCharset);
+                    CharsetDecoder decoder = charset.newDecoder();
+                    ByteBuffer byteBuffer = ByteBuffer.wrap(truststorePass.get().get());
+                    CharBuffer charBuffer = decoder.decode(byteBuffer);
+                    try (InputStream truststore = new FileInputStream(truststorePath.get())) {
+                        ts.load(truststore, charBuffer.array());
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    } finally {
+                        byteBuffer.clear();
+                        charBuffer.clear();
+                        truststorePass.get().clear();
                     }
-                    ts.setCertificateEntry(truststore.getAlias(), cert);
-                } catch (CertificateException e) {
-                    throw new RuntimeException(e);
+                } else if (!truststorePath.isEmpty() || !truststorePass.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            String.format(
+                                    "To import a truststore, provide both the path to the"
+                                        + " truststore and the pass, or a path to a file containing"
+                                        + " the pass"));
                 }
-            }
 
-            // set up trust manager factory
-            tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-            tmf.init(ts);
+                // initialize truststore with user provided certs
+                for (TruststoreConfig truststore : truststoreCerts) {
+                    // load truststore with certificatesCertificate
+                    try (InputStream certFile = new FileInputStream(truststore.getPath())) {
+                        CertificateFactory cf =
+                                CertificateFactory.getInstance(truststore.getType());
+                        Certificate cert = cf.generateCertificate(certFile);
+                        if (ts.containsAlias(truststore.getType())) {
+                            throw new IllegalStateException(
+                                    String.format(
+                                            "truststore already contains a certificate with alias"
+                                                    + " \"%s\"",
+                                            truststore.getAlias()));
+                        }
+                        ts.setCertificateEntry(truststore.getAlias(), cert);
+                    } catch (CertificateException e) {
+                        throw new RuntimeException(e);
+                    }
+                }
 
-            X509TrustManager customTrustManager = null;
-            for (TrustManager tm : tmf.getTrustManagers()) {
-                if (tm instanceof X509TrustManager) {
-                    customTrustManager = (X509TrustManager) tm;
-                    break;
+                // set up trust manager factory
+                tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+                tmf.init(ts);
+
+                customTrustManager = null;
+                for (TrustManager tm : tmf.getTrustManagers()) {
+                    if (tm instanceof X509TrustManager) {
+                        customTrustManager = (X509TrustManager) tm;
+                        break;
+                    }
                 }
             }
 
@@ -274,11 +305,21 @@ public abstract class MainModule {
                         }
                     };
 
-            // set up HTTPS context
-            sslCtx.init(null, new TrustManager[] {mergedTrustManager}, null);
-            return sslCtx;
+            builder =
+                    builder.loadTrustMaterial(
+                            (X509Certificate[] chain, String authType) -> {
+                                try {
+                                    mergedTrustManager.checkServerTrusted(chain, authType);
+                                    return true;
+                                } catch (Exception e) {
+                                    return false;
+                                }
+                            });
+
+            return builder.build();
         } catch (NoSuchAlgorithmException
                 | KeyManagementException
+                | UnrecoverableKeyException
                 | KeyStoreException
                 | CertificateException
                 | IOException e) {
@@ -420,7 +461,7 @@ public abstract class MainModule {
                                 });
 
         if (!verifyHostname) {
-            builder = builder.setSSLHostnameVerifier((hostname, session) -> true);
+            builder = builder.setSSLHostnameVerifier(NoopHostnameVerifier.INSTANCE);
         }
         return builder.build();
     }
