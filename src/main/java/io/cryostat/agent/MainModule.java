@@ -175,7 +175,9 @@ public abstract class MainModule {
                         cbuf = Charset.forName(clientAuthKeystorePassFileCharset).decode(bbuf);
                         builder =
                                 builder.loadKeyMaterial(
-                                        clientAuthCert.toFile(), cbuf.array(), null);
+                                        // FIXME this assumes the keystore and key have the same
+                                        // password
+                                        clientAuthCert.toFile(), cbuf.array(), cbuf.array());
                     } finally {
                         Arrays.fill(bbuf.array(), (byte) 0);
                         bbuf.clear();
@@ -188,11 +190,13 @@ public abstract class MainModule {
                     char[] chars = new char[0];
                     try {
                         chars = clientAuthKeystorePass.get().toCharArray();
-                        builder = builder.loadKeyMaterial(clientAuthCert.toFile(), chars, null);
+                        // FIXME this assumes the keystore and key have the same password
+                        builder = builder.loadKeyMaterial(clientAuthCert.toFile(), chars, chars);
                     } finally {
                         Arrays.fill(chars, '\0');
                     }
                 } else {
+                    // FIXME this assumes the keystore and key have the same password (none)
                     builder = builder.loadKeyMaterial(clientAuthCert.toFile(), null, null);
                 }
             }
