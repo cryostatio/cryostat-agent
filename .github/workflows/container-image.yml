@@ -41,10 +41,10 @@ jobs:
       with:
         path: ~/.m2
         key: ${{ runner.os }}-build-${{ hashFiles('**/pom.xml') }}
-    - run: mvn -B -U clean install
+    - run: mvn -B -U -Psnapshots clean install
     - id: get-agent-version
       run: |
-        echo "agent-version=$(mvn -q -DforceStdout help:evaluate -Dexpression=project.version)" >> $GITHUB_OUTPUT
+        echo "agent-version=$(mvn -Psnapshots -q -DforceStdout help:evaluate -Dexpression=project.version)" >> $GITHUB_OUTPUT
     - name: Get date tag
       run: echo "DATE_TAG=$(date -uI)" >> "$GITHUB_ENV"
     - name: Build container images and manifest
