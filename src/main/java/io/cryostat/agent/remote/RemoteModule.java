@@ -24,7 +24,7 @@ public abstract class RemoteModule {
 
     @Binds
     @IntoSet
-    abstract RemoteContext bindGCContext(GCContext ctx);
+    abstract RemoteContext bindInvokeContext(InvokeContext ctx);
 
     @Binds
     @IntoSet
