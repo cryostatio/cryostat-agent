@@ -95,8 +95,20 @@ public abstract class ConfigModule {
     public static final Pattern CRYOSTAT_AGENT_TRUSTSTORE_PATTERN =
             Pattern.compile(
                     "^(?:cryostat\\.agent\\.webclient\\.tls\\.truststore\\.cert)\\[(?<index>\\d+)\\]\\.(?<property>.*)$");
-    public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEYSTORE_PATH =
-            "cryostat.agent.webclient.tls.client-auth.keystore.path";
+    public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_CERT_PATH =
+            "cryostat.agent.webclient.tls.client-auth.cert.path";
+    public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_CERT_TYPE =
+            "cryostat.agent.webclient.tls.client-auth.cert.type";
+    public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_CERT_ALIAS =
+            "cryostat.agent.webclient.tls.client-auth.cert.alias";
+    public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_PATH =
+            "cryostat.agent.webclient.tls.client-auth.key.path";
+    public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_CHARSET =
+            "cryostat.agent.webclient.tls.client-auth.key.charset";
+    public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_ENCODING =
+            "cryostat.agent.webclient.tls.client-auth.key.encoding";
+    public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_TYPE =
+            "cryostat.agent.webclient.tls.client-auth.key.type";
     public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_PASS_FILE =
             "cryostat.agent.webclient.tls.client-auth.key.pass.file";
     public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_PASS_CHARSET =
@@ -111,8 +123,8 @@ public abstract class ConfigModule {
             "cryostat.agent.webclient.tls.client-auth.keystore.pass";
     public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEYSTORE_TYPE =
             "cryostat.agent.webclient.tls.client-auth.keystore.type";
-    public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEYSTORE_CERTS =
-            "cryostat.agent.webclient.tls.client-auth.keystore.cert";
+    public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_MANAGER_TYPE =
+            "cryostat.agent.webclient.tls.client-auth.key-manager.type";
     public static final String CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_RETRY_COUNT =
             "cryostat.agent.webclient.response.retry-count";
 
@@ -411,11 +423,55 @@ public abstract class ConfigModule {
 
     @Provides
     @Singleton
-    @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEYSTORE_PATH)
-    public static Optional<String> provideCryostatAgentWebclientTlsClientAuthKeystorePath(
+    @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_CERT_PATH)
+    public static Optional<String> provideCryostatAgentWebclientTlsClientAuthCertPath(
             Config config) {
         return config.getOptionalValue(
-                CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEYSTORE_PATH, String.class);
+                CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_CERT_PATH, String.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_CERT_TYPE)
+    public static String provideCryostatAgentWebclientTlsClientAuthCertType(Config config) {
+        return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_CERT_TYPE, String.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_CERT_ALIAS)
+    public static String provideCryostatAgentWebclientTlsClientAuthCertAlias(Config config) {
+        return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_CERT_ALIAS, String.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_PATH)
+    public static Optional<String> provideCryostatAgentWebclientTlsClientAuthKeyPath(
+            Config config) {
+        return config.getOptionalValue(
+                CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_PATH, String.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_TYPE)
+    public static String provideCryostatAgentWebclientTlsClientAuthKeyType(Config config) {
+        return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_TYPE, String.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_CHARSET)
+    public static String provideCryostatAgentWebclientTlsClientAuthKeyCharset(Config config) {
+        return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_CHARSET, String.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_ENCODING)
+    public static String provideCryostatAgentWebclientTlsClientAuthKeyEncoding(Config config) {
+        return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_ENCODING, String.class);
     }
 
     @Provides
@@ -481,11 +537,10 @@ public abstract class ConfigModule {
 
     @Provides
     @Singleton
-    @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEYSTORE_CERTS)
-    public static Optional<String> provideCryostatAgentWebclientTlsClientAuthKeystoreCert(
-            Config config) {
-        return config.getOptionalValue(
-                CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEYSTORE_CERTS, String.class);
+    @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_MANAGER_TYPE)
+    public static String provideCryostatAgentWebclientTlsClientAuthKeyManagerType(Config config) {
+        return config.getValue(
+                CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_MANAGER_TYPE, String.class);
     }
 
     @Provides
