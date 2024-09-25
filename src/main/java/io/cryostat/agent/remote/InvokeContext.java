@@ -17,24 +17,29 @@ package io.cryostat.agent.remote;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.lang.management.ManagementFactory;
-import java.lang.management.MemoryMXBean;
+import java.util.Objects;
 
 import javax.inject.Inject;
+import javax.management.MBeanServer;
+import javax.management.ObjectName;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
 import org.apache.http.HttpStatus;
+import org.eclipse.microprofile.config.Config;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-class InvokeContext implements RemoteContext {
+class InvokeContext extends MutatingRemoteContext {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
     private final ObjectMapper mapper;
 
     @Inject
-    InvokeContext(ObjectMapper mapper) {
+    InvokeContext(ObjectMapper mapper, Config config) {
+        super(config);
         this.mapper = mapper;
     }
 
@@ -42,15 +47,6 @@ class InvokeContext implements RemoteContext {
     public String path() {
         return "/mbean-invoke/";
     }
-
-    /*
-    * public <T> T invokeMBeanOperation(
-           String beanName,
-           String operation,
-           Object[] parameters,
-           String[] signature,
-           Class<T> returnType)
-    */
 
     @Override
     public void handle(HttpExchange exchange) throws IOException {
@@ -61,10 +57,24 @@ class InvokeContext implements RemoteContext {
                     try (InputStream body = exchange.getRequestBody()) {
                         MBeanInvocationRequest req =
                                 mapper.readValue(body, MBeanInvocationRequest.class);
-                        if (req.beanName.equals(ManagementFactory.MEMORY_MXBEAN_NAME)) {
-                            MemoryMXBean bean = ManagementFactory.getMemoryMXBean();
-                            bean.gc();
-                            exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_NONE);
+                        if (!req.isValid()) {
+                            exchange.sendResponseHeaders(
+                                    HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
+                        }
+                        MBeanServer server = ManagementFactory.getPlatformMBeanServer();
+                        Object response =
+                                server.invoke(
+                                        ObjectName.getInstance(req.beanName),
+                                        req.operation,
+                                        req.parameters,
+                                        req.signature);
+                        if (Objects.nonNull(response)) {
+                            exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
+                            try (OutputStream responseStream = exchange.getResponseBody()) {
+                                mapper.writeValue(responseStream, response);
+                            }
+                        } else {
+                            exchange.sendResponseHeaders(HttpStatus.SC_CREATED, BODY_LENGTH_NONE);
                         }
                     } catch (Exception e) {
                         log.error("mbean serialization failure", e);
@@ -88,12 +98,10 @@ class InvokeContext implements RemoteContext {
         public String operation;
         public Object[] parameters;
         public String[] signature;
-        public Class<T> returnType;
 
         // Support GC and Thread operations for now
         public boolean isValid() {
-            if (this.beanName.equals(ManagementFactory.MEMORY_MXBEAN_NAME)
-                    || this.beanName.equals(ManagementFactory.THREAD_MXBEAN_NAME)) {
+            if (this.beanName.equals(ManagementFactory.MEMORY_MXBEAN_NAME)) {
                 return true;
             }
             return false;
