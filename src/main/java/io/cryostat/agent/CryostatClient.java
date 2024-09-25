@@ -125,7 +125,9 @@ public class CryostatClient {
                                         + "?token="
                                         + pluginInfo.getToken()));
         log.trace("{}", req);
-        return supply(req, (res) -> logResponse(req, res)).thenApply(this::isOkStatus);
+        return supply(req, (res) -> logResponse(req, res))
+                .thenApply(this::isOkStatus)
+                .whenComplete((v, t) -> req.reset());
     }
 
     public CompletableFuture<PluginInfo> register(
@@ -174,7 +176,8 @@ public class CryostatClient {
                                     log.error("Unable to parse response as JSON", e);
                                     throw new RegistrationException(e);
                                 }
-                            });
+                            })
+                    .whenComplete((v, t) -> req.reset());
         } catch (JsonProcessingException e) {
             return CompletableFuture.failedFuture(e);
         }
@@ -209,7 +212,8 @@ public class CryostatClient {
                                 return CompletableFuture.completedFuture(prevId);
                             }
                             return submitCredentials(prevId, credentials, callback);
-                        });
+                        })
+                .whenComplete((v, t) -> req.reset());
     }
 
     private CompletableFuture<Integer> queryExistingCredentials(URI callback) {
@@ -254,7 +258,8 @@ public class CryostatClient {
                                                                 selfMatchExpression(callback)))
                                         .map(sc -> sc.id)
                                         .findFirst()
-                                        .orElse(-1));
+                                        .orElse(-1))
+                .whenComplete((v, t) -> req.reset());
     }
 
     private CompletableFuture<Integer> submitCredentials(
@@ -317,7 +322,8 @@ public class CryostatClient {
                                     location.substring(
                                             location.lastIndexOf('/') + 1, location.length());
                             return Integer.valueOf(id);
-                        });
+                        })
+                .whenComplete((v, t) -> req.reset());
     }
 
     public CompletableFuture<Void> deleteCredentials(int id) {
@@ -326,7 +332,9 @@ public class CryostatClient {
         }
         HttpDelete req = new HttpDelete(baseUri.resolve(CREDENTIALS_API_PATH + "/" + id));
         log.trace("{}", req);
-        return supply(req, (res) -> logResponse(req, res)).thenApply(res -> null);
+        return supply(req, (res) -> logResponse(req, res))
+                .whenComplete((v, t) -> req.reset())
+                .thenApply(res -> null);
     }
 
     public CompletableFuture<Void> deregister(PluginInfo pluginInfo) {
@@ -341,6 +349,7 @@ public class CryostatClient {
         log.trace("{}", req);
         return supply(req, (res) -> logResponse(req, res))
                 .thenApply(res -> assertOkStatus(req, res))
+                .whenComplete((v, t) -> req.reset())
                 .thenApply(res -> null);
     }
 
@@ -362,6 +371,7 @@ public class CryostatClient {
             log.trace("{}", req);
             return supply(req, (res) -> logResponse(req, res))
                     .thenApply(res -> assertOkStatus(req, res))
+                    .whenComplete((v, t) -> req.reset())
                     .thenApply(res -> null);
         } catch (JsonProcessingException e) {
             return CompletableFuture.failedFuture(e);
@@ -432,20 +442,21 @@ public class CryostatClient {
                                         .build());
         req.setEntity(entityBuilder.build());
         return supply(
-                req,
-                (res) -> {
-                    Instant finish = Instant.now();
-                    log.trace(
-                            "{} {} ({} -> {}): {}/{}",
-                            req.getMethod(),
-                            res.getStatusLine().getStatusCode(),
-                            fileName,
-                            req.getURI(),
-                            FileUtils.byteCountToDisplaySize(is.getByteCount()),
-                            Duration.between(start, finish));
-                    assertOkStatus(req, res);
-                    return (Void) null;
-                });
+                        req,
+                        (res) -> {
+                            Instant finish = Instant.now();
+                            log.trace(
+                                    "{} {} ({} -> {}): {}/{}",
+                                    req.getMethod(),
+                                    res.getStatusLine().getStatusCode(),
+                                    fileName,
+                                    req.getURI(),
+                                    FileUtils.byteCountToDisplaySize(is.getByteCount()),
+                                    Duration.between(start, finish));
+                            assertOkStatus(req, res);
+                            return (Void) null;
+                        })
+                .whenComplete((v, t) -> req.reset());
     }
 
     private HttpResponse logResponse(HttpRequestBase req, HttpResponse res) {
@@ -460,8 +471,7 @@ public class CryostatClient {
         // it responds with an auth challenge, and then send the auth information we have, and use
         // the client auth cache. This flow is supported for Bearer tokens in httpclient 5.
         authorizationSupplier.get().ifPresent(v -> req.addHeader(HttpHeaders.AUTHORIZATION, v));
-        return CompletableFuture.supplyAsync(() -> fn.apply(executeQuiet(req)), executor)
-                .whenComplete((v, t) -> req.reset());
+        return CompletableFuture.supplyAsync(() -> fn.apply(executeQuiet(req)), executor);
     }
 
     private HttpResponse executeQuiet(HttpUriRequest req) {
