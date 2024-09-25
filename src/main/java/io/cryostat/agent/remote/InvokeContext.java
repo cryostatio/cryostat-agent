@@ -74,7 +74,7 @@ class InvokeContext extends MutatingRemoteContext {
                                 mapper.writeValue(responseStream, response);
                             }
                         } else {
-                            exchange.sendResponseHeaders(HttpStatus.SC_CREATED, BODY_LENGTH_NONE);
+                            exchange.sendResponseHeaders(HttpStatus.SC_ACCEPTED, BODY_LENGTH_NONE);
                         }
                     } catch (Exception e) {
                         log.error("mbean serialization failure", e);
