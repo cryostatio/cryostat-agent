@@ -470,15 +470,6 @@ public abstract class ConfigModule {
 
     @Provides
     @Singleton
-    @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_PASS)
-    public static Optional<String> provideCryostatAgentWebclientTlsClientAuthKeyPass(
-            Config config) {
-        return config.getOptionalValue(
-                CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_PASS, String.class);
-    }
-
-    @Provides
-    @Singleton
     @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_PASS_FILE)
     public static Optional<String> provideCryostatAgentWebclientTlsClientAuthKeyPassFile(
             Config config) {
