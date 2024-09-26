@@ -356,75 +356,6 @@ public abstract class MainModule {
                         Arrays.fill(charBuffer.array(), '\0');
                         truststorePass.get().clear();
                     }
-
-                    // initialize truststore with user provided certs
-                    for (TruststoreConfig truststore : truststoreCerts) {
-                        // load truststore with certificatesCertificate
-                        try (InputStream certFile = new FileInputStream(truststore.getPath())) {
-                            CertificateFactory cf =
-                                    CertificateFactory.getInstance(truststore.getType());
-                            Certificate cert = cf.generateCertificate(certFile);
-                            if (ts.containsAlias(truststore.getType())) {
-                                throw new IllegalStateException(
-                                        String.format(
-                                                "truststore already contains a certificate with"
-                                                        + " alias \"%s\"",
-                                                truststore.getAlias()));
-                            }
-                            ts.setCertificateEntry(truststore.getAlias(), cert);
-                        } catch (CertificateException e) {
-                            throw new RuntimeException(e);
-                        }
-                    }
-
-                    // set up trust manager factory
-                    tmf =
-                            TrustManagerFactory.getInstance(
-                                    TrustManagerFactory.getDefaultAlgorithm());
-                    tmf.init(ts);
-
-                    customTrustManager = null;
-                    for (TrustManager tm : tmf.getTrustManagers()) {
-                        if (tm instanceof X509TrustManager) {
-                            customTrustManager = (X509TrustManager) tm;
-                            break;
-                        }
-                    }
-
-                    final X509TrustManager finalDefaultTM = defaultTrustManager;
-                    final X509TrustManager finalCustomTM = customTrustManager;
-                    trustManagers =
-                            new X509TrustManager[] {
-                                new X509TrustManager() {
-                                    @Override
-                                    public void checkClientTrusted(
-                                            X509Certificate[] chain, String authType)
-                                            throws CertificateException {
-                                        try {
-                                            finalCustomTM.checkClientTrusted(chain, authType);
-                                        } catch (CertificateException e) {
-                                            finalDefaultTM.checkClientTrusted(chain, authType);
-                                        }
-                                    }
-
-                                    @Override
-                                    public void checkServerTrusted(
-                                            X509Certificate[] chain, String authType)
-                                            throws CertificateException {
-                                        try {
-                                            finalCustomTM.checkServerTrusted(chain, authType);
-                                        } catch (CertificateException e) {
-                                            finalDefaultTM.checkServerTrusted(chain, authType);
-                                        }
-                                    }
-
-                                    @Override
-                                    public X509Certificate[] getAcceptedIssuers() {
-                                        return finalDefaultTM.getAcceptedIssuers();
-                                    }
-                                }
-                            };
-                    ;
                 } else if (!truststorePath.isEmpty() || !truststorePass.isEmpty()) {
                     throw new IllegalArgumentException(
                             String.format(
@@ -432,6 +363,73 @@ public abstract class MainModule {
                                         + " truststore and the pass, or a path to a file containing"
                                         + " the pass"));
                 }
+
+                // initialize truststore with user provided certs
+                for (TruststoreConfig truststore : truststoreCerts) {
+                    // load truststore with certificatesCertificate
+                    try (InputStream certFile = new FileInputStream(truststore.getPath())) {
+                        CertificateFactory cf =
+                                CertificateFactory.getInstance(truststore.getType());
+                        Certificate cert = cf.generateCertificate(certFile);
+                        if (ts.containsAlias(truststore.getType())) {
+                            throw new IllegalStateException(
+                                    String.format(
+                                            "truststore already contains a certificate with"
+                                                    + " alias \"%s\"",
+                                            truststore.getAlias()));
+                        }
+                        ts.setCertificateEntry(truststore.getAlias(), cert);
+                    } catch (CertificateException e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+
+                // set up trust manager factory
+                tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+                tmf.init(ts);
+
+                customTrustManager = null;
+                for (TrustManager tm : tmf.getTrustManagers()) {
+                    if (tm instanceof X509TrustManager) {
+                        customTrustManager = (X509TrustManager) tm;
+                        break;
+                    }
+                }
+
+                final X509TrustManager finalDefaultTM = defaultTrustManager;
+                final X509TrustManager finalCustomTM = customTrustManager;
+                trustManagers =
+                        new X509TrustManager[] {
+                            new X509TrustManager() {
+                                @Override
+                                public void checkClientTrusted(
+                                        X509Certificate[] chain, String authType)
+                                        throws CertificateException {
+                                    try {
+                                        finalCustomTM.checkClientTrusted(chain, authType);
+                                    } catch (CertificateException e) {
+                                        finalDefaultTM.checkClientTrusted(chain, authType);
+                                    }
+                                }
+
+                                @Override
+                                public void checkServerTrusted(
+                                        X509Certificate[] chain, String authType)
+                                        throws CertificateException {
+                                    try {
+                                        finalCustomTM.checkServerTrusted(chain, authType);
+                                    } catch (CertificateException e) {
+                                        finalDefaultTM.checkServerTrusted(chain, authType);
+                                    }
+                                }
+
+                                @Override
+                                public X509Certificate[] getAcceptedIssuers() {
+                                    return finalDefaultTM.getAcceptedIssuers();
+                                }
+                            }
+                        };
+                ;
             }
 
             SSLContext sslCtx = SSLContext.getInstance(clientTlsVersion);
