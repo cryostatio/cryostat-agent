@@ -239,7 +239,7 @@ public abstract class MainModule {
                     String clientAuthKeyManagerType) {
         try {
             KeyManager[] keyManagers = null;
-            if (clientAuthCertPath.isPresent()) {
+            if (clientAuthCertPath.isPresent() && clientAuthKeyPath.isPresent()) {
                 KeyStore ks = KeyStore.getInstance(clientAuthKeystoreType);
                 Optional<CharBuffer> keystorePass =
                         readPass(
@@ -302,6 +302,13 @@ public abstract class MainModule {
                     clearBuffer(keystorePass);
                     clearBuffer(keyPass);
                 }
+            } else if (clientAuthCertPath.isPresent() || clientAuthKeyPath.isPresent()) {
+                throw new IllegalArgumentException(
+                        String.format(
+                                "To use TLS client authentication, both the certificate (%s) and"
+                                        + " private key (%s) properties must be set.",
+                                ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_CERT_PATH,
+                                ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_PATH));
             }
 
             X509TrustManager trustManager = null;
@@ -338,7 +345,7 @@ public abstract class MainModule {
                 KeyStore ts = KeyStore.getInstance(truststoreType);
                 ts.load(null, null);
                 // initialize truststore with user provided path and pass
-                if (!truststorePath.isEmpty() && !truststorePass.isEmpty()) {
+                if (truststorePath.isPresent() && truststorePass.isPresent()) {
                     Charset charset = Charset.forName(passCharset);
                     CharsetDecoder decoder = charset.newDecoder();
                     ByteBuffer byteBuffer = ByteBuffer.wrap(truststorePass.get().get());
@@ -352,12 +359,16 @@ public abstract class MainModule {
                         Arrays.fill(charBuffer.array(), '\0');
                         truststorePass.get().clear();
                     }
-                } else if (!truststorePath.isEmpty() || !truststorePass.isEmpty()) {
+                } else if (truststorePath.isPresent() || truststorePass.isPresent()) {
                     throw new IllegalArgumentException(
                             String.format(
                                     "To import a truststore, provide both the path to the"
-                                        + " truststore and the pass, or a path to a file containing"
-                                        + " the pass"));
+                                        + " truststore (%s) and the pass (%s), or a path to a file"
+                                        + " containing the pass (%s)",
+                                    ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PATH,
+                                    ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS,
+                                    ConfigModule
+                                            .CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS_FILE));
                 }
 
                 // initialize truststore with user provided certs
