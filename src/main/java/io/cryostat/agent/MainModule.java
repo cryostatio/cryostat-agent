@@ -223,12 +223,6 @@ public abstract class MainModule {
                     String clientAuthKeyEncoding,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEYSTORE_TYPE)
                     String clientAuthKeystoreType,
-            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEYSTORE_PASS)
-                    Optional<String> clientAuthKeystorePass,
-            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEYSTORE_PASS_FILE)
-                    Optional<String> clientAuthKeystorePassFile,
-            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEYSTORE_PASS_CHARSET)
-                    String clientAuthKeystorePassFileCharset,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_PASS)
                     Optional<String> clientAuthKeyPass,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_PASS_FILE)
@@ -239,13 +233,8 @@ public abstract class MainModule {
                     String clientAuthKeyManagerType) {
         try {
             KeyManager[] keyManagers = null;
-            if (clientAuthCertPath.isPresent()) {
+            if (clientAuthCertPath.isPresent() && clientAuthKeyPath.isPresent()) {
                 KeyStore ks = KeyStore.getInstance(clientAuthKeystoreType);
-                Optional<CharBuffer> keystorePass =
-                        readPass(
-                                clientAuthKeystorePass,
-                                clientAuthKeystorePassFile,
-                                clientAuthKeystorePassFileCharset);
                 Optional<CharBuffer> keyPass =
                         readPass(
                                 clientAuthKeyPass,
@@ -260,7 +249,7 @@ public abstract class MainModule {
                                 new BufferedInputStream(
                                         new FileInputStream(
                                                 Path.of(clientAuthKeyPath.get()).toFile()))) {
-                    ks.load(null, keystorePass.map(CharBuffer::array).orElse(null));
+                    ks.load(null, null);
                     CertificateFactory certFactory =
                             CertificateFactory.getInstance(clientAuthCertType);
                     Certificate[] certChain =
@@ -295,13 +284,19 @@ public abstract class MainModule {
                             keyPass.map(CharBuffer::array).orElse(null),
                             certChain);
                     KeyManagerFactory kmf = KeyManagerFactory.getInstance(clientAuthKeyManagerType);
-                    kmf.init(ks, keystorePass.map(CharBuffer::array).orElse(null));
+                    kmf.init(ks, null);
                     keyManagers = kmf.getKeyManagers();
                 } finally {
                     Arrays.fill(keyBytes, (byte) 0);
-                    clearBuffer(keystorePass);
                     clearBuffer(keyPass);
                 }
+            } else if (clientAuthCertPath.isPresent() || clientAuthKeyPath.isPresent()) {
+                throw new IllegalArgumentException(
+                        String.format(
+                                "To use TLS client authentication, both the certificate (%s) and"
+                                        + " private key (%s) properties must be set.",
+                                ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_CERT_PATH,
+                                ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_PATH));
             }
 
             X509TrustManager trustManager = null;
@@ -338,7 +333,7 @@ public abstract class MainModule {
                 KeyStore ts = KeyStore.getInstance(truststoreType);
                 ts.load(null, null);
                 // initialize truststore with user provided path and pass
-                if (!truststorePath.isEmpty() && !truststorePass.isEmpty()) {
+                if (truststorePath.isPresent() && truststorePass.isPresent()) {
                     Charset charset = Charset.forName(passCharset);
                     CharsetDecoder decoder = charset.newDecoder();
                     ByteBuffer byteBuffer = ByteBuffer.wrap(truststorePass.get().get());
@@ -352,12 +347,16 @@ public abstract class MainModule {
                         Arrays.fill(charBuffer.array(), '\0');
                         truststorePass.get().clear();
                     }
-                } else if (!truststorePath.isEmpty() || !truststorePass.isEmpty()) {
+                } else if (truststorePath.isPresent() || truststorePass.isPresent()) {
                     throw new IllegalArgumentException(
                             String.format(
                                     "To import a truststore, provide both the path to the"
-                                        + " truststore and the pass, or a path to a file containing"
-                                        + " the pass"));
+                                        + " truststore (%s) and the pass (%s), or a path to a file"
+                                        + " containing the pass (%s)",
+                                    ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PATH,
+                                    ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS,
+                                    ConfigModule
+                                            .CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS_FILE));
                 }
 
                 // initialize truststore with user provided certs
