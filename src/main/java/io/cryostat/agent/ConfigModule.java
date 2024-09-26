@@ -115,6 +115,12 @@ public abstract class ConfigModule {
             "cryostat.agent.webclient.tls.client-auth.key.pass-charset";
     public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_PASS =
             "cryostat.agent.webclient.tls.client-auth.key.pass";
+    public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEYSTORE_PASS_FILE =
+            "cryostat.agent.webclient.tls.client-auth.keystore.pass.file";
+    public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEYSTORE_PASS_CHARSET =
+            "cryostat.agent.webclient.tls.client-auth.keystore.pass-charset";
+    public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEYSTORE_PASS =
+            "cryostat.agent.webclient.tls.client-auth.keystore.pass";
     public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEYSTORE_TYPE =
             "cryostat.agent.webclient.tls.client-auth.keystore.type";
     public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_MANAGER_TYPE =
@@ -483,6 +489,42 @@ public abstract class ConfigModule {
     public static String provideCryostatAgentWebclientTlsClientAuthKeyPassCharset(Config config) {
         return config.getValue(
                 CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_PASS_CHARSET, String.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_PASS)
+    public static Optional<String> provideCryostatAgentWebclientTlsClientAuthKeyPass(
+            Config config) {
+        return config.getOptionalValue(
+                CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEYSTORE_PASS, String.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEYSTORE_PASS_FILE)
+    public static Optional<String> provideCryostatAgentWebclientTlsClientAuthKeystorePassFile(
+            Config config) {
+        return config.getOptionalValue(
+                CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEYSTORE_PASS_FILE, String.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEYSTORE_PASS_CHARSET)
+    public static String provideCryostatAgentWebclientTlsClientAuthKeystorePassCharset(
+            Config config) {
+        return config.getValue(
+                CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEYSTORE_PASS_CHARSET, String.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEYSTORE_PASS)
+    public static Optional<String> provideCryostatAgentWebclientTlsClientAuthKeystorePass(
+            Config config) {
+        return config.getOptionalValue(
+                CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEYSTORE_PASS, String.class);
     }
 
     @Provides
