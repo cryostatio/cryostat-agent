@@ -304,25 +304,21 @@ public abstract class MainModule {
                 }
             }
 
-            TrustManager[] trustManagers = null;
+            X509TrustManager trustManager = null;
             if (trustAll) {
-                trustManagers =
-                        new X509TrustManager[] {
-                            new X509TrustManager() {
-                                @Override
-                                public void checkClientTrusted(
-                                        X509Certificate[] chain, String authType)
-                                        throws CertificateException {}
+                trustManager =
+                        new X509TrustManager() {
+                            @Override
+                            public void checkClientTrusted(X509Certificate[] chain, String authType)
+                                    throws CertificateException {}
 
-                                @Override
-                                public void checkServerTrusted(
-                                        X509Certificate[] chain, String authType)
-                                        throws CertificateException {}
+                            @Override
+                            public void checkServerTrusted(X509Certificate[] chain, String authType)
+                                    throws CertificateException {}
 
-                                @Override
-                                public X509Certificate[] getAcceptedIssuers() {
-                                    return new X509Certificate[0];
-                                }
+                            @Override
+                            public X509Certificate[] getAcceptedIssuers() {
+                                return new X509Certificate[0];
                             }
                         };
             } else {
@@ -398,42 +394,37 @@ public abstract class MainModule {
 
                 final X509TrustManager finalDefaultTM = defaultTrustManager;
                 final X509TrustManager finalCustomTM = customTrustManager;
-                trustManagers =
-                        new X509TrustManager[] {
-                            new X509TrustManager() {
-                                @Override
-                                public void checkClientTrusted(
-                                        X509Certificate[] chain, String authType)
-                                        throws CertificateException {
-                                    try {
-                                        finalCustomTM.checkClientTrusted(chain, authType);
-                                    } catch (CertificateException e) {
-                                        finalDefaultTM.checkClientTrusted(chain, authType);
-                                    }
-                                }
-
-                                @Override
-                                public void checkServerTrusted(
-                                        X509Certificate[] chain, String authType)
-                                        throws CertificateException {
-                                    try {
-                                        finalCustomTM.checkServerTrusted(chain, authType);
-                                    } catch (CertificateException e) {
-                                        finalDefaultTM.checkServerTrusted(chain, authType);
-                                    }
-                                }
-
-                                @Override
-                                public X509Certificate[] getAcceptedIssuers() {
-                                    return finalDefaultTM.getAcceptedIssuers();
+                trustManager =
+                        new X509TrustManager() {
+                            @Override
+                            public void checkClientTrusted(X509Certificate[] chain, String authType)
+                                    throws CertificateException {
+                                try {
+                                    finalCustomTM.checkClientTrusted(chain, authType);
+                                } catch (CertificateException e) {
+                                    finalDefaultTM.checkClientTrusted(chain, authType);
                                 }
                             }
+
+                            @Override
+                            public void checkServerTrusted(X509Certificate[] chain, String authType)
+                                    throws CertificateException {
+                                try {
+                                    finalCustomTM.checkServerTrusted(chain, authType);
+                                } catch (CertificateException e) {
+                                    finalDefaultTM.checkServerTrusted(chain, authType);
+                                }
+                            }
+
+                            @Override
+                            public X509Certificate[] getAcceptedIssuers() {
+                                return finalDefaultTM.getAcceptedIssuers();
+                            }
                         };
-                ;
             }
 
             SSLContext sslCtx = SSLContext.getInstance(clientTlsVersion);
-            sslCtx.init(keyManagers, trustManagers, null);
+            sslCtx.init(keyManagers, new X509TrustManager[] {trustManager}, null);
             return sslCtx;
         } catch (NoSuchAlgorithmException
                 | KeyManagementException
