@@ -876,10 +876,6 @@ public abstract class ConfigModule {
     public static class BytePass {
         private final byte[] buf;
 
-        public BytePass(int len) {
-            this.buf = new byte[len];
-        }
-
         public BytePass(byte[] s) {
             this.buf = Arrays.copyOf(s, s.length);
         }

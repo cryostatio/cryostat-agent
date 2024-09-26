@@ -238,8 +238,6 @@ public abstract class MainModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_MANAGER_TYPE)
                     String clientAuthKeyManagerType) {
         try {
-            SSLContext sslCtx = SSLContext.getInstance(clientTlsVersion);
-
             KeyManager[] keyManagers = null;
             if (clientAuthCertPath.isPresent()) {
                 KeyStore ks = KeyStore.getInstance(clientAuthKeystoreType);
@@ -354,8 +352,8 @@ public abstract class MainModule {
                     } catch (IOException e) {
                         throw new RuntimeException(e);
                     } finally {
-                        byteBuffer.clear();
-                        charBuffer.clear();
+                        Arrays.fill(byteBuffer.array(), (byte) 0);
+                        Arrays.fill(charBuffer.array(), '\0');
                         truststorePass.get().clear();
                     }
 
@@ -436,6 +434,7 @@ public abstract class MainModule {
                 }
             }
 
+            SSLContext sslCtx = SSLContext.getInstance(clientTlsVersion);
             sslCtx.init(keyManagers, trustManagers, null);
             return sslCtx;
         } catch (NoSuchAlgorithmException
