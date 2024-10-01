@@ -92,7 +92,7 @@
 
   <com.github.spotbugs.version>4.8.6</com.github.spotbugs.version>
   <com.github.spotbugs.plugin.version>4.8.6.4</com.github.spotbugs.plugin.version>
-  <org.junit.jupiter.version>5.11.0</org.junit.jupiter.version>
+  <org.junit.jupiter.version>5.11.1</org.junit.jupiter.version>
   <org.hamcrest.version>3.0</org.hamcrest.version>
   <org.mockito.version>5.14.1</org.mockito.version>
   <org.jacoco.maven.plugin.version>0.8.12</org.jacoco.maven.plugin.version>
@@ -101,7 +101,7 @@
   <org.jsoup.version>1.15.3</org.jsoup.version>
 
   <maven-source-plugin.version>3.3.1</maven-source-plugin.version>
-  <maven-javadoc-plugin.version>3.10.0</maven-javadoc-plugin.version>
+  <maven-javadoc-plugin.version>3.10.1</maven-javadoc-plugin.version>
   <jreleaser-maven-plugin.version>1.14.0</jreleaser-maven-plugin.version>
 
   <shade.prefix>io.cryostat.agent.shaded</shade.prefix>

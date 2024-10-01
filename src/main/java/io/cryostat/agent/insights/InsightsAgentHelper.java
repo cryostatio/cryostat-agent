@@ -63,12 +63,12 @@ public class InsightsAgentHelper {
         // Check if the user has opted out
         boolean optingOut =
                 config.getOptionalValue(RHT_INSIGHTS_JAVA_OPT_OUT, boolean.class).orElse(false);
-        return pluginInfo.getEnv().containsKey(INSIGHTS_SVC) && !optingOut;
+        return pluginInfo.getEnvAsMap().containsKey(INSIGHTS_SVC) && !optingOut;
     }
 
     public void runInsightsAgent(PluginInfo pluginInfo) {
         log.info("Starting Red Hat Insights client");
-        String server = pluginInfo.getEnv().get(INSIGHTS_SVC);
+        String server = pluginInfo.getEnvAsMap().get(INSIGHTS_SVC);
         Objects.requireNonNull(server, "Insights server is missing");
         String appName = config.getValue(ConfigModule.CRYOSTAT_AGENT_APP_NAME, String.class);
 
