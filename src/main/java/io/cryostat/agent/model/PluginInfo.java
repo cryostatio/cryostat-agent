@@ -15,22 +15,33 @@
  */
 package io.cryostat.agent.model;
 
-import java.util.HashMap;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 public class PluginInfo {
 
     private String id;
     private String token;
-    private Map<String, String> env = new HashMap<>();
+    private List<KeyValue> env = new ArrayList<>();
 
     public PluginInfo() {}
 
-    public PluginInfo(String id, String token, Map<String, String> env) {
+    public PluginInfo(String id, String token, List<KeyValue> env) {
         this.id = id;
         this.token = token;
-        this.env.putAll(env);
+        this.env.addAll(env);
+    }
+
+    public PluginInfo(String id, String token, Map<String, String> env) {
+        this(
+                id,
+                token,
+                env.entrySet().stream()
+                        .map(e -> new KeyValue(e.getKey(), e.getValue()))
+                        .collect(Collectors.toList()));
     }
 
     public void copyFrom(PluginInfo o) {
@@ -55,8 +66,12 @@ public class PluginInfo {
         return token;
     }
 
-    public Map<String, String> getEnv() {
-        return new HashMap<>(env);
+    public List<KeyValue> getEnv() {
+        return new ArrayList<>(env);
+    }
+
+    public Map<String, String> getEnvAsMap() {
+        return env.stream().collect(Collectors.toMap(KeyValue::getKey, KeyValue::getValue));
     }
 
     public void setId(String id) {
@@ -67,9 +82,16 @@ public class PluginInfo {
         this.token = token;
     }
 
-    public void setEnv(Map<String, String> env) {
+    public void setEnv(List<KeyValue> env) {
         this.env.clear();
-        this.env.putAll(env);
+        this.env.addAll(env);
+    }
+
+    public void setEnvFromMap(Map<String, String> env) {
+        this.setEnv(
+                env.entrySet().stream()
+                        .map(e -> new KeyValue(e.getKey(), e.getValue()))
+                        .collect(Collectors.toList()));
     }
 
     @Override

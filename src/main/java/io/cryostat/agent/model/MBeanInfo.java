@@ -59,6 +59,8 @@ public class MBeanInfo {
                         getJvmID(getRuntimeMetrics()));
     }
 
+    protected final void finalize() {}
+
     public MBeanMetrics getMBeanMetrics() {
         return mBeanMetrics;
     }
