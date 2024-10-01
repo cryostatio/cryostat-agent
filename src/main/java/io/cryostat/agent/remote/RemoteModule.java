@@ -24,6 +24,10 @@ public abstract class RemoteModule {
 
     @Binds
     @IntoSet
+    abstract RemoteContext bindInvokeContext(InvokeContext ctx);
+
+    @Binds
+    @IntoSet
     abstract RemoteContext bindMBeanContext(MBeanContext ctx);
 
     @Binds
