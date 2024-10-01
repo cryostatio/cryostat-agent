@@ -99,7 +99,6 @@ class InvokeContext extends MutatingRemoteContext {
         public Object[] parameters;
         public String[] signature;
 
-        // Support GC and Thread operations for now
         public boolean isValid() {
             if (this.beanName.equals(ManagementFactory.MEMORY_MXBEAN_NAME)) {
                 return true;
