@@ -159,6 +159,18 @@ stopped or the host JVM shuts down.
 
 ## Configuration
 
+### Logging
+
+`cryostat-agent` uses [SLF4J](https://www.slf4j.org/) for its logging. Currently it ships with `slf4j-simple` as the
+log implementation, but this should change in the future to hook in to any existing SLF4J providers found on the
+classpath at runtime, or fallback to `slf4j-simple` if nothing is found.
+
+The Agent's log levels can be controlled by setting a JVM system property on the target JVM:
+`-Dio.cryostat.agent.shaded.org.slf4j.simpleLogger.defaultLogLevel=trace`, or replace `trace` with whatever level you
+prefer. This can also be passed as a dynamic attachment argument when starting the Agent after the target JVM.
+
+### Agent Properties
+
 `cryostat-agent` uses [smallrye-config](https://github.com/smallrye/smallrye-config) for configuration.
 Below is a list of configuration properties that can be used to influence how `cryostat-agent` runs
 and how it advertises itself to a Cryostat server instance. Properties that require configuration are indicated with a checked box.
