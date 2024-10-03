@@ -128,7 +128,6 @@ public class Registration {
                                                                         t);
                                                                 throw new CompletionException(t);
                                                             }
-                                                            ;
                                                             notify(
                                                                     RegistrationEvent.State
                                                                             .REFRESHING);
