@@ -94,7 +94,7 @@ public abstract class ConfigModule {
             "cryostat.agent.webclient.tls.truststore.cert";
     public static final Pattern CRYOSTAT_AGENT_TRUSTSTORE_PATTERN =
             Pattern.compile(
-                    "^(?:cryostat\\.agent\\.webclient\\.tls\\.truststore\\.cert)\\[(?<index>\\d+)\\]\\.(?<property>.*)$");
+                    "^(?:cryostat\\.agent\\.webclient\\.tls\\.truststore\\.cert).(?<index>\\d+).\\.(?<property>.*)$");
     public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_CERT_PATH =
             "cryostat.agent.webclient.tls.client-auth.cert.path";
     public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_CERT_TYPE =
@@ -378,9 +378,11 @@ public abstract class ConfigModule {
                                 throw new IllegalArgumentException(
                                         String.format(
                                                 "Invalid truststore config property name format:"
-                                                    + " \"%s\". Make sure the config property"
-                                                    + " matches the following pattern:"
-                                                    + " 'cryostat.agent.truststore.cert[CERT_NUMBER].CERT_PROPERTY'",
+                                                        + " \"%s\". Make sure the config property"
+                                                        + " matches the following pattern:"
+                                                        + " '"
+                                                        + CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_CERTS
+                                                        + "[CERT_NUMBER].CERT_PROPERTY'",
                                                 name));
                             }
                             int truststoreNumber = Integer.parseInt(matcher.group("index"));
