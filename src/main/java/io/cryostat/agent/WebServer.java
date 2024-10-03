@@ -94,6 +94,7 @@ class WebServer {
                             ctx.getFilters().add(compressionFilter);
                         });
         this.http.start();
+        log.info("WebServer listening on {}", this.http.getAddress());
     }
 
     void stop() {
