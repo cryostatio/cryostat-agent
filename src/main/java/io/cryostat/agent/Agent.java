@@ -155,7 +155,6 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
         Thread t =
                 new Thread(
                         () -> {
-                            log.info("Cryostat Agent starting...");
                             agent.accept(aa);
                         });
         t.setDaemon(true);
@@ -211,6 +210,7 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
         } catch (IOException ioe) {
             log.warn("Unable to read versions.properties file", ioe);
         }
+        log.info("Cryostat Agent version {} starting...", agentVersion);
         properties.forEach(
                 (k, v) -> {
                     log.trace("Set system property {} = {}", k, v);
@@ -281,7 +281,7 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
             webServer.start();
             registration.start();
             client.triggerEvaluator().start(args.getSmartTriggers());
-            log.info("Cryostat Agent {} startup complete", agentVersion);
+            log.info("startup complete");
         } catch (Exception e) {
             log.error(Agent.class.getSimpleName() + " startup failure", e);
             if (agentExitHandler != null) {
