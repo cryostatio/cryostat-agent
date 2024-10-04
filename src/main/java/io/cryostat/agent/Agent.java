@@ -200,12 +200,21 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
 
     @Override
     public void accept(AgentArgs args) {
-        args.getProperties()
-                .forEach(
-                        (k, v) -> {
-                            log.trace("Set system property {} = {}", k, v);
-                            System.setProperty(k, v);
-                        });
+        Map<String, String> properties = new HashMap<>();
+        properties.putAll(args.getProperties());
+        properties.put("gitCommitHash", new BuildInfo().getGitInfo().getHash());
+        String agentVersion = "unknown";
+        try {
+            VersionInfo versionInfo = VersionInfo.load();
+            properties.putAll(versionInfo.asMap());
+        } catch (IOException ioe) {
+            log.warn("Unable to read versions.properties file", ioe);
+        }
+        properties.forEach(
+                (k, v) -> {
+                    log.trace("Set system property {} = {}", k, v);
+                    System.setProperty(k, v);
+                });
         AgentExitHandler agentExitHandler = null;
         try {
             final Client client = DaggerAgent_Client.builder().build();
@@ -271,7 +280,7 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
             webServer.start();
             registration.start();
             client.triggerEvaluator().start(args.getSmartTriggers());
-            log.info("Startup complete");
+            log.info("Cryostat Agent {} startup complete", agentVersion);
         } catch (Exception e) {
             log.error(Agent.class.getSimpleName() + " startup failure", e);
             if (agentExitHandler != null) {
