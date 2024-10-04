@@ -218,6 +218,14 @@ and how it advertises itself to a Cryostat server instance. Properties that requ
 - [ ] `cryostat.agent.webserver.tls.keystore.pass.charset` [`String`]: the character set used by the HTTPS server keystore's password. Default `utf-8`.
 - [ ] `cryostat.agent.webserver.tls.keystore.file` [`String`]: the filepath to the HTTPS server keystore
 - [ ] `cryostat.agent.webserver.tls.keystore.type` [`String`]: the type of keystore used for the Agent's HTTPS server. Default `PKCS12`.
+- [ ] `cryostat.agent.webserver.tls.key.alias` [`String`]: the alias used for the keystore entry to contain this key for the HTTPS server.
+- [ ] `cryostat.agent.webserver.tls.key.path` [`String`]: the filepath to the TLS key used by the HTTPS server.
+- [ ] `cryostat.agent.webserver.tls.key.charset` [`String`]: the string encoding of the TLS key file. Default `utf-8`.
+- [ ] `cryostat.agent.webserver.tls.key.encoding` [`String`]: the certificate encoding of the TLS key file. Default `PKCS1`.
+- [ ] `cryostat.agent.webserver.tls.key.type` [`String`]: the key type of the TLS key. Default `RSA`.
+- [ ] `cryostat.agent.webserver.tls.key.pass.file` [`String`]: the path to a file containing the password to unlock the TLS key.
+- [ ] `cryostat.agent.webserver.tls.key.pass-charset` [`String`]: the string encoding of the file containing the TLS key password. Default `utf-8`.
+- [ ] `cryostat.agent.webserver.tls.key.pass` [`String`]: the TLS key password value. Providing the password as a mounted file is preferred.
 - [ ] `cryostat.agent.webserver.tls.cert.alias` [`String`]: the alias for the certificate stored in the HTTPS server keystore. Default `serverCert`.
 - [ ] `cryostat.agent.webserver.tls.cert.file` [`String`]: the filepath to the certificate to be stored by the HTTPS server keystore
 - [ ] `cryostat.agent.webserver.tls.cert.type` [`String`]: the type of certificate that the HTTPS server keystore will present. Default `X.509`.
