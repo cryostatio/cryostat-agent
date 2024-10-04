@@ -281,7 +281,7 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
             webServer.start();
             registration.start();
             client.triggerEvaluator().start(args.getSmartTriggers());
-            log.info("startup complete");
+            log.info("Startup complete");
         } catch (Exception e) {
             log.error(Agent.class.getSimpleName() + " startup failure", e);
             if (agentExitHandler != null) {
