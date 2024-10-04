@@ -202,10 +202,11 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
     public void accept(AgentArgs args) {
         Map<String, String> properties = new HashMap<>();
         properties.putAll(args.getProperties());
-        properties.put("gitCommitHash", new BuildInfo().getGitInfo().getHash());
+        properties.put("build.git.commit-hash", new BuildInfo().getGitInfo().getHash());
         String agentVersion = "unknown";
         try {
             VersionInfo versionInfo = VersionInfo.load();
+            agentVersion = versionInfo.getAgentVersion();
             properties.putAll(versionInfo.asMap());
         } catch (IOException ioe) {
             log.warn("Unable to read versions.properties file", ioe);
