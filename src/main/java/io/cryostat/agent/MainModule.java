@@ -15,25 +15,36 @@
  */
 package io.cryostat.agent;
 
+import java.io.BufferedInputStream;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.math.BigInteger;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.CharsetDecoder;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.KeyFactory;
 import java.security.KeyManagementException;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.security.PrivateKey;
 import java.security.UnrecoverableKeyException;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
+import java.security.spec.InvalidKeySpecException;
+import java.security.spec.KeySpec;
+import java.security.spec.PKCS8EncodedKeySpec;
+import java.util.Arrays;
+import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -44,6 +55,7 @@ import java.util.function.Supplier;
 
 import javax.inject.Named;
 import javax.inject.Singleton;
+import javax.net.ssl.KeyManager;
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
@@ -74,9 +86,16 @@ import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.protocol.HttpClientContext;
-import org.apache.http.impl.client.HttpClientBuilder;
+import org.apache.http.config.Registry;
+import org.apache.http.config.RegistryBuilder;
+import org.apache.http.conn.HttpClientConnectionManager;
+import org.apache.http.conn.socket.ConnectionSocketFactory;
+import org.apache.http.conn.socket.PlainConnectionSocketFactory;
+import org.apache.http.conn.ssl.NoopHostnameVerifier;
+import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.impl.client.StandardHttpRequestRetryHandler;
+import org.apache.http.impl.conn.BasicHttpClientConnectionManager;
 import org.apache.http.protocol.HttpContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -131,6 +150,48 @@ public abstract class MainModule {
                 remoteContexts, cryostat, http, digest, user, passLength, callback, registration);
     }
 
+    private static Optional<CharBuffer> readPass(
+            Optional<String> pass, Optional<String> passFile, String passFileCharset)
+            throws IOException {
+        CharBuffer cb = null;
+        if (passFile.isPresent()) {
+            byte[] bytes = null;
+            try {
+                bytes = Files.readAllBytes(Path.of(passFile.get()));
+                cb = Charset.forName(passFileCharset).decode(ByteBuffer.wrap(bytes));
+            } finally {
+                if (bytes != null) {
+                    Arrays.fill(bytes, (byte) 0);
+                }
+            }
+        } else if (pass.isPresent()) {
+            cb = CharBuffer.wrap(pass.get().toCharArray());
+        }
+        return Optional.ofNullable(cb);
+    }
+
+    private static void clearBuffer(Optional<CharBuffer> cb) {
+        if (cb == null) {
+            return;
+        }
+        cb.ifPresent(c -> Arrays.fill(c.array(), '\0'));
+        cb.ifPresent(CharBuffer::clear);
+    }
+
+    private static byte[] buildPkcs8KeyFromPkcs1Key(byte[] innerKey) {
+        var result = new byte[innerKey.length + 26];
+        System.arraycopy(
+                Base64.getDecoder().decode("MIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKY="),
+                0,
+                result,
+                0,
+                26);
+        System.arraycopy(BigInteger.valueOf(result.length - 4).toByteArray(), 0, result, 2, 2);
+        System.arraycopy(BigInteger.valueOf(innerKey.length).toByteArray(), 0, result, 24, 2);
+        System.arraycopy(innerKey, 0, result, 26, innerKey.length);
+        return result;
+    }
+
     @Provides
     @Singleton
     @Named(HTTP_CLIENT_SSL_CTX)
@@ -145,140 +206,241 @@ public abstract class MainModule {
                     String passCharset,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_TYPE) String truststoreType,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_CERTS)
-                    List<TruststoreConfig> truststoreCerts) {
+                    List<TruststoreConfig> truststoreCerts,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_CERT_PATH)
+                    Optional<String> clientAuthCertPath,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_CERT_TYPE)
+                    String clientAuthCertType,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_CERT_ALIAS)
+                    String clientAuthCertAlias,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_PATH)
+                    Optional<String> clientAuthKeyPath,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_TYPE)
+                    String clientAuthKeyType,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_CHARSET)
+                    String clientAuthKeyCharset,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_ENCODING)
+                    String clientAuthKeyEncoding,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEYSTORE_TYPE)
+                    String clientAuthKeystoreType,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEYSTORE_PASS)
+                    Optional<String> clientAuthKeystorePass,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEYSTORE_PASS_FILE)
+                    Optional<String> clientAuthKeystorePassFile,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEYSTORE_PASS_CHARSET)
+                    String clientAuthKeystorePassFileCharset,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_PASS)
+                    Optional<String> clientAuthKeyPass,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_PASS_FILE)
+                    Optional<String> clientAuthKeyPassFile,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_PASS_CHARSET)
+                    String clientAuthKeyPassFileCharset,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_MANAGER_TYPE)
+                    String clientAuthKeyManagerType) {
         try {
+            KeyManager[] keyManagers = null;
+            if (clientAuthCertPath.isPresent() && clientAuthKeyPath.isPresent()) {
+                KeyStore ks = KeyStore.getInstance(clientAuthKeystoreType);
+                Optional<CharBuffer> keystorePass =
+                        readPass(
+                                clientAuthKeystorePass,
+                                clientAuthKeystorePassFile,
+                                clientAuthKeystorePassFileCharset);
+                Optional<CharBuffer> keyPass =
+                        readPass(
+                                clientAuthKeyPass,
+                                clientAuthKeyPassFile,
+                                clientAuthKeyPassFileCharset);
+                byte[] keyBytes = new byte[0];
+                try (BufferedInputStream certIs =
+                                new BufferedInputStream(
+                                        new FileInputStream(
+                                                Path.of(clientAuthCertPath.get()).toFile()));
+                        BufferedInputStream keyIs =
+                                new BufferedInputStream(
+                                        new FileInputStream(
+                                                Path.of(clientAuthKeyPath.get()).toFile()))) {
+                    ks.load(null, keystorePass.map(CharBuffer::array).orElse(null));
+                    CertificateFactory certFactory =
+                            CertificateFactory.getInstance(clientAuthCertType);
+                    Certificate[] certChain =
+                            certFactory.generateCertificates(certIs).toArray(new Certificate[0]);
+                    KeyFactory keyFactory = KeyFactory.getInstance(clientAuthKeyType);
+                    KeySpec keySpec;
+                    // FIXME avoid allocating a String that holds the encoded key. This
+                    // String may sit around on the heap until the JVM decides to do a GC
+                    // and release it. It would be better to handle this using mutable
+                    // structures (ex. byte[] or char[]) so that it can be explicitly
+                    // cleared ASAP, or else use off-heap memory.
+                    String s =
+                            new String(keyIs.readAllBytes(), Charset.forName(clientAuthKeyCharset));
+                    String pem = s.replaceAll("-----.+KEY-----", "").replaceAll("\\s+", "");
+                    switch (clientAuthKeyEncoding) {
+                        case "PKCS1":
+                            keyBytes = buildPkcs8KeyFromPkcs1Key(Base64.getDecoder().decode(pem));
+                            keySpec = new PKCS8EncodedKeySpec(keyBytes, clientAuthKeyType);
+                            break;
+                        case "PKCS8":
+                            keyBytes = Base64.getDecoder().decode(pem);
+                            keySpec = new PKCS8EncodedKeySpec(keyBytes, clientAuthKeyType);
+                            break;
+                        default:
+                            throw new IllegalArgumentException(
+                                    "Unimplemented key encoding: " + clientAuthKeyEncoding);
+                    }
+                    PrivateKey key = keyFactory.generatePrivate(keySpec);
+                    ks.setKeyEntry(
+                            clientAuthCertAlias,
+                            key,
+                            keyPass.map(CharBuffer::array).orElse(null),
+                            certChain);
+                    KeyManagerFactory kmf = KeyManagerFactory.getInstance(clientAuthKeyManagerType);
+                    kmf.init(ks, keystorePass.map(CharBuffer::array).orElse(null));
+                    keyManagers = kmf.getKeyManagers();
+                } finally {
+                    Arrays.fill(keyBytes, (byte) 0);
+                    clearBuffer(keystorePass);
+                    clearBuffer(keyPass);
+                }
+            } else if (clientAuthCertPath.isPresent() || clientAuthKeyPath.isPresent()) {
+                throw new IllegalArgumentException(
+                        String.format(
+                                "To use TLS client authentication, both the certificate (%s) and"
+                                        + " private key (%s) properties must be set.",
+                                ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_CERT_PATH,
+                                ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_PATH));
+            }
+
+            X509TrustManager trustManager = null;
             if (trustAll) {
-                SSLContext sslCtx = SSLContext.getInstance(clientTlsVersion);
-                sslCtx.init(
-                        null,
-                        new TrustManager[] {
-                            new X509TrustManager() {
-                                @Override
-                                public void checkClientTrusted(
-                                        X509Certificate[] chain, String authType)
-                                        throws CertificateException {}
+                trustManager =
+                        new X509TrustManager() {
+                            @Override
+                            public void checkClientTrusted(X509Certificate[] chain, String authType)
+                                    throws CertificateException {}
 
-                                @Override
-                                public void checkServerTrusted(
-                                        X509Certificate[] chain, String authType)
-                                        throws CertificateException {}
+                            @Override
+                            public void checkServerTrusted(X509Certificate[] chain, String authType)
+                                    throws CertificateException {}
 
-                                @Override
-                                public X509Certificate[] getAcceptedIssuers() {
-                                    return new X509Certificate[0];
+                            @Override
+                            public X509Certificate[] getAcceptedIssuers() {
+                                return new X509Certificate[0];
+                            }
+                        };
+            } else {
+                // set up trust manager factory
+                TrustManagerFactory tmf =
+                        TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+                tmf.init((KeyStore) null);
+
+                X509TrustManager defaultTrustManager = null;
+                X509TrustManager customTrustManager = null;
+                for (TrustManager tm : tmf.getTrustManagers()) {
+                    if (tm instanceof X509TrustManager) {
+                        defaultTrustManager = (X509TrustManager) tm;
+                        break;
+                    }
+                }
+                KeyStore ts = KeyStore.getInstance(truststoreType);
+                ts.load(null, null);
+                // initialize truststore with user provided path and pass
+                if (truststorePath.isPresent() && truststorePass.isPresent()) {
+                    Charset charset = Charset.forName(passCharset);
+                    CharsetDecoder decoder = charset.newDecoder();
+                    ByteBuffer byteBuffer = ByteBuffer.wrap(truststorePass.get().get());
+                    CharBuffer charBuffer = decoder.decode(byteBuffer);
+                    try (InputStream truststore = new FileInputStream(truststorePath.get())) {
+                        ts.load(truststore, charBuffer.array());
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    } finally {
+                        Arrays.fill(byteBuffer.array(), (byte) 0);
+                        Arrays.fill(charBuffer.array(), '\0');
+                        truststorePass.get().clear();
+                    }
+                } else if (truststorePath.isPresent() || truststorePass.isPresent()) {
+                    throw new IllegalArgumentException(
+                            String.format(
+                                    "To import a truststore, provide both the path to the"
+                                        + " truststore (%s) and the pass (%s), or a path to a file"
+                                        + " containing the pass (%s)",
+                                    ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PATH,
+                                    ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS,
+                                    ConfigModule
+                                            .CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PASS_FILE));
+                }
+
+                // initialize truststore with user provided certs
+                for (TruststoreConfig truststore : truststoreCerts) {
+                    // load truststore with certificatesCertificate
+                    try (InputStream certFile = new FileInputStream(truststore.getPath())) {
+                        CertificateFactory cf =
+                                CertificateFactory.getInstance(truststore.getType());
+                        Certificate cert = cf.generateCertificate(certFile);
+                        if (ts.containsAlias(truststore.getType())) {
+                            throw new IllegalStateException(
+                                    String.format(
+                                            "truststore already contains a certificate with"
+                                                    + " alias \"%s\"",
+                                            truststore.getAlias()));
+                        }
+                        ts.setCertificateEntry(truststore.getAlias(), cert);
+                    } catch (CertificateException e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+
+                // set up trust manager factory
+                tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+                tmf.init(ts);
+
+                customTrustManager = null;
+                for (TrustManager tm : tmf.getTrustManagers()) {
+                    if (tm instanceof X509TrustManager) {
+                        customTrustManager = (X509TrustManager) tm;
+                        break;
+                    }
+                }
+
+                final X509TrustManager finalDefaultTM = defaultTrustManager;
+                final X509TrustManager finalCustomTM = customTrustManager;
+                trustManager =
+                        new X509TrustManager() {
+                            @Override
+                            public void checkClientTrusted(X509Certificate[] chain, String authType)
+                                    throws CertificateException {
+                                try {
+                                    finalCustomTM.checkClientTrusted(chain, authType);
+                                } catch (CertificateException e) {
+                                    finalDefaultTM.checkClientTrusted(chain, authType);
                                 }
                             }
-                        },
-                        null);
-                return sslCtx;
+
+                            @Override
+                            public void checkServerTrusted(X509Certificate[] chain, String authType)
+                                    throws CertificateException {
+                                try {
+                                    finalCustomTM.checkServerTrusted(chain, authType);
+                                } catch (CertificateException e) {
+                                    finalDefaultTM.checkServerTrusted(chain, authType);
+                                }
+                            }
+
+                            @Override
+                            public X509Certificate[] getAcceptedIssuers() {
+                                return finalDefaultTM.getAcceptedIssuers();
+                            }
+                        };
             }
 
             SSLContext sslCtx = SSLContext.getInstance(clientTlsVersion);
-
-            // set up trust manager factory
-            TrustManagerFactory tmf =
-                    TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-            tmf.init((KeyStore) null);
-
-            X509TrustManager defaultTrustManager = null;
-            for (TrustManager tm : tmf.getTrustManagers()) {
-                if (tm instanceof X509TrustManager) {
-                    defaultTrustManager = (X509TrustManager) tm;
-                    break;
-                }
-            }
-
-            KeyStore ts = KeyStore.getInstance(truststoreType);
-            ts.load(null, null);
-
-            // initialize truststore with user provided path and pass
-            if (!truststorePath.isEmpty() && !truststorePass.isEmpty()) {
-                Charset charset = Charset.forName(passCharset);
-                CharsetDecoder decoder = charset.newDecoder();
-                ByteBuffer byteBuffer = ByteBuffer.wrap(truststorePass.get().get());
-                CharBuffer charBuffer = decoder.decode(byteBuffer);
-                try (InputStream truststore = new FileInputStream(truststorePath.get())) {
-                    ts.load(truststore, charBuffer.array());
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                } finally {
-                    byteBuffer.clear();
-                    charBuffer.clear();
-                    truststorePass.get().clear();
-                }
-            } else if (!truststorePath.isEmpty() || !truststorePass.isEmpty()) {
-                throw new IllegalArgumentException(
-                        String.format(
-                                "To import a truststore, provide both the path to the truststore"
-                                    + " and the pass, or a path to a file containing the pass"));
-            }
-
-            // initialize truststore with user provided certs
-            for (TruststoreConfig truststore : truststoreCerts) {
-                // load truststore with certificatesCertificate
-                try (InputStream certFile = new FileInputStream(truststore.getPath())) {
-                    CertificateFactory cf = CertificateFactory.getInstance(truststore.getType());
-                    Certificate cert = cf.generateCertificate(certFile);
-                    if (ts.containsAlias(truststore.getType())) {
-                        throw new IllegalStateException(
-                                String.format(
-                                        "truststore already contains a certificate with alias"
-                                                + " \"%s\"",
-                                        truststore.getAlias()));
-                    }
-                    ts.setCertificateEntry(truststore.getAlias(), cert);
-                } catch (CertificateException e) {
-                    throw new RuntimeException(e);
-                }
-            }
-
-            // set up trust manager factory
-            tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-            tmf.init(ts);
-
-            X509TrustManager customTrustManager = null;
-            for (TrustManager tm : tmf.getTrustManagers()) {
-                if (tm instanceof X509TrustManager) {
-                    customTrustManager = (X509TrustManager) tm;
-                    break;
-                }
-            }
-
-            final X509TrustManager finalDefaultTM = defaultTrustManager;
-            final X509TrustManager finalCustomTM = customTrustManager;
-            X509TrustManager mergedTrustManager =
-                    new X509TrustManager() {
-                        @Override
-                        public void checkClientTrusted(X509Certificate[] chain, String authType)
-                                throws CertificateException {
-                            try {
-                                finalCustomTM.checkClientTrusted(chain, authType);
-                            } catch (CertificateException e) {
-                                finalDefaultTM.checkClientTrusted(chain, authType);
-                            }
-                        }
-
-                        @Override
-                        public void checkServerTrusted(X509Certificate[] chain, String authType)
-                                throws CertificateException {
-                            try {
-                                finalCustomTM.checkServerTrusted(chain, authType);
-                            } catch (CertificateException e) {
-                                finalDefaultTM.checkServerTrusted(chain, authType);
-                            }
-                        }
-
-                        @Override
-                        public X509Certificate[] getAcceptedIssuers() {
-                            return finalDefaultTM.getAcceptedIssuers();
-                        }
-                    };
-
-            // set up HTTPS context
-            sslCtx.init(null, new TrustManager[] {mergedTrustManager}, null);
+            sslCtx.init(keyManagers, new X509TrustManager[] {trustManager}, null);
             return sslCtx;
         } catch (NoSuchAlgorithmException
                 | KeyManagementException
+                | InvalidKeySpecException
+                | UnrecoverableKeyException
                 | KeyStoreException
                 | CertificateException
                 | IOException e) {
@@ -375,54 +537,61 @@ public abstract class MainModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_CONNECT_TIMEOUT_MS) int connectTimeout,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_TIMEOUT_MS) int responseTimeout,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_RETRY_COUNT) int retryCount) {
-        HttpClientBuilder builder =
-                HttpClients.custom()
-                        .setSSLContext(sslContext)
-                        .setDefaultRequestConfig(
-                                RequestConfig.custom()
-                                        .setAuthenticationEnabled(true)
-                                        .setExpectContinueEnabled(true)
-                                        .setConnectTimeout(connectTimeout)
-                                        .setSocketTimeout(responseTimeout)
-                                        .setRedirectsEnabled(true)
-                                        .build())
-                        .setRetryHandler(
-                                new StandardHttpRequestRetryHandler(retryCount, true) {
-                                    @Override
-                                    public boolean retryRequest(
-                                            IOException exception,
-                                            int executionCount,
-                                            HttpContext context) {
-                                        // if the Authorization header we should send may change
-                                        // over time, ex. we read a Bearer token from a file, then
-                                        // it is possible that we get a 401 or 403 response because
-                                        // the token expired in between the time that we read it
-                                        // from our filesystem and when it was received by the
-                                        // authenticator. So, in this set of conditions, we should
-                                        // refresh our header value and try again right away
-                                        if (authorizationType.isDynamic()) {
-                                            HttpClientContext clientCtx =
-                                                    HttpClientContext.adapt(context);
-                                            if (clientCtx.isRequestSent()) {
-                                                HttpResponse resp = clientCtx.getResponse();
-                                                if (resp != null && resp.getStatusLine() != null) {
-                                                    int sc = resp.getStatusLine().getStatusCode();
-                                                    if (executionCount < 2
-                                                            && (sc == 401 || sc == 403)) {
-                                                        return true;
-                                                    }
-                                                }
+        SSLConnectionSocketFactory sslSocketFactory =
+                new SSLConnectionSocketFactory(
+                        sslContext,
+                        verifyHostname
+                                ? SSLConnectionSocketFactory.getDefaultHostnameVerifier()
+                                : NoopHostnameVerifier.INSTANCE);
+        Registry<ConnectionSocketFactory> socketFactoryRegistry =
+                RegistryBuilder.<ConnectionSocketFactory>create()
+                        .register("https", sslSocketFactory)
+                        .register("http", new PlainConnectionSocketFactory())
+                        .build();
+        HttpClientConnectionManager connMan =
+                new BasicHttpClientConnectionManager(socketFactoryRegistry);
+        return HttpClients.custom()
+                .setSSLContext(sslContext)
+                .setSSLSocketFactory(sslSocketFactory)
+                .setConnectionManager(connMan)
+                .setDefaultRequestConfig(
+                        RequestConfig.custom()
+                                .setAuthenticationEnabled(true)
+                                .setExpectContinueEnabled(true)
+                                .setConnectTimeout(connectTimeout)
+                                .setSocketTimeout(responseTimeout)
+                                .setRedirectsEnabled(true)
+                                .build())
+                .setRetryHandler(
+                        new StandardHttpRequestRetryHandler(retryCount, true) {
+                            @Override
+                            public boolean retryRequest(
+                                    IOException exception,
+                                    int executionCount,
+                                    HttpContext context) {
+                                // if the Authorization header we should send may change
+                                // over time, ex. we read a Bearer token from a file, then
+                                // it is possible that we get a 401 or 403 response because
+                                // the token expired in between the time that we read it
+                                // from our filesystem and when it was received by the
+                                // authenticator. So, in this set of conditions, we should
+                                // refresh our header value and try again right away
+                                if (authorizationType.isDynamic()) {
+                                    HttpClientContext clientCtx = HttpClientContext.adapt(context);
+                                    if (clientCtx.isRequestSent()) {
+                                        HttpResponse resp = clientCtx.getResponse();
+                                        if (resp != null && resp.getStatusLine() != null) {
+                                            int sc = resp.getStatusLine().getStatusCode();
+                                            if (executionCount < 2 && (sc == 401 || sc == 403)) {
+                                                return true;
                                             }
                                         }
-                                        return super.retryRequest(
-                                                exception, executionCount, context);
                                     }
-                                });
-
-        if (!verifyHostname) {
-            builder = builder.setSSLHostnameVerifier((hostname, session) -> true);
-        }
-        return builder.build();
+                                }
+                                return super.retryRequest(exception, executionCount, context);
+                            }
+                        })
+                .build();
     }
 
     @Provides

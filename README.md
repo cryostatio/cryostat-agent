@@ -194,6 +194,21 @@ and how it advertises itself to a Cryostat server instance. Properties that requ
 - [ ] `cryostat.agent.webclient.tls.truststore.pass.file` [`String`]: the filepath to the agent's client truststore's password
 - [ ] `cryostat.agent.webclient.tls.truststore.pass.charset` [`String`]: the character set used by the agent's client truststore's password. Default `utf-8`.
 - [ ] `cryostat.agent.webclient.tls.truststore.pass` [`String`]: the String format of the agent's client truststore's pass
+- [ ] `cryostat.agent.webclient.tls.client-auth.cert.path` [`String`]: the filepath to the TLS client authentication certificate which the agent will send to the server.
+- [ ] `cryostat.agent.webclient.tls.client-auth.cert.type` [`String`]: the certificate type for TLS client authentication. Default `X.509`.
+- [ ] `cryostat.agent.webclient.tls.client-auth.cert.alias` [`String`]: the certificate alias for TLS client authentication. Default `identity`.
+- [ ] `cryostat.agent.webclient.tls.client-auth.key.path` [`String`]: the filepath to the TLS client authentication key which the agent will use when communicating with the server.
+- [ ] `cryostat.agent.webclient.tls.client-auth.key.charset` [`String`]: the string encoding of the TLS client authentication key file. Default `utf-8`.
+- [ ] `cryostat.agent.webclient.tls.client-auth.key.encoding` [`String`]: the certificate encoding of the TLS client authentication key file. Default `PKCS1`.
+- [ ] `cryostat.agent.webclient.tls.client-auth.key.type` [`String`]: the key type of the TLS client authentication key. Default `RSA`.
+- [ ] `cryostat.agent.webclient.tls.client-auth.key.pass.file` [`String`]: the path to a file containing the password to unlock the TLS client authentication key.
+- [ ] `cryostat.agent.webclient.tls.client-auth.key.pass-charset` [`String`]: the string encoding of the file containing the TLS client authentication key password. Default `utf-8`.
+- [ ] `cryostat.agent.webclient.tls.client-auth.key.pass` [`String`]: the TLS client authentication key password value. Providing the password as a mounted file is preferred.
+- [ ] `cryostat.agent.webclient.tls.client-auth.keystore.pass.file` [`String`]: the path to a file containing a password to lock the TLS client authentication keystore.
+- [ ] `cryostat.agent.webclient.tls.client-auth.keystore.pass-charset` [`String`]: the string encoding of the file containing the TLS client authentication keystore password.
+- [ ] `cryostat.agent.webclient.tls.client-auth.keystore.pass` [`String`]: the TLS client authentication keystore password value. If no password or password file path is specified then the generated keystore will be left unlocked.
+- [ ] `cryostat.agent.webclient.tls.client-auth.keystore.type` [`String`]: the TLS client authentication keystore type. Default `PKCS12`.
+- [ ] `cryostat.agent.webclient.tls.client-auth.key-manager.type` [`String`]: the TLS client authentication key manager type. Default `SunX509`.
 - [ ] `cryostat.agent.webclient.connect.timeout-ms` [`long`]: the duration in milliseconds to wait for HTTP requests to the Cryostat server to connect. Default `1000`.
 - [ ] `cryostat.agent.webclient.response.timeout-ms` [`long`]: the duration in milliseconds to wait for HTTP requests to the Cryostat server to respond. Default `1000`.
 - [ ] `cryostat.agent.webserver.host` [`String`]: the internal hostname or IP address for the embedded webserver to bind to. Default `0.0.0.0`.
