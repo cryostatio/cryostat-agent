@@ -104,8 +104,12 @@
   <maven-source-plugin.version>3.3.1</maven-source-plugin.version>
   <maven-javadoc-plugin.version>3.10.1</maven-javadoc-plugin.version>
   <jreleaser-maven-plugin.version>1.14.0</jreleaser-maven-plugin.version>
+  <org.codehaus.mojo.exec.plugin.version>3.4.1</org.codehaus.mojo.exec.plugin.version>
 
   <shade.prefix>io.cryostat.agent.shaded</shade.prefix>
+
+  <cryostat.server.version.min>4.0.0</cryostat.server.version.min>
+  <cryostat.server.version.max>5.0.0</cryostat.server.version.max>
 </properties>
 
 <dependencyManagement>
@@ -298,6 +302,29 @@
           </manifestEntries>
         </archive>
       </configuration>
+    </plugin>
+    <plugin>
+      <groupId>org.codehaus.mojo</groupId>
+      <artifactId>exec-maven-plugin</artifactId>
+      <version>${org.codehaus.mojo.exec.plugin.version}</version>
+      <executions>
+        <execution>
+          <id>generate-git-version</id>
+          <phase>generate-resources</phase>
+          <goals>
+            <goal>exec</goal>
+          </goals>
+          <configuration>
+            <executable>git</executable>
+            <arguments>
+              <argument>rev-parse</argument>
+              <argument>--verify</argument>
+              <argument>HEAD</argument>
+            </arguments>
+            <outputFile>${project.build.directory}/classes/META-INF/gitinfo</outputFile>
+          </configuration>
+        </execution>
+      </executions>
     </plugin>
     <plugin>
       <groupId>org.apache.maven.plugins</groupId>

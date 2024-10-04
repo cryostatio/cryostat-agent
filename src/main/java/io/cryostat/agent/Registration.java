@@ -15,6 +15,7 @@
  */
 package io.cryostat.agent;
 
+import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.UnknownHostException;
@@ -33,6 +34,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
+import io.cryostat.agent.VersionInfo.Semver;
 import io.cryostat.agent.model.DiscoveryNode;
 import io.cryostat.agent.model.PluginInfo;
 import io.cryostat.agent.util.StringUtils;
@@ -197,6 +199,29 @@ public class Registration {
             return;
         }
         try {
+            cryostat.serverHealth()
+                    .thenAccept(
+                            health -> {
+                                Semver cryostatSemver = health.cryostatSemver();
+                                log.debug(
+                                        "Connected to Cryostat server: version {} , build {}",
+                                        cryostatSemver,
+                                        health.buildInfo().git().hash());
+                                try {
+                                    VersionInfo version = VersionInfo.load();
+                                    if (!version.validateServerVersion(cryostatSemver)) {
+                                        log.warn(
+                                                "Cryostat server version {} is outside of expected"
+                                                        + " range [{}, {})",
+                                                cryostatSemver,
+                                                version.getServerMin(),
+                                                version.getServerMax());
+                                    }
+                                } catch (IOException ioe) {
+                                    log.error("Unable to read versions.properties file", ioe);
+                                }
+                            })
+                    .get();
             URI credentialedCallback =
                     new URIBuilder(callback)
                             .setUserInfo("storedcredentials", String.valueOf(credentialId))
