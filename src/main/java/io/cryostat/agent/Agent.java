@@ -38,6 +38,7 @@ import javax.inject.Named;
 import javax.inject.Singleton;
 
 import io.cryostat.agent.ConfigModule.URIRange;
+import io.cryostat.agent.VersionInfo.Semver;
 import io.cryostat.agent.harvest.Harvester;
 import io.cryostat.agent.insights.InsightsAgentHelper;
 import io.cryostat.agent.model.PluginInfo;
@@ -49,6 +50,7 @@ import com.sun.tools.attach.AttachNotSupportedException;
 import com.sun.tools.attach.VirtualMachine;
 import com.sun.tools.attach.VirtualMachineDescriptor;
 import dagger.Component;
+import org.apache.commons.lang3.tuple.Pair;
 import org.eclipse.microprofile.config.Config;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -203,14 +205,21 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
         properties.putAll(args.getProperties());
         properties.put("build.git.commit-hash", new BuildInfo().getGitInfo().getHash());
         String agentVersion = "unknown";
+        Pair<Semver, Semver> serverVersionRange = Pair.of(Semver.UNKNOWN, Semver.UNKNOWN);
         try {
             VersionInfo versionInfo = VersionInfo.load();
+            serverVersionRange = Pair.of(versionInfo.getServerMin(), versionInfo.getServerMax());
             agentVersion = versionInfo.getAgentVersion();
             properties.putAll(versionInfo.asMap());
         } catch (IOException ioe) {
             log.warn("Unable to read versions.properties file", ioe);
         }
-        log.info("Cryostat Agent version {} starting...", agentVersion);
+        log.info(
+                "Cryostat Agent version {} (for Cryostat server version range [{}, {}) )"
+                        + " starting...",
+                agentVersion,
+                serverVersionRange.getLeft(),
+                serverVersionRange.getRight());
         properties.forEach(
                 (k, v) -> {
                     log.trace("Set system property {} = {}", k, v);
