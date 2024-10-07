@@ -22,6 +22,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
 
+import io.cryostat.agent.util.ResourcesUtil;
+
 public class VersionInfo {
 
     private static final String RESOURCE_LOCATION = "versions.properties";
@@ -42,10 +44,7 @@ public class VersionInfo {
 
     public static VersionInfo load() throws IOException {
         Properties prop = new Properties();
-        try (InputStream is =
-                Thread.currentThread()
-                        .getContextClassLoader()
-                        .getResourceAsStream(RESOURCE_LOCATION)) {
+        try (InputStream is = ResourcesUtil.getResourceAsStream(RESOURCE_LOCATION)) {
             prop.load(is);
         }
         String agentVersion = prop.getProperty(AGENT_VERSION_KEY);
@@ -80,6 +79,8 @@ public class VersionInfo {
     }
 
     public static class Semver implements Comparable<Semver> {
+
+        public static final Semver UNKNOWN = new Semver(0, 0, 0);
 
         private final int major;
         private final int minor;
