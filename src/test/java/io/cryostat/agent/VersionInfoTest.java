@@ -17,46 +17,21 @@ package io.cryostat.agent;
 
 import io.cryostat.agent.VersionInfo.Semver;
 
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Test;
+import org.hamcrest.MatcherAssert;
+import org.hamcrest.Matchers;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 public class VersionInfoTest {
 
     static final Semver serverMin = Semver.fromString("1.0.0");
     static final Semver serverMax = Semver.fromString("2.0.0");
 
-    @Test
-    public void testActualEqualsMin() {
+    @ParameterizedTest
+    @CsvSource({"1.0.0, true", "2.0.0, false", "3.0.0, false", "0.1.0, false", "1.1.0, true"})
+    public void test(String serverVersion, boolean inRange) {
         VersionInfo info = new VersionInfo(Semver.UNKNOWN, serverMin, serverMax);
-        Semver actual = Semver.fromString("1.0.0");
-        Assertions.assertTrue(info.validateServerVersion(actual));
-    }
-
-    @Test
-    public void testActualEqualsMax() {
-        VersionInfo info = new VersionInfo(Semver.UNKNOWN, serverMin, serverMax);
-        Semver actual = Semver.fromString("2.0.0");
-        Assertions.assertFalse(info.validateServerVersion(actual));
-    }
-
-    @Test
-    public void testActualGreaterMax() {
-        VersionInfo info = new VersionInfo(Semver.UNKNOWN, serverMin, serverMax);
-        Semver actual = Semver.fromString("3.0.0");
-        Assertions.assertFalse(info.validateServerVersion(actual));
-    }
-
-    @Test
-    public void testActualLesserMin() {
-        VersionInfo info = new VersionInfo(Semver.UNKNOWN, serverMin, serverMax);
-        Semver actual = Semver.fromString("0.1.0");
-        Assertions.assertFalse(info.validateServerVersion(actual));
-    }
-
-    @Test
-    public void testActualInRange() {
-        VersionInfo info = new VersionInfo(Semver.UNKNOWN, serverMin, serverMax);
-        Semver actual = Semver.fromString("1.1.0");
-        Assertions.assertTrue(info.validateServerVersion(actual));
+        Semver actual = Semver.fromString(serverVersion);
+        MatcherAssert.assertThat(info.validateServerVersion(actual), Matchers.equalTo(inRange));
     }
 }
