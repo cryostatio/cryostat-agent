@@ -31,12 +31,12 @@ public class VersionInfo {
     static final String MIN_VERSION_KEY = "cryostat.server.version.min";
     static final String MAX_VERSION_KEY = "cryostat.server.version.max";
 
-    private final String agentVersion;
+    private final Semver agentVersion;
     private final Semver serverMin;
     private final Semver serverMax;
 
     // testing only
-    VersionInfo(String agentVersion, Semver serverMin, Semver serverMax) {
+    VersionInfo(Semver agentVersion, Semver serverMin, Semver serverMax) {
         this.agentVersion = agentVersion;
         this.serverMin = serverMin;
         this.serverMax = serverMax;
@@ -47,7 +47,7 @@ public class VersionInfo {
         try (InputStream is = ResourcesUtil.getResourceAsStream(RESOURCE_LOCATION)) {
             prop.load(is);
         }
-        String agentVersion = prop.getProperty(AGENT_VERSION_KEY);
+        Semver agentVersion = Semver.fromString(prop.getProperty(AGENT_VERSION_KEY));
         Semver serverMin = Semver.fromString(prop.getProperty(MIN_VERSION_KEY));
         Semver serverMax = Semver.fromString(prop.getProperty(MAX_VERSION_KEY));
         return new VersionInfo(agentVersion, serverMin, serverMax);
@@ -55,12 +55,12 @@ public class VersionInfo {
 
     public Map<String, String> asMap() {
         return Map.of(
-                AGENT_VERSION_KEY, getAgentVersion(),
+                AGENT_VERSION_KEY, getAgentVersion().toString(),
                 MIN_VERSION_KEY, getServerMin().toString(),
                 MAX_VERSION_KEY, getServerMax().toString());
     }
 
-    public String getAgentVersion() {
+    public Semver getAgentVersion() {
         return agentVersion;
     }
 
@@ -80,7 +80,13 @@ public class VersionInfo {
 
     public static class Semver implements Comparable<Semver> {
 
-        public static final Semver UNKNOWN = new Semver(0, 0, 0);
+        public static final Semver UNKNOWN =
+                new Semver(0, 0, 0) {
+                    @Override
+                    public String toString() {
+                        return "unknown";
+                    }
+                };
 
         private final int major;
         private final int minor;

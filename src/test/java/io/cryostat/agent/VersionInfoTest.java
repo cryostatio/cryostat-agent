@@ -27,35 +27,35 @@ public class VersionInfoTest {
 
     @Test
     public void testActualEqualsMin() {
-        VersionInfo info = new VersionInfo("", serverMin, serverMax);
+        VersionInfo info = new VersionInfo(Semver.UNKNOWN, serverMin, serverMax);
         Semver actual = Semver.fromString("1.0.0");
         Assertions.assertTrue(info.validateServerVersion(actual));
     }
 
     @Test
     public void testActualEqualsMax() {
-        VersionInfo info = new VersionInfo("", serverMin, serverMax);
+        VersionInfo info = new VersionInfo(Semver.UNKNOWN, serverMin, serverMax);
         Semver actual = Semver.fromString("2.0.0");
         Assertions.assertFalse(info.validateServerVersion(actual));
     }
 
     @Test
     public void testActualGreaterMax() {
-        VersionInfo info = new VersionInfo("", serverMin, serverMax);
+        VersionInfo info = new VersionInfo(Semver.UNKNOWN, serverMin, serverMax);
         Semver actual = Semver.fromString("3.0.0");
         Assertions.assertFalse(info.validateServerVersion(actual));
     }
 
     @Test
     public void testActualLesserMin() {
-        VersionInfo info = new VersionInfo("", serverMin, serverMax);
+        VersionInfo info = new VersionInfo(Semver.UNKNOWN, serverMin, serverMax);
         Semver actual = Semver.fromString("0.1.0");
         Assertions.assertFalse(info.validateServerVersion(actual));
     }
 
     @Test
     public void testActualInRange() {
-        VersionInfo info = new VersionInfo("", serverMin, serverMax);
+        VersionInfo info = new VersionInfo(Semver.UNKNOWN, serverMin, serverMax);
         Semver actual = Semver.fromString("1.1.0");
         Assertions.assertTrue(info.validateServerVersion(actual));
     }
