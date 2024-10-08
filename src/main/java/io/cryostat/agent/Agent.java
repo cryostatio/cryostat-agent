@@ -204,7 +204,7 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
         Map<String, String> properties = new HashMap<>();
         properties.putAll(args.getProperties());
         properties.put("build.git.commit-hash", new BuildInfo().getGitInfo().getHash());
-        String agentVersion = "unknown";
+        Semver agentVersion = Semver.UNKNOWN;
         Pair<Semver, Semver> serverVersionRange = Pair.of(Semver.UNKNOWN, Semver.UNKNOWN);
         try {
             VersionInfo versionInfo = VersionInfo.load();
