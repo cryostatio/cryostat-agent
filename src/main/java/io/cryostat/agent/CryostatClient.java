@@ -44,6 +44,7 @@ import io.cryostat.agent.harvest.Harvester;
 import io.cryostat.agent.model.DiscoveryNode;
 import io.cryostat.agent.model.PluginInfo;
 import io.cryostat.agent.model.RegistrationInfo;
+import io.cryostat.agent.model.ServerHealth;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -109,6 +110,22 @@ public class CryostatClient {
         this.realm = realm;
 
         log.info("Using Cryostat baseuri {}", baseUri);
+    }
+
+    public CompletableFuture<ServerHealth> serverHealth() {
+        HttpGet req = new HttpGet(baseUri.resolve("/health"));
+        log.trace("{}", req);
+        return supply(req, res -> logResponse(req, res))
+                .thenApply(
+                        res -> {
+                            try (InputStream is = res.getEntity().getContent()) {
+                                return mapper.readValue(is, ServerHealth.class);
+                            } catch (IOException e) {
+                                log.error("Unable to parse response as JSON", e);
+                                throw new RegistrationException(e);
+                            }
+                        })
+                .whenComplete((v, t) -> req.reset());
     }
 
     public CompletableFuture<Boolean> checkRegistration(PluginInfo pluginInfo) {
