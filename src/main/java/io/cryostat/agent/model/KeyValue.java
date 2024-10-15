@@ -18,8 +18,11 @@ package io.cryostat.agent.model;
 import java.util.Objects;
 
 public class KeyValue {
-    private final String key;
-    private final String value;
+
+    private String key;
+    private String value;
+
+    KeyValue() {}
 
     public KeyValue(String key, String value) {
         this.key = Objects.requireNonNull(key);
@@ -32,6 +35,14 @@ public class KeyValue {
 
     public String getValue() {
         return value;
+    }
+
+    void setKey(String key) {
+        this.key = key;
+    }
+
+    void setValue(String value) {
+        this.value = value;
     }
 
     @Override
