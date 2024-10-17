@@ -24,6 +24,9 @@ import java.util.Properties;
 
 import io.cryostat.agent.util.ResourcesUtil;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 public class VersionInfo {
 
     private static final String RESOURCE_LOCATION = "versions.properties";
@@ -80,6 +83,8 @@ public class VersionInfo {
 
     public static class Semver implements Comparable<Semver> {
 
+        private static Logger log = LoggerFactory.getLogger(Semver.class);
+
         public static final Semver UNKNOWN =
                 new Semver(0, 0, 0) {
                     @Override
@@ -103,10 +108,15 @@ public class VersionInfo {
             if (parts.length != 3) {
                 throw new IllegalArgumentException();
             }
-            return new Semver(
-                    Integer.parseInt(parts[0]),
-                    Integer.parseInt(parts[1]),
-                    Integer.parseInt(parts[2]));
+            try {
+                return new Semver(
+                        Integer.parseInt(parts[0]),
+                        Integer.parseInt(parts[1]),
+                        Integer.parseInt(parts[2]));
+            } catch (NumberFormatException nfe) {
+                log.error(String.format("Unable to parse input string \"%s\"", in), nfe);
+                return UNKNOWN;
+            }
         }
 
         public int getMajor() {
