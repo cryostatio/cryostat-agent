@@ -35,6 +35,9 @@ public class SemverTest {
         "2.0.0, 1.1.0, 1",
         "1.0.1, 1.1.0, -1",
         "1.1.1, 1.0.1, 1",
+        "1.0.0-SNAPSHOT, 1.0.0, 0",
+        "v1.0.0-SNAPSHOT, 1.0.0, 0",
+        "v1.0.0, 1.0.0, 0",
     })
     public void test(String first, String second, int result) {
         Semver a = Semver.fromString(first);

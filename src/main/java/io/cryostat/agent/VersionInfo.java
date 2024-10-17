@@ -21,8 +21,13 @@ import java.util.Comparator;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import io.cryostat.agent.util.ResourcesUtil;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class VersionInfo {
 
@@ -80,6 +85,13 @@ public class VersionInfo {
 
     public static class Semver implements Comparable<Semver> {
 
+        public static final Pattern VERSION_PATTERN =
+                Pattern.compile(
+                        "^v?(?<major>[\\d]+)\\.(?<minor>[\\d]+)\\.(?<patch>[\\d]+)(?:-[a-z0-9\\._-]*)?",
+                        Pattern.CASE_INSENSITIVE | Pattern.MULTILINE);
+
+        private static Logger log = LoggerFactory.getLogger(Semver.class);
+
         public static final Semver UNKNOWN =
                 new Semver(0, 0, 0) {
                     @Override
@@ -99,14 +111,20 @@ public class VersionInfo {
         }
 
         public static Semver fromString(String in) {
-            String[] parts = in.split("\\.");
-            if (parts.length != 3) {
-                throw new IllegalArgumentException();
+            try {
+                Matcher m = VERSION_PATTERN.matcher(in);
+                if (!m.matches()) {
+                    log.warn("Input version \"{}\" did not match expected semver pattern", in);
+                    return UNKNOWN;
+                }
+                return new Semver(
+                        Integer.parseInt(m.group("major")),
+                        Integer.parseInt(m.group("minor")),
+                        Integer.parseInt(m.group("patch")));
+            } catch (NumberFormatException nfe) {
+                log.error(String.format("Unable to parse input string \"%s\"", in), nfe);
+                return UNKNOWN;
             }
-            return new Semver(
-                    Integer.parseInt(parts[0]),
-                    Integer.parseInt(parts[1]),
-                    Integer.parseInt(parts[2]));
         }
 
         public int getMajor() {

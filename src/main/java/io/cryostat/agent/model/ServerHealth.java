@@ -15,20 +15,12 @@
  */
 package io.cryostat.agent.model;
 
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
 import io.cryostat.agent.VersionInfo.Semver;
 
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
 @SuppressFBWarnings(value = {"EI_EXPOSE_REP", "EI_EXPOSE_REP2"})
 public class ServerHealth {
-
-    private static final Pattern VERSION_PATTERN =
-            Pattern.compile(
-                    "^v(?<major>[\\d]+)\\.(?<minor>[\\d]+)\\.(?<patch>[\\d]+)(?:-[a-z0-9\\._-]*)?",
-                    Pattern.CASE_INSENSITIVE | Pattern.MULTILINE);
 
     private String cryostatVersion;
     private BuildInfo build;
@@ -53,14 +45,7 @@ public class ServerHealth {
     }
 
     public Semver cryostatSemver() {
-        Matcher m = VERSION_PATTERN.matcher(cryostatVersion());
-        if (!m.matches()) {
-            return Semver.fromString("0.0.0");
-        }
-        return new Semver(
-                Integer.parseInt(m.group("major")),
-                Integer.parseInt(m.group("minor")),
-                Integer.parseInt(m.group("patch")));
+        return Semver.fromString(cryostatVersion());
     }
 
     public BuildInfo buildInfo() {
