@@ -104,7 +104,7 @@
   <maven-source-plugin.version>3.3.1</maven-source-plugin.version>
   <maven-javadoc-plugin.version>3.10.1</maven-javadoc-plugin.version>
   <jreleaser-maven-plugin.version>1.14.0</jreleaser-maven-plugin.version>
-  <org.codehaus.mojo.exec.plugin.version>3.4.1</org.codehaus.mojo.exec.plugin.version>
+  <org.codehaus.mojo.exec.plugin.version>3.5.0</org.codehaus.mojo.exec.plugin.version>
 
   <shade.prefix>io.cryostat.agent.shaded</shade.prefix>
 
