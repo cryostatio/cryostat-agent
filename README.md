@@ -249,6 +249,11 @@ and how it advertises itself to a Cryostat server instance. Properties that requ
 - [ ] `cryostat.agent.harvester.max-size-b` [`long`]: the JFR `maxsize` setting, specified in bytes, to apply to periodic uploads during the application lifecycle. Defaults to `0`, which means `unlimited`.
 - [ ] `cryostat.agent.smart-trigger.definitions` [`String[]`]: a comma-separated list of Smart Trigger definitions to load at startup. Defaults to the empty string: no Smart Triggers.
 - [ ] `cryostat.agent.smart-trigger.evaluation.period-ms` [`long`]: the length of time between Smart Trigger evaluations. Default `1000`.
+- [ ] `cryostat.agent.kubernetes.callback.scheme` [`String`]: A Kubernetes-specific override for the scheme portion of the `cryostat.agent.callback` URL (e.g. `https`).
+- [ ] `cryostat.agent.kubernetes.callback.pod.name` [`String`]: A Kubernetes-specific override for the host portion of the `cryostat.agent.callback` URL. If this pod is resolvable using its name as a host name, that will be used in the callback URL.
+- [ ] `cryostat.agent.kubernetes.callback.ip` [`String`]: A Kubernetes-specific override for the host portion of the `cryostat.agent.callback` URL. If this pod is resolvable using the dashed IPv4 address (e.g. 1-2-3-4) as a host name, that will be used in the callback URL.
+- [ ] `cryostat.agent.kubernetes.callback.domain` [`String`]: A Kubernetes-specific override for the domain portion of the `cryostat.agent.callback` URL. This will be appended to a resolvable host name to form the callback URL.
+- [ ] `cryostat.agent.kubernetes.callback.port` [`int`]: A Kubernetes-specific override for the port portion of the `cryostat.agent.callback` URL.
 - [ ] `rht.insights.java.opt-out` [`boolean`]: for the Red Hat build of Cryostat, set this to true to disable data collection for Red Hat Insights. Defaults to `false`. Red Hat Insights data collection is always disabled for community builds of Cryostat.
 - [ ] `rht.insights.java.debug` [`boolean`]: for the Red Hat build of Cryostat, set this to true to enable debug logging for the Red Hat Insights Java Agent. Defaults to `false`. Red Hat Insights data collection is always disabled for community builds of Cryostat.
 

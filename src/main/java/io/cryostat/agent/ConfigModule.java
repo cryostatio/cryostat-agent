@@ -19,6 +19,7 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.net.UnknownHostException;
@@ -49,6 +50,7 @@ import io.cryostat.agent.util.StringUtils;
 
 import dagger.Module;
 import dagger.Provides;
+import org.apache.http.client.utils.URIBuilder;
 import org.eclipse.microprofile.config.Config;
 import org.eclipse.microprofile.config.ConfigProvider;
 import org.slf4j.Logger;
@@ -208,6 +210,17 @@ public abstract class ConfigModule {
     public static final String CRYOSTAT_AGENT_SMART_TRIGGER_EVALUATION_PERIOD_MS =
             "cryostat.agent.smart-trigger.evaluation.period-ms";
 
+    public static final String CRYOSTAT_AGENT_KUBERNETES_CALLBACK_SCHEME =
+            "cryostat.agent.kubernetes.callback.scheme";
+    public static final String CRYOSTAT_AGENT_KUBERNETES_CALLBACK_POD_NAME =
+            "cryostat.agent.kubernetes.callback.pod.name";
+    public static final String CRYOSTAT_AGENT_KUBERNETES_CALLBACK_IP =
+            "cryostat.agent.kubernetes.callback.ip";
+    public static final String CRYOSTAT_AGENT_KUBERNETES_CALLBACK_DOMAIN =
+            "cryostat.agent.kubernetes.callback.domain";
+    public static final String CRYOSTAT_AGENT_KUBERNETES_CALLBACK_PORT =
+            "cryostat.agent.kubernetes.callback.port";
+
     public static final String CRYOSTAT_AGENT_API_WRITES_ENABLED =
             "cryostat.agent.api.writes-enabled";
 
@@ -251,6 +264,10 @@ public abstract class ConfigModule {
     @Singleton
     @Named(CRYOSTAT_AGENT_CALLBACK)
     public static URI provideCryostatAgentCallback(Config config) {
+        Optional<URI> callback = buildCallbackKubernetes(config);
+        if (callback.isPresent()) {
+            return callback.get();
+        }
         return config.getValue(CRYOSTAT_AGENT_CALLBACK, URI.class);
     }
 
@@ -966,6 +983,67 @@ public abstract class ConfigModule {
 
         public void clear() {
             Arrays.fill(this.buf, (byte) 0);
+        }
+    }
+
+    private static Optional<URI> buildCallbackKubernetes(Config config) {
+        Optional<String> k8sScheme =
+                config.getOptionalValue(CRYOSTAT_AGENT_KUBERNETES_CALLBACK_SCHEME, String.class);
+        Optional<String> k8sIP =
+                config.getOptionalValue(CRYOSTAT_AGENT_KUBERNETES_CALLBACK_IP, String.class);
+        Optional<String> k8sPod =
+                config.getOptionalValue(CRYOSTAT_AGENT_KUBERNETES_CALLBACK_POD_NAME, String.class);
+        Optional<String> k8sDomain =
+                config.getOptionalValue(CRYOSTAT_AGENT_KUBERNETES_CALLBACK_DOMAIN, String.class);
+        Optional<Integer> k8sPort =
+                config.getOptionalValue(CRYOSTAT_AGENT_KUBERNETES_CALLBACK_PORT, Integer.class);
+        if (k8sScheme.isPresent()
+                && (k8sIP.isPresent() || k8sPod.isPresent())
+                && k8sDomain.isPresent()
+                && k8sPort.isPresent()) {
+
+            // Try resolving the pod name as a DNS name
+            Optional<String> resolvedHost =
+                    k8sPod.map(name -> name + "." + k8sDomain.get())
+                            .filter(host -> tryResolveHostname(host));
+
+            // Try resolving using dashed IP representation as a DNS name
+            if (resolvedHost.isEmpty()) {
+                resolvedHost =
+                        k8sIP.map(ip -> ip.replaceAll("\\.", "-") + "." + k8sDomain.get())
+                                .filter(host -> tryResolveHostname(host));
+            }
+
+            // If none of the above resolved, then throw an error
+            if (resolvedHost.isEmpty()) {
+                throw new RuntimeException(
+                        "Failed to resolve hostname, consider disabling hostname verification in"
+                                + " Cryostat for the agent callback");
+            }
+
+            try {
+                URI result =
+                        new URIBuilder()
+                                .setScheme(k8sScheme.get())
+                                .setHost(resolvedHost.get())
+                                .setPort(k8sPort.get())
+                                .build();
+                log.debug("Using " + result.toASCIIString() + " for callback URL");
+                return Optional.of(result);
+            } catch (URISyntaxException e) {
+                throw new IllegalArgumentException(e);
+            }
+        }
+        return Optional.empty();
+    }
+
+    private static boolean tryResolveHostname(String hostname) {
+        try {
+            InetAddress addr = InetAddress.getByName(hostname);
+            log.debug("Resolved " + hostname + " to " + addr.getHostAddress());
+            return true;
+        } catch (UnknownHostException ignored) {
+            return false;
         }
     }
 }
