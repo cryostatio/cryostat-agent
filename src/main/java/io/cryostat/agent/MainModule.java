@@ -459,31 +459,46 @@ public abstract class MainModule {
                     String passFileCharset,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_FILE)
                     Optional<String> keyStoreFilePath,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_KEY_ALIAS) String keyAlias,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_KEY_PATH) Optional<String> keyFilePath,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_KEY_PASS) Optional<String> keyPass,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_KEY_PASS_FILE)
+                    Optional<String> keyPassFile,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_KEY_PASS_CHARSET)
+                    String keyPassCharset,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_KEY_PATH) Optional<String> keyPath,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_KEY_ENCODING) String keyEncoding,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_KEY_CHARSET) String keyCharset,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_KEY_TYPE) String keyType,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_TYPE) String keyStoreType,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_CERT_ALIAS) String certAlias,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_CERT_FILE)
                     Optional<String> certFilePath,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_CERT_TYPE) String certType) {
         boolean ssl =
-                keyStorePassFile.isPresent()
-                        && keyStoreFilePath.isPresent()
+                (keyStoreFilePath.isPresent() || keyFilePath.isPresent())
+                        && keyStorePassFile.isPresent()
                         && certFilePath.isPresent();
         if (!ssl) {
             if (keyStorePassFile.isPresent()
+                    || keyFilePath.isPresent()
                     || keyStoreFilePath.isPresent()
                     || certFilePath.isPresent()) {
                 throw new IllegalArgumentException(
-                        "The file paths for the keystore, keystore password, and certificate must"
-                            + " ALL be provided to set up HTTPS connections. Otherwise, make sure"
-                            + " they are all unset to use an HTTP server.");
+                        "The file paths for the keystore or key file, keystore password, and"
+                            + " certificate must ALL be provided to set up HTTPS connections."
+                            + " Otherwise, make sure they are all unset to use an HTTP server.");
             }
             return Optional.empty();
         }
 
+        InputStream keystore = null;
         try (InputStream pass = new FileInputStream(keyStorePassFile.get());
-                InputStream keystore = new FileInputStream(keyStoreFilePath.get());
                 InputStream certFile = new FileInputStream(certFilePath.get())) {
             SSLContext sslContext = SSLContext.getInstance(serverTlsVersion);
+            if (keyStoreFilePath.isPresent()) {
+                keystore = new FileInputStream(keyStoreFilePath.get());
+            }
 
             // initialize keystore
             String password = IOUtils.toString(pass, Charset.forName(passFileCharset));
@@ -503,6 +518,46 @@ public abstract class MainModule {
             }
             ks.setCertificateEntry(certAlias, cert);
 
+            if (keyFilePath.isPresent()) {
+                Optional<CharBuffer> kp = readPass(keyPass, keyPassFile, keyPassCharset);
+                byte[] keyBytes = new byte[0];
+                try (BufferedInputStream keyIs =
+                        new BufferedInputStream(
+                                new FileInputStream(Path.of(keyPath.get()).toFile()))) {
+                    KeyFactory keyFactory = KeyFactory.getInstance(keyType);
+                    KeySpec keySpec;
+                    // FIXME avoid allocating a String that holds the encoded key. This
+                    // String may sit around on the heap until the JVM decides to do a GC
+                    // and release it. It would be better to handle this using mutable
+                    // structures (ex. byte[] or char[]) so that it can be explicitly
+                    // cleared ASAP, or else use off-heap memory.
+                    String s = new String(keyIs.readAllBytes(), Charset.forName(keyCharset));
+                    String pem = s.replaceAll("-----.+KEY-----", "").replaceAll("\\s+", "");
+                    switch (keyEncoding) {
+                        case "PKCS1":
+                            keyBytes = buildPkcs8KeyFromPkcs1Key(Base64.getDecoder().decode(pem));
+                            keySpec = new PKCS8EncodedKeySpec(keyBytes, keyType);
+                            break;
+                        case "PKCS8":
+                            keyBytes = Base64.getDecoder().decode(pem);
+                            keySpec = new PKCS8EncodedKeySpec(keyBytes, keyType);
+                            break;
+                        default:
+                            throw new IllegalArgumentException(
+                                    "Unimplemented key encoding: " + keyType);
+                    }
+                    PrivateKey key = keyFactory.generatePrivate(keySpec);
+                    ks.setKeyEntry(
+                            keyAlias,
+                            key,
+                            kp.map(CharBuffer::array).orElse(null),
+                            new Certificate[] {cert});
+                } finally {
+                    Arrays.fill(keyBytes, (byte) 0);
+                    clearBuffer(kp);
+                }
+            }
+
             // set up key manager factory
             KeyManagerFactory kmf =
                     KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
@@ -520,10 +575,19 @@ public abstract class MainModule {
         } catch (KeyStoreException
                 | CertificateException
                 | UnrecoverableKeyException
+                | InvalidKeySpecException
                 | KeyManagementException
                 | IOException
                 | NoSuchAlgorithmException e) {
             throw new RuntimeException(e);
+        } finally {
+            if (keystore != null) {
+                try {
+                    keystore.close();
+                } catch (IOException ioe) {
+                    throw new RuntimeException(ioe);
+                }
+            }
         }
     }
 
