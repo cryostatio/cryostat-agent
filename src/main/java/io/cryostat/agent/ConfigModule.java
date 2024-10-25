@@ -46,6 +46,7 @@ import java.util.stream.StreamSupport;
 import javax.inject.Named;
 import javax.inject.Singleton;
 
+import io.cryostat.agent.util.ResourcesUtil;
 import io.cryostat.agent.util.StringUtils;
 
 import dagger.Module;
@@ -237,7 +238,7 @@ public abstract class ConfigModule {
         fns.add(Pair.of("Simple", ConfigProvider::getConfig));
         fns.add(
                 Pair.of(
-                        "Current Thread Context Classloader",
+                        "ResourcesUtil Classloader",
                         () -> {
                             // if we don't do this then the SmallRye Config loader may end up with a
                             // null classloader in the case that the Agent starts separately and is
@@ -245,17 +246,18 @@ public abstract class ConfigModule {
                             // we try to detect and preempt that case and ensure that there is a
                             // reasonable classloader for the SmallRye config loader to use.
                             PrivilegedExceptionAction<ClassLoader> pea =
-                                    () -> {
-                                        ClassLoader cl =
-                                                Thread.currentThread().getContextClassLoader();
-                                        if (cl != null) {
-                                            return cl;
-                                        }
-                                        return new URLClassLoader(
-                                                new URL[] {Agent.selfJarLocation().toURL()});
-                                    };
-                            ClassLoader cl = AccessController.doPrivileged(pea);
-                            return ConfigProvider.getConfig(cl);
+                                    ResourcesUtil::getClassLoader;
+                            return ConfigProvider.getConfig(AccessController.doPrivileged(pea));
+                        }));
+        fns.add(
+                Pair.of(
+                        "Agent JAR URL Classloader",
+                        () -> {
+                            PrivilegedExceptionAction<ClassLoader> pea =
+                                    () ->
+                                            new URLClassLoader(
+                                                    new URL[] {Agent.selfJarLocation().toURL()});
+                            return ConfigProvider.getConfig(AccessController.doPrivileged(pea));
                         }));
         fns.add(
                 Pair.of(
