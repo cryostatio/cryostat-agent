@@ -26,6 +26,7 @@ import java.util.regex.Pattern;
 
 import io.cryostat.agent.util.ResourcesUtil;
 
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -35,6 +36,8 @@ public class VersionInfo {
     static final String AGENT_VERSION_KEY = "cryostat.agent.version";
     static final String MIN_VERSION_KEY = "cryostat.server.version.min";
     static final String MAX_VERSION_KEY = "cryostat.server.version.max";
+
+    private static Logger log = LoggerFactory.getLogger(VersionInfo.class);
 
     private final Semver agentVersion;
     private final Semver serverMin;
@@ -50,7 +53,15 @@ public class VersionInfo {
     public static VersionInfo load() throws IOException {
         Properties prop = new Properties();
         try (InputStream is = ResourcesUtil.getResourceAsStream(RESOURCE_LOCATION)) {
-            prop.load(is);
+            if (is == null) {
+                log.warn("Could not locate resource {}", RESOURCE_LOCATION);
+            } else {
+                try {
+                    prop.load(is);
+                } catch (Exception e) {
+                    log.warn(String.format("Failed to load resource %s", RESOURCE_LOCATION), e);
+                }
+            }
         }
         Semver agentVersion = Semver.fromString(prop.getProperty(AGENT_VERSION_KEY));
         Semver serverMin = Semver.fromString(prop.getProperty(MIN_VERSION_KEY));
@@ -111,6 +122,9 @@ public class VersionInfo {
         }
 
         public static Semver fromString(String in) {
+            if (StringUtils.isBlank(in)) {
+                return UNKNOWN;
+            }
             try {
                 Matcher m = VERSION_PATTERN.matcher(in);
                 if (!m.matches()) {
