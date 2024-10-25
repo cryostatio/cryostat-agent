@@ -239,30 +239,32 @@ public abstract class ConfigModule {
         fns.add(
                 Pair.of(
                         "ResourcesUtil Classloader",
-                        () -> {
-                            // if we don't do this then the SmallRye Config loader may end up with a
-                            // null classloader in the case that the Agent starts separately and is
-                            // dynamically attached to a running VM, which results in an NPE. Here
-                            // we try to detect and preempt that case and ensure that there is a
-                            // reasonable classloader for the SmallRye config loader to use.
-                            PrivilegedExceptionAction<ClassLoader> pea =
-                                    ResourcesUtil::getClassLoader;
-                            return ConfigProvider.getConfig(AccessController.doPrivileged(pea));
-                        }));
-        fns.add(
-                Pair.of(
-                        "Agent JAR URL Classloader",
-                        () -> {
-                            PrivilegedExceptionAction<ClassLoader> pea =
-                                    () ->
-                                            new URLClassLoader(
-                                                    new URL[] {Agent.selfJarLocation().toURL()});
-                            return ConfigProvider.getConfig(AccessController.doPrivileged(pea));
-                        }));
+                        () ->
+                                ConfigProvider.getConfig(
+                                        AccessController.doPrivileged(
+                                                (PrivilegedExceptionAction<ClassLoader>)
+                                                        ResourcesUtil::getClassLoader))));
         fns.add(
                 Pair.of(
                         "Config Class Classloader",
-                        () -> ConfigProvider.getConfig(Config.class.getClassLoader())));
+                        () ->
+                                ConfigProvider.getConfig(
+                                        AccessController.doPrivileged(
+                                                (PrivilegedExceptionAction<ClassLoader>)
+                                                        Config.class::getClassLoader))));
+        fns.add(
+                Pair.of(
+                        "Agent JAR URL Classloader",
+                        () ->
+                                ConfigProvider.getConfig(
+                                        AccessController.doPrivileged(
+                                                (PrivilegedExceptionAction<ClassLoader>)
+                                                        () ->
+                                                                new URLClassLoader(
+                                                                        new URL[] {
+                                                                            Agent.selfJarLocation()
+                                                                                    .toURL()
+                                                                        })))));
 
         Config config = null;
         for (Pair<String, Callable<Config>> fn : fns) {
