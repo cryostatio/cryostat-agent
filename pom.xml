@@ -71,7 +71,7 @@
   <org.apache.maven.plugins.resources.version>3.3.0</org.apache.maven.plugins.resources.version>
   <org.apache.maven.plugins.assembly.version>3.4.2</org.apache.maven.plugins.assembly.version>
   <com.mycila.license.maven.plugin.version>4.6</com.mycila.license.maven.plugin.version>
-  <org.owasp.dependency.check.version>11.0.0</org.owasp.dependency.check.version>
+  <org.owasp.dependency.check.version>11.1.0</org.owasp.dependency.check.version>
 
   <!-- Use a separate property for dependency alignment purposes. -->
   <com.google.dagger.version>2.51.1</com.google.dagger.version>
