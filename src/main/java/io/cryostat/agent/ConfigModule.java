@@ -53,6 +53,10 @@ import dagger.Provides;
 import org.apache.http.client.utils.URIBuilder;
 import org.eclipse.microprofile.config.Config;
 import org.eclipse.microprofile.config.ConfigProvider;
+import org.projectnessie.cel.extension.StringsLib;
+import org.projectnessie.cel.tools.Script;
+import org.projectnessie.cel.tools.ScriptException;
+import org.projectnessie.cel.tools.ScriptHost;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -210,19 +214,19 @@ public abstract class ConfigModule {
     public static final String CRYOSTAT_AGENT_SMART_TRIGGER_EVALUATION_PERIOD_MS =
             "cryostat.agent.smart-trigger.evaluation.period-ms";
 
-    public static final String CRYOSTAT_AGENT_KUBERNETES_CALLBACK_SCHEME =
-            "cryostat.agent.kubernetes.callback.scheme";
-    public static final String CRYOSTAT_AGENT_KUBERNETES_CALLBACK_POD_NAME =
-            "cryostat.agent.kubernetes.callback.pod.name";
-    public static final String CRYOSTAT_AGENT_KUBERNETES_CALLBACK_IP =
-            "cryostat.agent.kubernetes.callback.ip";
-    public static final String CRYOSTAT_AGENT_KUBERNETES_CALLBACK_DOMAIN =
-            "cryostat.agent.kubernetes.callback.domain";
-    public static final String CRYOSTAT_AGENT_KUBERNETES_CALLBACK_PORT =
-            "cryostat.agent.kubernetes.callback.port";
+    public static final String CRYOSTAT_AGENT_CALLBACK_SCHEME = "cryostat.agent.callback.scheme";
+    public static final String CRYOSTAT_AGENT_CALLBACK_HOST_NAME =
+            "cryostat.agent.callback.host-name";
+    public static final String CRYOSTAT_AGENT_CALLBACK_DOMAIN_NAME =
+            "cryostat.agent.callback.domain-name";
+    public static final String CRYOSTAT_AGENT_CALLBACK_PORT = "cryostat.agent.callback.port";
 
     public static final String CRYOSTAT_AGENT_API_WRITES_ENABLED =
             "cryostat.agent.api.writes-enabled";
+
+    private static final String HOST_SCRIPT_PATTERN_STRING =
+            "(?<host>[A-Za-z0-9-.]+)(?:\\[(?<script>.+)\\])?";
+    private static final Pattern HOST_SCRIPT_PATTERN = Pattern.compile(HOST_SCRIPT_PATTERN_STRING);
 
     @Provides
     @Singleton
@@ -264,7 +268,7 @@ public abstract class ConfigModule {
     @Singleton
     @Named(CRYOSTAT_AGENT_CALLBACK)
     public static URI provideCryostatAgentCallback(Config config) {
-        Optional<URI> callback = buildCallbackKubernetes(config);
+        Optional<URI> callback = buildCallbackFromComponents(config);
         if (callback.isPresent()) {
             return callback.get();
         }
@@ -986,33 +990,27 @@ public abstract class ConfigModule {
         }
     }
 
-    private static Optional<URI> buildCallbackKubernetes(Config config) {
-        Optional<String> k8sScheme =
-                config.getOptionalValue(CRYOSTAT_AGENT_KUBERNETES_CALLBACK_SCHEME, String.class);
-        Optional<String> k8sIP =
-                config.getOptionalValue(CRYOSTAT_AGENT_KUBERNETES_CALLBACK_IP, String.class);
-        Optional<String> k8sPod =
-                config.getOptionalValue(CRYOSTAT_AGENT_KUBERNETES_CALLBACK_POD_NAME, String.class);
-        Optional<String> k8sDomain =
-                config.getOptionalValue(CRYOSTAT_AGENT_KUBERNETES_CALLBACK_DOMAIN, String.class);
-        Optional<Integer> k8sPort =
-                config.getOptionalValue(CRYOSTAT_AGENT_KUBERNETES_CALLBACK_PORT, Integer.class);
-        if (k8sScheme.isPresent()
-                && (k8sIP.isPresent() || k8sPod.isPresent())
-                && k8sDomain.isPresent()
-                && k8sPort.isPresent()) {
+    private static Optional<URI> buildCallbackFromComponents(Config config) {
+        Optional<String> scheme =
+                config.getOptionalValue(CRYOSTAT_AGENT_CALLBACK_SCHEME, String.class);
+        Optional<String[]> hostNames =
+                config.getOptionalValue(CRYOSTAT_AGENT_CALLBACK_HOST_NAME, String[].class);
+        Optional<String> domainName =
+                config.getOptionalValue(CRYOSTAT_AGENT_CALLBACK_DOMAIN_NAME, String.class);
+        Optional<Integer> port =
+                config.getOptionalValue(CRYOSTAT_AGENT_CALLBACK_PORT, Integer.class);
+        if (scheme.isPresent()
+                && hostNames.isPresent()
+                && domainName.isPresent()
+                && port.isPresent()) {
 
-            // Try resolving the pod name as a DNS name
+            // Try resolving the each provided host name in order as a DNS name
             Optional<String> resolvedHost =
-                    k8sPod.map(name -> name + "." + k8sDomain.get())
-                            .filter(host -> tryResolveHostname(host));
-
-            // Try resolving using dashed IP representation as a DNS name
-            if (resolvedHost.isEmpty()) {
-                resolvedHost =
-                        k8sIP.map(ip -> ip.replaceAll("\\.", "-") + "." + k8sDomain.get())
-                                .filter(host -> tryResolveHostname(host));
-            }
+                    computeHostNames(hostNames.get()).stream()
+                            .sequential()
+                            .map(name -> name + "." + domainName.get())
+                            .filter(host -> tryResolveHostname(host))
+                            .findFirst();
 
             // If none of the above resolved, then throw an error
             if (resolvedHost.isEmpty()) {
@@ -1024,11 +1022,11 @@ public abstract class ConfigModule {
             try {
                 URI result =
                         new URIBuilder()
-                                .setScheme(k8sScheme.get())
+                                .setScheme(scheme.get())
                                 .setHost(resolvedHost.get())
-                                .setPort(k8sPort.get())
+                                .setPort(port.get())
                                 .build();
-                log.debug("Using " + result.toASCIIString() + " for callback URL");
+                log.debug("Using {} for callback URL", result.toASCIIString());
                 return Optional.of(result);
             } catch (URISyntaxException e) {
                 throw new IllegalArgumentException(e);
@@ -1037,10 +1035,47 @@ public abstract class ConfigModule {
         return Optional.empty();
     }
 
+    private static List<String> computeHostNames(String[] hostNames) {
+        ScriptHost scriptHost = ScriptHost.newBuilder().build();
+        List<String> result = new ArrayList<>(hostNames.length);
+        for (String hostName : hostNames) {
+            Matcher m = HOST_SCRIPT_PATTERN.matcher(hostName);
+            if (!m.matches()) {
+                throw new RuntimeException(
+                        "Invalid hostname argument encountered: "
+                                + hostName
+                                + ". Expected format: \"hostname\" or \"hostname[cel-script]\".");
+            }
+            if (m.group("script") == null) {
+                result.add(m.group("host"));
+            } else {
+                result.add(evaluateHostnameScript(scriptHost, m.group("script"), m.group("host")));
+            }
+        }
+
+        return result;
+    }
+
+    private static String evaluateHostnameScript(
+            ScriptHost scriptHost, String scriptText, String hostname) {
+        try {
+            Script script =
+                    scriptHost
+                            .buildScript("\"" + hostname + "\"." + scriptText)
+                            .withLibraries(new StringsLib())
+                            .build();
+            Map<String, Object> args = new HashMap<>();
+            return script.execute(String.class, args);
+        } catch (ScriptException e) {
+            throw new RuntimeException("Failed to execute provided CEL script", e);
+        }
+    }
+
     private static boolean tryResolveHostname(String hostname) {
         try {
+            log.debug("Attempting to resolve {}", hostname);
             InetAddress addr = InetAddress.getByName(hostname);
-            log.debug("Resolved " + hostname + " to " + addr.getHostAddress());
+            log.debug("Resolved {} to {}", hostname, addr.getHostAddress());
             return true;
         } catch (UnknownHostException ignored) {
             return false;

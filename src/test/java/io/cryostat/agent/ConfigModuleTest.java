@@ -61,8 +61,8 @@ public class ConfigModuleTest {
     }
 
     @Test
-    void testCallbackKubernetesPodName() throws Exception {
-        setupKubernetesCallback();
+    void testCallbackComponentsHostname() throws Exception {
+        setupCallbackComponents();
 
         when(addr.getHostAddress()).thenReturn("10.2.3.4");
         addrMock.when(() -> InetAddress.getByName("foo.headless.svc.example.com")).thenReturn(addr);
@@ -72,8 +72,8 @@ public class ConfigModuleTest {
     }
 
     @Test
-    void testCallbackKubernetesPodIP() throws Exception {
-        setupKubernetesCallback();
+    void testCallbackComponentsDashedIP() throws Exception {
+        setupCallbackComponents();
 
         when(addr.getHostAddress()).thenReturn("10.2.3.4");
         addrMock.when(() -> InetAddress.getByName("foo.headless.svc.example.com"))
@@ -86,8 +86,8 @@ public class ConfigModuleTest {
     }
 
     @Test
-    void testCallbackKubernetesNoMatch() throws Exception {
-        setupKubernetesCallback();
+    void testCallbackComponentsNoMatch() throws Exception {
+        setupCallbackComponents();
 
         addrMock.when(() -> InetAddress.getByName("foo.headless.svc.example.com"))
                 .thenThrow(new UnknownHostException("TEST"));
@@ -98,21 +98,16 @@ public class ConfigModuleTest {
                 RuntimeException.class, () -> ConfigModule.provideCryostatAgentCallback(config));
     }
 
-    private void setupKubernetesCallback() {
+    private void setupCallbackComponents() {
         when(config.getOptionalValue(
-                        ConfigModule.CRYOSTAT_AGENT_KUBERNETES_CALLBACK_DOMAIN, String.class))
+                        ConfigModule.CRYOSTAT_AGENT_CALLBACK_DOMAIN_NAME, String.class))
                 .thenReturn(Optional.of("headless.svc.example.com"));
         when(config.getOptionalValue(
-                        ConfigModule.CRYOSTAT_AGENT_KUBERNETES_CALLBACK_IP, String.class))
-                .thenReturn(Optional.of("10.2.3.4"));
-        when(config.getOptionalValue(
-                        ConfigModule.CRYOSTAT_AGENT_KUBERNETES_CALLBACK_POD_NAME, String.class))
-                .thenReturn(Optional.of("foo"));
-        when(config.getOptionalValue(
-                        ConfigModule.CRYOSTAT_AGENT_KUBERNETES_CALLBACK_PORT, Integer.class))
+                        ConfigModule.CRYOSTAT_AGENT_CALLBACK_HOST_NAME, String[].class))
+                .thenReturn(Optional.of(new String[] {"foo", "10.2.3.4[replace(\".\", \"-\")]"}));
+        when(config.getOptionalValue(ConfigModule.CRYOSTAT_AGENT_CALLBACK_PORT, Integer.class))
                 .thenReturn(Optional.of(9977));
-        when(config.getOptionalValue(
-                        ConfigModule.CRYOSTAT_AGENT_KUBERNETES_CALLBACK_SCHEME, String.class))
+        when(config.getOptionalValue(ConfigModule.CRYOSTAT_AGENT_CALLBACK_SCHEME, String.class))
                 .thenReturn(Optional.of("https"));
     }
 }
