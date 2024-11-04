@@ -36,6 +36,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.Callable;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
@@ -236,35 +237,28 @@ public abstract class ConfigModule {
     public static Config provideConfig() {
         List<Pair<String, Callable<Config>>> fns = new ArrayList<>();
         fns.add(Pair.of("Simple", ConfigProvider::getConfig));
-        fns.add(
-                Pair.of(
-                        "ResourcesUtil Classloader",
+        Function<Callable<ClassLoader>, Callable<Config>> clConfigLoader =
+                cl ->
                         () ->
                                 ConfigProvider.getConfig(
                                         AccessController.doPrivileged(
                                                 (PrivilegedExceptionAction<ClassLoader>)
-                                                        ResourcesUtil::getClassLoader))));
+                                                        cl.call()));
         fns.add(
                 Pair.of(
-                        "Config Class Classloader",
-                        () ->
-                                ConfigProvider.getConfig(
-                                        AccessController.doPrivileged(
-                                                (PrivilegedExceptionAction<ClassLoader>)
-                                                        Config.class::getClassLoader))));
+                        "ResourcesUtil ClassLoader",
+                        clConfigLoader.apply(ResourcesUtil::getClassLoader)));
         fns.add(
                 Pair.of(
-                        "Agent JAR URL Classloader",
-                        () ->
-                                ConfigProvider.getConfig(
-                                        AccessController.doPrivileged(
-                                                (PrivilegedExceptionAction<ClassLoader>)
-                                                        () ->
-                                                                new URLClassLoader(
-                                                                        new URL[] {
-                                                                            Agent.selfJarLocation()
-                                                                                    .toURL()
-                                                                        })))));
+                        "Config Class ClassLoader",
+                        clConfigLoader.apply(Config.class::getClassLoader)));
+        fns.add(
+                Pair.of(
+                        "Agent JAR URL ClassLoader",
+                        clConfigLoader.apply(
+                                () ->
+                                        new URLClassLoader(
+                                                new URL[] {Agent.selfJarLocation().toURL()}))));
 
         Config config = null;
         for (Pair<String, Callable<Config>> fn : fns) {
