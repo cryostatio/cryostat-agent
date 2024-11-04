@@ -239,11 +239,22 @@ public abstract class ConfigModule {
         fns.add(Pair.of("Simple", ConfigProvider::getConfig));
         Function<Callable<ClassLoader>, Callable<Config>> clConfigLoader =
                 cl ->
-                        () ->
-                                ConfigProvider.getConfig(
+                        () -> {
+                            ClassLoader loader;
+                            try {
+                                loader =
                                         AccessController.doPrivileged(
                                                 (PrivilegedExceptionAction<ClassLoader>)
-                                                        cl.call()));
+                                                        () -> cl.call());
+                            } catch (Exception e) {
+                                log.warn(
+                                        "ClassLoader AccessController failure - is this JVM too new"
+                                            + " to have the AccessController and SecurityManager?",
+                                        e);
+                                loader = cl.call();
+                            }
+                            return ConfigProvider.getConfig(loader);
+                        };
         fns.add(
                 Pair.of(
                         "ResourcesUtil ClassLoader",
