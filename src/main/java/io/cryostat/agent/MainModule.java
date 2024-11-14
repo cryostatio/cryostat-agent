@@ -477,34 +477,37 @@ public abstract class MainModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_CERT_TYPE) String certType) {
         boolean ssl =
                 (keyStoreFilePath.isPresent() || keyFilePath.isPresent())
-                        && keyStorePassFile.isPresent()
                         && certFilePath.isPresent();
         if (!ssl) {
-            if (keyStorePassFile.isPresent()
-                    || keyFilePath.isPresent()
+            if (keyFilePath.isPresent()
                     || keyStoreFilePath.isPresent()
                     || certFilePath.isPresent()) {
                 throw new IllegalArgumentException(
-                        "The file paths for the keystore or key file, keystore password, and"
-                            + " certificate must ALL be provided to set up HTTPS connections."
-                            + " Otherwise, make sure they are all unset to use an HTTP server.");
+                        "The file paths for the keystore or key file, and certificate must ALL be"
+                            + " provided to set up HTTPS connections. Otherwise, make sure they are"
+                            + " all unset to use an HTTP server.");
             }
             return Optional.empty();
         }
 
         InputStream keystore = null;
-        try (InputStream pass = new FileInputStream(keyStorePassFile.get());
-                InputStream certFile = new FileInputStream(certFilePath.get())) {
+        InputStream pass = null;
+        try (InputStream certFile = new FileInputStream(certFilePath.get())) {
             SSLContext sslContext = SSLContext.getInstance(serverTlsVersion);
             if (keyStoreFilePath.isPresent()) {
                 keystore = new FileInputStream(keyStoreFilePath.get());
             }
+            char[] storePass = null;
+            if (keyStorePassFile.isPresent()) {
+                pass = new FileInputStream(keyStorePassFile.get());
+                String password = IOUtils.toString(pass, Charset.forName(passFileCharset));
+                password = password.substring(0, password.length() - 1);
+                storePass = password.toCharArray();
+            }
 
             // initialize keystore
-            String password = IOUtils.toString(pass, Charset.forName(passFileCharset));
-            password = password.substring(0, password.length() - 1);
             KeyStore ks = KeyStore.getInstance(keyStoreType);
-            ks.load(keystore, password.toCharArray());
+            ks.load(keystore, storePass);
 
             // set up certificate factory
             CertificateFactory cf = CertificateFactory.getInstance(certType);
@@ -561,7 +564,7 @@ public abstract class MainModule {
             // set up key manager factory
             KeyManagerFactory kmf =
                     KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
-            kmf.init(ks, password.toCharArray());
+            kmf.init(ks, storePass);
 
             // set up trust manager factory
             TrustManagerFactory tmf =
@@ -584,6 +587,13 @@ public abstract class MainModule {
             if (keystore != null) {
                 try {
                     keystore.close();
+                } catch (IOException ioe) {
+                    throw new RuntimeException(ioe);
+                }
+            }
+            if (pass != null) {
+                try {
+                    pass.close();
                 } catch (IOException ioe) {
                     throw new RuntimeException(ioe);
                 }
