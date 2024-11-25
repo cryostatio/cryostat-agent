@@ -27,7 +27,6 @@ import java.nio.charset.Charset;
 import java.security.AccessController;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.security.PrivilegedActionException;
 import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -36,6 +35,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
@@ -46,10 +47,12 @@ import java.util.stream.StreamSupport;
 import javax.inject.Named;
 import javax.inject.Singleton;
 
+import io.cryostat.agent.util.ResourcesUtil;
 import io.cryostat.agent.util.StringUtils;
 
 import dagger.Module;
 import dagger.Provides;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.http.client.utils.URIBuilder;
 import org.eclipse.microprofile.config.Config;
 import org.eclipse.microprofile.config.ConfigProvider;
@@ -177,6 +180,7 @@ public abstract class ConfigModule {
     public static final String CRYOSTAT_AGENT_WEBSERVER_CREDENTIALS_PASS_LENGTH =
             "cryostat.agent.webserver.credentials.pass.length";
 
+    public static final String CRYOSTAT_AGENT_CONFIG_LOADABLE = "cryostat.agent.config.loadable";
     public static final String CRYOSTAT_AGENT_APP_NAME = "cryostat.agent.app.name";
     public static final String CRYOSTAT_AGENT_HOSTNAME = "cryostat.agent.hostname";
     public static final String CRYOSTAT_AGENT_APP_JMX_PORT = "cryostat.agent.app.jmx.port";
@@ -231,24 +235,72 @@ public abstract class ConfigModule {
     @Provides
     @Singleton
     public static Config provideConfig() {
-        // if we don't do this then the SmallRye Config loader may end up with a null classloader in
-        // the case that the Agent starts separately and is dynamically attached to a running VM,
-        // which results in an NPE. Here we try to detect and preempt that case and ensure that
-        // there is a reasonable classloader for the SmallRye config loader to use.
-        PrivilegedExceptionAction<ClassLoader> pea =
-                () -> {
-                    ClassLoader cl = Thread.currentThread().getContextClassLoader();
-                    if (cl != null) {
-                        return cl;
-                    }
-                    return new URLClassLoader(new URL[] {Agent.selfJarLocation().toURL()});
-                };
-        try {
-            ClassLoader cl = AccessController.doPrivileged(pea);
-            return ConfigProvider.getConfig(cl);
-        } catch (PrivilegedActionException pae) {
-            throw new RuntimeException(pae);
+        List<Pair<String, Callable<Config>>> fns = new ArrayList<>();
+        fns.add(Pair.of("Simple", ConfigProvider::getConfig));
+        Function<Callable<ClassLoader>, Callable<Config>> clConfigLoader =
+                cl ->
+                        () -> {
+                            ClassLoader loader;
+                            try {
+                                loader =
+                                        AccessController.doPrivileged(
+                                                (PrivilegedExceptionAction<ClassLoader>)
+                                                        () -> cl.call());
+                            } catch (Exception e) {
+                                log.warn(
+                                        "ClassLoader AccessController failure - is this JVM too new"
+                                            + " to have the AccessController and SecurityManager?",
+                                        e);
+                                loader = cl.call();
+                            }
+                            return ConfigProvider.getConfig(loader);
+                        };
+        fns.add(
+                Pair.of(
+                        "ResourcesUtil ClassLoader",
+                        clConfigLoader.apply(ResourcesUtil::getClassLoader)));
+        fns.add(
+                Pair.of(
+                        "Config Class ClassLoader",
+                        clConfigLoader.apply(Config.class::getClassLoader)));
+        fns.add(
+                Pair.of(
+                        "Agent JAR URL ClassLoader",
+                        clConfigLoader.apply(
+                                () ->
+                                        new URLClassLoader(
+                                                new URL[] {Agent.selfJarLocation().toURL()}))));
+
+        Config config = null;
+        for (Pair<String, Callable<Config>> fn : fns) {
+            try {
+                log.trace(
+                        "Testing classloader \"{}\" for {} property",
+                        fn.getLeft(),
+                        CRYOSTAT_AGENT_CONFIG_LOADABLE);
+                Config candidate = fn.getRight().call();
+                if (!candidate.getValue(CRYOSTAT_AGENT_CONFIG_LOADABLE, boolean.class)) {
+                    log.warn(
+                            "{} was false. Assuming that this means the {} classloader"
+                                    + " cannot be used to load properties. Do not override this"
+                                    + " configuration property with a blank or false value!",
+                            CRYOSTAT_AGENT_CONFIG_LOADABLE,
+                            fn.getLeft());
+                    continue;
+                }
+                config = candidate;
+                break;
+            } catch (Exception e) {
+                config = null;
+                log.debug(
+                        String.format("Failed to load config from \"%s\" supplier", fn.getLeft()),
+                        e);
+            }
         }
+        if (config == null || !config.getValue(CRYOSTAT_AGENT_CONFIG_LOADABLE, boolean.class)) {
+            log.error("Unable to load configuration from any classloader source!");
+        }
+        return config;
     }
 
     @Provides

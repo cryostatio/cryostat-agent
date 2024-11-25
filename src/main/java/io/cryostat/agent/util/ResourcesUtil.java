@@ -17,12 +17,21 @@ package io.cryostat.agent.util;
 
 import java.io.InputStream;
 
+import io.cryostat.agent.Agent;
+
 public class ResourcesUtil {
 
     private ResourcesUtil() {}
 
     public static ClassLoader getClassLoader() {
-        ClassLoader cl = Thread.currentThread().getContextClassLoader();
+        return getClassLoader(Agent.class);
+    }
+
+    public static ClassLoader getClassLoader(Class<?> klazz) {
+        ClassLoader cl = klazz.getClassLoader();
+        if (cl == null) {
+            cl = Thread.currentThread().getContextClassLoader();
+        }
         if (cl == null) {
             cl = ClassLoader.getSystemClassLoader();
         }
