@@ -98,13 +98,31 @@ public class ConfigModuleTest {
                 RuntimeException.class, () -> ConfigModule.provideCryostatAgentCallback(config));
     }
 
+    @Test
+    void testCallbackComponentsWithSpace() throws Exception {
+        setupCallbackComponents(new String[] {"foo", " 10.2.3.4[replace(\".\", \"-\")]"});
+
+        when(addr.getHostAddress()).thenReturn("10.2.3.4");
+        addrMock.when(() -> InetAddress.getByName("foo.headless.svc.example.com"))
+                .thenThrow(new UnknownHostException("TEST"));
+        addrMock.when(() -> InetAddress.getByName("10-2-3-4.headless.svc.example.com"))
+                .thenReturn(addr);
+
+        URI result = ConfigModule.provideCryostatAgentCallback(config);
+        assertEquals("https://10-2-3-4.headless.svc.example.com:9977", result.toASCIIString());
+    }
+
     private void setupCallbackComponents() {
+        setupCallbackComponents(new String[] {"foo", "10.2.3.4[replace(\".\", \"-\")]"});
+    }
+
+    private void setupCallbackComponents(String[] hostnames) {
         when(config.getOptionalValue(
                         ConfigModule.CRYOSTAT_AGENT_CALLBACK_DOMAIN_NAME, String.class))
                 .thenReturn(Optional.of("headless.svc.example.com"));
         when(config.getOptionalValue(
                         ConfigModule.CRYOSTAT_AGENT_CALLBACK_HOST_NAME, String[].class))
-                .thenReturn(Optional.of(new String[] {"foo", "10.2.3.4[replace(\".\", \"-\")]"}));
+                .thenReturn(Optional.of(hostnames));
         when(config.getOptionalValue(ConfigModule.CRYOSTAT_AGENT_CALLBACK_PORT, Integer.class))
                 .thenReturn(Optional.of(9977));
         when(config.getOptionalValue(ConfigModule.CRYOSTAT_AGENT_CALLBACK_SCHEME, String.class))

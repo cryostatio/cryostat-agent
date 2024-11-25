@@ -1039,6 +1039,7 @@ public abstract class ConfigModule {
         ScriptHost scriptHost = ScriptHost.newBuilder().build();
         List<String> result = new ArrayList<>(hostNames.length);
         for (String hostName : hostNames) {
+            hostName = hostName.trim();
             Matcher m = HOST_SCRIPT_PATTERN.matcher(hostName);
             if (!m.matches()) {
                 throw new RuntimeException(
