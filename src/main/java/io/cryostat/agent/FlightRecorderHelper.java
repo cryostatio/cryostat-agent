@@ -26,8 +26,9 @@ import java.util.Optional;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import io.cryostat.libcryostat.templates.TemplateType;
+
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import jdk.jfr.Configuration;
 import jdk.jfr.FlightRecorder;
 import jdk.jfr.Recording;
