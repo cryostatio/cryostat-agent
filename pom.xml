@@ -87,8 +87,13 @@
   <org.slf4j.version>2.0.12</org.slf4j.version>
   <org.projectnessie.cel.bom.version>0.4.4</org.projectnessie.cel.bom.version>
   <com.google.protobuf-java.version>3.25.5</com.google.protobuf-java.version>
+<<<<<<< HEAD
   <info.picocli.version>4.7.4</info.picocli.version>
   <com.redhat.insights.agent.version>1.0.2</com.redhat.insights.agent.version>
+=======
+  <info.picocli.version>4.7.6</info.picocli.version>
+  <com.redhat.insights.agent.version>1.0.3</com.redhat.insights.agent.version>
+>>>>>>> b394997 (build(deps): bump com.redhat.insights:runtimes-agent from 1.0.2 to 1.0.3 (#549))
 
   <com.github.spotbugs.version>4.8.5</com.github.spotbugs.version>
   <com.github.spotbugs.plugin.version>4.8.5.0</com.github.spotbugs.plugin.version>
