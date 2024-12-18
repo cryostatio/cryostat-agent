@@ -242,7 +242,7 @@ public abstract class MainModule {
         try {
             KeyManager[] keyManagers = null;
             if (clientAuthCertPath.isPresent() && clientAuthKeyPath.isPresent() && tlsEnabled) {
-                if (!baseUri.getScheme().contains("https")) {
+                if (!baseUri.getScheme().equals("https")) {
                     throw new IllegalArgumentException(
                             String.format(
                                     "If TLS is enabled via the (%s) property, the base URI (%s)"
@@ -698,11 +698,10 @@ public abstract class MainModule {
             ScheduledExecutorService executor,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_HOST) String host,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_PORT) int port,
-            @Named(HTTP_SERVER_SSL_CTX) Optional<SSLContext> sslContext,
-            @Named(ConfigModule.CRYOSTAT_AGENT_TLS_ENABLED) boolean tlsEnabled) {
+            @Named(HTTP_SERVER_SSL_CTX) Optional<SSLContext> sslContext) {
         try {
             HttpServer http;
-            if (sslContext.isEmpty() || !tlsEnabled) {
+            if (sslContext.isEmpty()) {
                 http = HttpServer.create(new InetSocketAddress(host, port), 0);
             } else {
                 http = HttpsServer.create(new InetSocketAddress(host, port), 0);
