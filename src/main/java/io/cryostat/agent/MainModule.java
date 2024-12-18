@@ -238,7 +238,7 @@ public abstract class MainModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_MANAGER_TYPE)
                     String clientAuthKeyManagerType,
             @Named(ConfigModule.CRYOSTAT_AGENT_BASEURI) URI baseUri,
-            @Named(ConfigModule.CRYOSTAT_AGENT_TLS_ENABLED) boolean tlsEnabled) {
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_REQUIRED) boolean tlsEnabled) {
         try {
             KeyManager[] keyManagers = null;
             if (clientAuthCertPath.isPresent() && clientAuthKeyPath.isPresent() && tlsEnabled) {
@@ -247,7 +247,7 @@ public abstract class MainModule {
                             String.format(
                                     "If TLS is enabled via the (%s) property, the base URI (%s)"
                                             + " must be an https connection.",
-                                    ConfigModule.CRYOSTAT_AGENT_TLS_ENABLED,
+                                    ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_REQUIRED,
                                     ConfigModule.CRYOSTAT_AGENT_BASEURI));
                 }
                 KeyStore ks = KeyStore.getInstance(clientAuthKeystoreType);
@@ -322,7 +322,7 @@ public abstract class MainModule {
                                     + " must be true as well.",
                                 ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_CERT_PATH,
                                 ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_PATH,
-                                ConfigModule.CRYOSTAT_AGENT_TLS_ENABLED));
+                                ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_REQUIRED));
             }
 
             X509TrustManager trustManager = null;
@@ -625,7 +625,7 @@ public abstract class MainModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_CONNECT_TIMEOUT_MS) int connectTimeout,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_TIMEOUT_MS) int responseTimeout,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_RETRY_COUNT) int retryCount,
-            @Named(ConfigModule.CRYOSTAT_AGENT_TLS_ENABLED) boolean tlsEnabled) {
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_REQUIRED) boolean tlsEnabled) {
         SSLConnectionSocketFactory sslSocketFactory =
                 new SSLConnectionSocketFactory(
                         sslContext,

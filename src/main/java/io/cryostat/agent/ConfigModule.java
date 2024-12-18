@@ -137,6 +137,9 @@ public abstract class ConfigModule {
     public static final String CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_RETRY_COUNT =
             "cryostat.agent.webclient.response.retry-count";
 
+    public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_REQUIRED =
+            "cryostat.agent.webclient.tls.required";
+
     public static final String CRYOSTAT_AGENT_WEBSERVER_HOST = "cryostat.agent.webserver.host";
     public static final String CRYOSTAT_AGENT_WEBSERVER_PORT = "cryostat.agent.webserver.port";
     public static final String CRYOSTAT_AGENT_WEBSERVER_TLS_VERSION =
@@ -231,8 +234,6 @@ public abstract class ConfigModule {
     private static final String HOST_SCRIPT_PATTERN_STRING =
             "(?<host>[A-Za-z0-9-.]+)(?:\\[(?<script>.+)\\])?";
     private static final Pattern HOST_SCRIPT_PATTERN = Pattern.compile(HOST_SCRIPT_PATTERN_STRING);
-
-    public static final String CRYOSTAT_AGENT_TLS_ENABLED = "cryostat.agent.tls.enabled";
 
     @Provides
     @Singleton
@@ -963,9 +964,9 @@ public abstract class ConfigModule {
 
     @Provides
     @Singleton
-    @Named(CRYOSTAT_AGENT_TLS_ENABLED)
+    @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_REQUIRED)
     public static boolean provideCryostatAgentTlsEnabled(Config config) {
-        return config.getValue(CRYOSTAT_AGENT_TLS_ENABLED, boolean.class);
+        return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_TLS_REQUIRED, boolean.class);
     }
 
     public enum URIRange {

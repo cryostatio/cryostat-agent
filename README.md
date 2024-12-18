@@ -188,6 +188,7 @@ and how it advertises itself to a Cryostat server instance. Properties that requ
 - [ ] `cryostat.agent.webclient.tls.version` [`String`]: the version of TLS used for the Agent's client SSL context. Default `TLSv1.2`.
 - [ ] `cryostat.agent.webclient.tls.trust-all` [`boolean`]: control whether the agent trusts all certificates presented by the Cryostat server. Default `false`. This should only be overridden for development and testing purposes, never in production.
 - [ ] `cryostat.agent.webclient.tls.verify-hostname` [`boolean`]: control whether the agent verifies hostnames on certificates presented by the Cryostat server. Default `true`. This should only be overridden for development and testing purposes, never in production.
+- [ ] `cryostat.agent.webclient.tls.required` [`boolean`]: Specify wether the agent should use TLS by default, expecting the base URI to be an https connection with a certificate it trusts. Defaults to `true`. Should only be disabled for testing/prototyping purposes.
 - [ ] `cryostat.agent.webclient.tls.trustore.cert` [`list`]: the list of truststoreConfig objects with alias, path, and type properties for certificates to be stored in the agent's truststore. For example, 'cryostat.agent.webclient.tls.truststore.cert[0].type' would be the type of the first certificate in this list. A truststoreConfig object must contain all three properties to be a valid certificate entry.
 - [ ] `cryostat.agent.webclient.tls.truststore.type` [`String`]: the type of truststore used for the agent's client truststore. Default `JKS`.
 - [ ] `cryostat.agent.webclient.tls.truststore.path` [`String`]: the filepath to the agent's webclient truststore. This takes precedence over `cryostat.agent.webclient.tls.truststore.cert` and must be configured with the truststore's pass with `cryostat.agent.webclient.tls.truststore.pass.file` or `cryostat.agent.webclient.tls.truststore.pass`.
@@ -255,7 +256,6 @@ and how it advertises itself to a Cryostat server instance. Properties that requ
 - [ ] `cryostat.agent.callback.port` [`int`]: An override for the port portion of the `cryostat.agent.callback` URL.
 - [ ] `rht.insights.java.opt-out` [`boolean`]: for the Red Hat build of Cryostat, set this to true to disable data collection for Red Hat Insights. Defaults to `false`. Red Hat Insights data collection is always disabled for community builds of Cryostat.
 - [ ] `rht.insights.java.debug` [`boolean`]: for the Red Hat build of Cryostat, set this to true to enable debug logging for the Red Hat Insights Java Agent. Defaults to `false`. Red Hat Insights data collection is always disabled for community builds of Cryostat.
-- [ ] `cryostat.agent.tls.enabled` [`boolean`]: Specify wether the agent should use TLS by default, expecting the base URI to be an https connection with a certificate it trusts. Defaults to `true`. Should only be disabled for testing/prototyping purposes.
 
 These properties can be set by JVM system properties or by environment variables. For example, the property
 `cryostat.agent.baseuri` can be set using `-Dcryostat.agent.baseuri=https://mycryostat.example.com:1234/` or
