@@ -26,6 +26,8 @@ import java.util.Optional;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
+import io.cryostat.libcryostat.templates.TemplateType;
+
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import jdk.jfr.Configuration;
 import jdk.jfr.FlightRecorder;
@@ -171,12 +173,6 @@ public class FlightRecorderHelper {
         public TemplateType getType() {
             return type;
         }
-    }
-
-    public enum TemplateType {
-        TARGET,
-        CUSTOM,
-        ;
     }
 
     @SuppressFBWarnings(value = "URF_UNREAD_FIELD")
