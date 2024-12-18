@@ -255,6 +255,7 @@ and how it advertises itself to a Cryostat server instance. Properties that requ
 - [ ] `cryostat.agent.callback.port` [`int`]: An override for the port portion of the `cryostat.agent.callback` URL.
 - [ ] `rht.insights.java.opt-out` [`boolean`]: for the Red Hat build of Cryostat, set this to true to disable data collection for Red Hat Insights. Defaults to `false`. Red Hat Insights data collection is always disabled for community builds of Cryostat.
 - [ ] `rht.insights.java.debug` [`boolean`]: for the Red Hat build of Cryostat, set this to true to enable debug logging for the Red Hat Insights Java Agent. Defaults to `false`. Red Hat Insights data collection is always disabled for community builds of Cryostat.
+- [ ] `cryostat.agent.tls.enabled` [`boolean`]: Specify wether the agent should use TLS by default, expecting the base URI to be an https connection with a certificate it trusts. Defaults to `true`. Should only be disabled for testing/prototyping purposes.
 
 These properties can be set by JVM system properties or by environment variables. For example, the property
 `cryostat.agent.baseuri` can be set using `-Dcryostat.agent.baseuri=https://mycryostat.example.com:1234/` or
