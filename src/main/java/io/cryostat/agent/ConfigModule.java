@@ -232,6 +232,8 @@ public abstract class ConfigModule {
             "(?<host>[A-Za-z0-9-.]+)(?:\\[(?<script>.+)\\])?";
     private static final Pattern HOST_SCRIPT_PATTERN = Pattern.compile(HOST_SCRIPT_PATTERN_STRING);
 
+    public static final String CRYOSTAT_AGENT_TLS_ENABLED = "cryostat.agent.tls.enabled";
+
     @Provides
     @Singleton
     public static Config provideConfig() {
@@ -957,6 +959,13 @@ public abstract class ConfigModule {
     @Named(CRYOSTAT_AGENT_SMART_TRIGGER_EVALUATION_PERIOD_MS)
     public static long provideCryostatSmartTriggerEvaluationPeriodMs(Config config) {
         return config.getValue(CRYOSTAT_AGENT_SMART_TRIGGER_EVALUATION_PERIOD_MS, long.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_TLS_ENABLED)
+    public static boolean provideCryostatAgentTlsEnabled(Config config) {
+        return config.getValue(CRYOSTAT_AGENT_TLS_ENABLED, boolean.class);
     }
 
     public enum URIRange {
