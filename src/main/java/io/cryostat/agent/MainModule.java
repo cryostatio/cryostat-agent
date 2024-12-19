@@ -236,10 +236,20 @@ public abstract class MainModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_PASS_CHARSET)
                     String clientAuthKeyPassFileCharset,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_MANAGER_TYPE)
-                    String clientAuthKeyManagerType) {
+                    String clientAuthKeyManagerType,
+            @Named(ConfigModule.CRYOSTAT_AGENT_BASEURI) URI baseUri,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_REQUIRED) boolean tlsEnabled) {
         try {
             KeyManager[] keyManagers = null;
-            if (clientAuthCertPath.isPresent() && clientAuthKeyPath.isPresent()) {
+            if (clientAuthCertPath.isPresent() && clientAuthKeyPath.isPresent() && tlsEnabled) {
+                if (!baseUri.getScheme().equals("https")) {
+                    throw new IllegalArgumentException(
+                            String.format(
+                                    "If TLS is enabled via the (%s) property, the base URI (%s)"
+                                            + " must be an https connection.",
+                                    ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_REQUIRED,
+                                    ConfigModule.CRYOSTAT_AGENT_BASEURI));
+                }
                 KeyStore ks = KeyStore.getInstance(clientAuthKeystoreType);
                 Optional<CharBuffer> keystorePass =
                         readPass(
@@ -302,13 +312,17 @@ public abstract class MainModule {
                     clearBuffer(keystorePass);
                     clearBuffer(keyPass);
                 }
-            } else if (clientAuthCertPath.isPresent() || clientAuthKeyPath.isPresent()) {
+            } else if (clientAuthCertPath.isPresent()
+                    || clientAuthKeyPath.isPresent()
+                    || tlsEnabled) {
                 throw new IllegalArgumentException(
                         String.format(
                                 "To use TLS client authentication, both the certificate (%s) and"
-                                        + " private key (%s) properties must be set.",
+                                    + " private key (%s) properties must be set. The (%s) property"
+                                    + " must be true as well.",
                                 ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_CERT_PATH,
-                                ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_PATH));
+                                ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_PATH,
+                                ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_REQUIRED));
             }
 
             X509TrustManager trustManager = null;
@@ -610,18 +624,28 @@ public abstract class MainModule {
                     boolean verifyHostname,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_CONNECT_TIMEOUT_MS) int connectTimeout,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_TIMEOUT_MS) int responseTimeout,
-            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_RETRY_COUNT) int retryCount) {
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_RETRY_COUNT) int retryCount,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_REQUIRED) boolean tlsEnabled) {
         SSLConnectionSocketFactory sslSocketFactory =
                 new SSLConnectionSocketFactory(
                         sslContext,
                         verifyHostname
                                 ? SSLConnectionSocketFactory.getDefaultHostnameVerifier()
                                 : NoopHostnameVerifier.INSTANCE);
-        Registry<ConnectionSocketFactory> socketFactoryRegistry =
-                RegistryBuilder.<ConnectionSocketFactory>create()
-                        .register("https", sslSocketFactory)
-                        .register("http", new PlainConnectionSocketFactory())
-                        .build();
+
+        Registry<ConnectionSocketFactory> socketFactoryRegistry;
+        if (tlsEnabled) {
+            socketFactoryRegistry =
+                    RegistryBuilder.<ConnectionSocketFactory>create()
+                            .register("https", sslSocketFactory)
+                            .build();
+        } else {
+            socketFactoryRegistry =
+                    RegistryBuilder.<ConnectionSocketFactory>create()
+                            .register("https", sslSocketFactory)
+                            .register("http", new PlainConnectionSocketFactory())
+                            .build();
+        }
         HttpClientConnectionManager connMan =
                 new BasicHttpClientConnectionManager(socketFactoryRegistry);
         return HttpClients.custom()
