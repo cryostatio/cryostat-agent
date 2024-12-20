@@ -241,15 +241,13 @@ public abstract class MainModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_REQUIRED) boolean tlsRequired) {
         try {
             KeyManager[] keyManagers = null;
-            if (tlsRequired) {
-                if (!baseUri.getScheme().equals("https")) {
-                    throw new IllegalArgumentException(
-                            String.format(
-                                    "If TLS is enabled via the (%s) property, the base URI (%s)"
-                                            + " must be an https connection.",
-                                    ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_REQUIRED,
-                                    ConfigModule.CRYOSTAT_AGENT_BASEURI));
-                }
+            if (tlsRequired && !baseUri.getScheme().equals("https")) {
+                throw new IllegalArgumentException(
+                        String.format(
+                                "If TLS is enabled via the (%s) property, the base URI (%s)"
+                                        + " must be an https connection.",
+                                ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_REQUIRED,
+                                ConfigModule.CRYOSTAT_AGENT_BASEURI));
             }
             if (clientAuthCertPath.isPresent() && clientAuthKeyPath.isPresent()) {
                 KeyStore ks = KeyStore.getInstance(clientAuthKeystoreType);
