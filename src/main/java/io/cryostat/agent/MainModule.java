@@ -238,10 +238,10 @@ public abstract class MainModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_MANAGER_TYPE)
                     String clientAuthKeyManagerType,
             @Named(ConfigModule.CRYOSTAT_AGENT_BASEURI) URI baseUri,
-            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_REQUIRED) boolean tlsEnabled) {
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_REQUIRED) boolean tlsRequired) {
         try {
             KeyManager[] keyManagers = null;
-            if (clientAuthCertPath.isPresent() && clientAuthKeyPath.isPresent() && tlsEnabled) {
+            if (tlsRequired) {
                 if (!baseUri.getScheme().equals("https")) {
                     throw new IllegalArgumentException(
                             String.format(
@@ -250,6 +250,8 @@ public abstract class MainModule {
                                     ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_REQUIRED,
                                     ConfigModule.CRYOSTAT_AGENT_BASEURI));
                 }
+            }
+            if (clientAuthCertPath.isPresent() && clientAuthKeyPath.isPresent()) {
                 KeyStore ks = KeyStore.getInstance(clientAuthKeystoreType);
                 Optional<CharBuffer> keystorePass =
                         readPass(
@@ -312,17 +314,13 @@ public abstract class MainModule {
                     clearBuffer(keystorePass);
                     clearBuffer(keyPass);
                 }
-            } else if (clientAuthCertPath.isPresent()
-                    || clientAuthKeyPath.isPresent()
-                    || tlsEnabled) {
+            } else if (clientAuthCertPath.isPresent() || clientAuthKeyPath.isPresent()) {
                 throw new IllegalArgumentException(
                         String.format(
                                 "To use TLS client authentication, both the certificate (%s) and"
-                                    + " private key (%s) properties must be set. The (%s) property"
-                                    + " must be true as well.",
+                                        + " private key (%s) properties must be set.",
                                 ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_CERT_PATH,
-                                ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_PATH,
-                                ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_REQUIRED));
+                                ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_PATH));
             }
 
             X509TrustManager trustManager = null;
