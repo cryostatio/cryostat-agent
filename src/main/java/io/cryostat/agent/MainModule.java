@@ -86,7 +86,6 @@ import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.protocol.HttpClientContext;
-import org.apache.http.config.Registry;
 import org.apache.http.config.RegistryBuilder;
 import org.apache.http.conn.HttpClientConnectionManager;
 import org.apache.http.conn.socket.ConnectionSocketFactory;
@@ -629,21 +628,14 @@ public abstract class MainModule {
                                 ? SSLConnectionSocketFactory.getDefaultHostnameVerifier()
                                 : NoopHostnameVerifier.INSTANCE);
 
-        Registry<ConnectionSocketFactory> socketFactoryRegistry;
-        if (tlsRequired) {
-            socketFactoryRegistry =
-                    RegistryBuilder.<ConnectionSocketFactory>create()
-                            .register("https", sslSocketFactory)
-                            .build();
-        } else {
-            socketFactoryRegistry =
-                    RegistryBuilder.<ConnectionSocketFactory>create()
-                            .register("https", sslSocketFactory)
-                            .register("http", new PlainConnectionSocketFactory())
-                            .build();
+        RegistryBuilder<ConnectionSocketFactory> socketFactoryRegistryBuilder =
+                RegistryBuilder.<ConnectionSocketFactory>create()
+                        .register("https", sslSocketFactory);
+        if (!tlsRequired) {
+            socketFactoryRegistryBuilder.register("http", new PlainConnectionSocketFactory());
         }
         HttpClientConnectionManager connMan =
-                new BasicHttpClientConnectionManager(socketFactoryRegistry);
+                new BasicHttpClientConnectionManager(socketFactoryRegistryBuilder.build());
         return HttpClients.custom()
                 .setSSLContext(sslContext)
                 .setSSLSocketFactory(sslSocketFactory)
