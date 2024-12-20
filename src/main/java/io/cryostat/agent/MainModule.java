@@ -86,7 +86,6 @@ import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.protocol.HttpClientContext;
-import org.apache.http.config.Registry;
 import org.apache.http.config.RegistryBuilder;
 import org.apache.http.conn.HttpClientConnectionManager;
 import org.apache.http.conn.socket.ConnectionSocketFactory;
@@ -236,9 +235,19 @@ public abstract class MainModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_PASS_CHARSET)
                     String clientAuthKeyPassFileCharset,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CLIENT_AUTH_KEY_MANAGER_TYPE)
-                    String clientAuthKeyManagerType) {
+                    String clientAuthKeyManagerType,
+            @Named(ConfigModule.CRYOSTAT_AGENT_BASEURI) URI baseUri,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_REQUIRED) boolean tlsRequired) {
         try {
             KeyManager[] keyManagers = null;
+            if (tlsRequired && !baseUri.getScheme().equals("https")) {
+                throw new IllegalArgumentException(
+                        String.format(
+                                "If TLS is enabled via the (%s) property, the base URI (%s)"
+                                        + " must be an https connection.",
+                                ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_REQUIRED,
+                                ConfigModule.CRYOSTAT_AGENT_BASEURI));
+            }
             if (clientAuthCertPath.isPresent() && clientAuthKeyPath.isPresent()) {
                 KeyStore ks = KeyStore.getInstance(clientAuthKeystoreType);
                 Optional<CharBuffer> keystorePass =
@@ -610,20 +619,23 @@ public abstract class MainModule {
                     boolean verifyHostname,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_CONNECT_TIMEOUT_MS) int connectTimeout,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_TIMEOUT_MS) int responseTimeout,
-            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_RETRY_COUNT) int retryCount) {
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_RETRY_COUNT) int retryCount,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_REQUIRED) boolean tlsRequired) {
         SSLConnectionSocketFactory sslSocketFactory =
                 new SSLConnectionSocketFactory(
                         sslContext,
                         verifyHostname
                                 ? SSLConnectionSocketFactory.getDefaultHostnameVerifier()
                                 : NoopHostnameVerifier.INSTANCE);
-        Registry<ConnectionSocketFactory> socketFactoryRegistry =
+
+        RegistryBuilder<ConnectionSocketFactory> socketFactoryRegistryBuilder =
                 RegistryBuilder.<ConnectionSocketFactory>create()
-                        .register("https", sslSocketFactory)
-                        .register("http", new PlainConnectionSocketFactory())
-                        .build();
+                        .register("https", sslSocketFactory);
+        if (!tlsRequired) {
+            socketFactoryRegistryBuilder.register("http", new PlainConnectionSocketFactory());
+        }
         HttpClientConnectionManager connMan =
-                new BasicHttpClientConnectionManager(socketFactoryRegistry);
+                new BasicHttpClientConnectionManager(socketFactoryRegistryBuilder.build());
         return HttpClients.custom()
                 .setSSLContext(sslContext)
                 .setSSLSocketFactory(sslSocketFactory)

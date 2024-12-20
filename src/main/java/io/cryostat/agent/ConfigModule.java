@@ -137,6 +137,9 @@ public abstract class ConfigModule {
     public static final String CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_RETRY_COUNT =
             "cryostat.agent.webclient.response.retry-count";
 
+    public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_REQUIRED =
+            "cryostat.agent.webclient.tls.required";
+
     public static final String CRYOSTAT_AGENT_WEBSERVER_HOST = "cryostat.agent.webserver.host";
     public static final String CRYOSTAT_AGENT_WEBSERVER_PORT = "cryostat.agent.webserver.port";
     public static final String CRYOSTAT_AGENT_WEBSERVER_TLS_VERSION =
@@ -957,6 +960,13 @@ public abstract class ConfigModule {
     @Named(CRYOSTAT_AGENT_SMART_TRIGGER_EVALUATION_PERIOD_MS)
     public static long provideCryostatSmartTriggerEvaluationPeriodMs(Config config) {
         return config.getValue(CRYOSTAT_AGENT_SMART_TRIGGER_EVALUATION_PERIOD_MS, long.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_REQUIRED)
+    public static boolean provideCryostatAgentTlsEnabled(Config config) {
+        return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_TLS_REQUIRED, boolean.class);
     }
 
     public enum URIRange {
