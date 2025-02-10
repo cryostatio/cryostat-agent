@@ -3,3 +3,4 @@ FROM ${BASEIMAGE}
 ARG OUTDIR=/cryostat/agent
 COPY target/cryostat-agent-*-shaded.jar ${OUTDIR}/
 RUN ln -s ${OUTDIR}/cryostat-agent-*-shaded.jar ${OUTDIR}/cryostat-agent-shaded.jar
+USER 1001
