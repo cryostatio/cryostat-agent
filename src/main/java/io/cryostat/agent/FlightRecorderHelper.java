@@ -128,7 +128,7 @@ public class FlightRecorderHelper {
         return getRecordings(r -> r.getId() == id).stream().findFirst();
     }
 
-    @SuppressFBWarnings(value = {"EI_EXPOSE_REP", "EI_EXPOSE_REP2"})
+    @SuppressFBWarnings("EI_EXPOSE_REP")
     public static class TemplatedRecording {
         private final ConfigurationInfo configuration;
         private final Recording recording;
@@ -175,7 +175,6 @@ public class FlightRecorderHelper {
         }
     }
 
-    @SuppressFBWarnings(value = "URF_UNREAD_FIELD")
     public static class RecordingInfo {
 
         public final long id;
