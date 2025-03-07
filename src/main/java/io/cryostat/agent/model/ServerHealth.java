@@ -19,7 +19,7 @@ import io.cryostat.agent.VersionInfo.Semver;
 
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
-@SuppressFBWarnings(value = {"EI_EXPOSE_REP", "EI_EXPOSE_REP2"})
+@SuppressFBWarnings("EI_EXPOSE_REP")
 public class ServerHealth {
 
     private String cryostatVersion;
@@ -52,7 +52,6 @@ public class ServerHealth {
         return build;
     }
 
-    @SuppressFBWarnings(value = {"EI_EXPOSE_REP", "EI_EXPOSE_REP2"})
     public static class BuildInfo {
         private GitInfo git;
 
@@ -71,7 +70,6 @@ public class ServerHealth {
         }
     }
 
-    @SuppressFBWarnings(value = {"EI_EXPOSE_REP", "EI_EXPOSE_REP2"})
     public static class GitInfo {
         private String hash;
 

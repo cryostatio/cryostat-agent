@@ -25,7 +25,6 @@ import javax.inject.Inject;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import jdk.jfr.EventType;
 import jdk.jfr.FlightRecorder;
 import jdk.jfr.SettingDescriptor;
@@ -93,7 +92,6 @@ class EventTypesContext implements RemoteContext {
                 .collect(Collectors.toList());
     }
 
-    @SuppressFBWarnings(value = "URF_UNREAD_FIELD")
     private static class EventInfo {
 
         public final String name;
@@ -110,7 +108,6 @@ class EventTypesContext implements RemoteContext {
         }
     }
 
-    @SuppressFBWarnings(value = "URF_UNREAD_FIELD")
     private static class SettingInfo {
 
         public final String name;

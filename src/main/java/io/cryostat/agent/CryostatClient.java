@@ -510,12 +510,7 @@ public class CryostatClient {
         return res;
     }
 
-    @SuppressFBWarnings(
-            value = {
-                "URF_UNREAD_FIELD",
-                "UWF_UNWRITTEN_FIELD",
-                "UWF_UNWRITTEN_PUBLIC_OR_PROTECTED_FIELD"
-            })
+    @SuppressFBWarnings("UWF_UNWRITTEN_PUBLIC_OR_PROTECTED_FIELD")
     public static class StoredCredential {
 
         public int id;
