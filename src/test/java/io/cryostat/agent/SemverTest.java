@@ -38,10 +38,10 @@ public class SemverTest {
         "1.0.0-SNAPSHOT, 1.0.0, 0",
         "v1.0.0-SNAPSHOT, 1.0.0, 0",
         "v1.0.0, 1.0.0, 0",
-        "v1.5.0.build-suffix1, v1.5.0.build-suffix1, 0",
-        "v1.5.0-build-suffix-2, v1.5.0-build-suffix-2, 0",
-        "v1.5.0_build-suffix-3, v1.5.0_build-suffix-3, 0",
-        "v1.5.0.build.suffix-4, v1.5.0.build.suffix-4, 0",
+        "v1.5.0.build-suffix1, 1.5.0, 0",
+        "v1.5.0-build-suffix-2, 1.5.0, 0",
+        "v1.5.0_build-suffix-3, 1.5.0, 0",
+        "v1.5.0.build.suffix-4, 1.5.0, 0",
     })
     public void test(String first, String second, int result) {
         Semver a = Semver.fromString(first);
