@@ -98,7 +98,7 @@ public class VersionInfo {
 
         public static final Pattern VERSION_PATTERN =
                 Pattern.compile(
-                        "^v?(?<major>[\\d]+)\\.(?<minor>[\\d]+)\\.(?<patch>[\\d]+)(?:-[a-z0-9\\._-]*)?",
+                        "^v?(?<major>[\\d]+)\\.(?<minor>[\\d]+)\\.(?<patch>[\\d]+)(?:[-_\\.][a-z0-9\\._-]*)?",
                         Pattern.CASE_INSENSITIVE | Pattern.MULTILINE);
 
         private static Logger log = LoggerFactory.getLogger(Semver.class);

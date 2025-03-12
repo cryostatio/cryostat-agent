@@ -28,7 +28,18 @@ public class VersionInfoTest {
     static final Semver serverMax = Semver.fromString("2.0.0");
 
     @ParameterizedTest
-    @CsvSource({"1.0.0, true", "2.0.0, false", "3.0.0, false", "0.1.0, false", "1.1.0, true"})
+    @CsvSource({
+        "1.0.0, true",
+        "2.0.0, false",
+        "3.0.0, false",
+        "0.1.0, false",
+        "1.1.0, true",
+        "v1.5.0, true",
+        "v1.5.0.build-suffix1, true",
+        "v1.5.0-build-suffix-2, true",
+        "v1.5.0_build-suffix-3, true",
+        "v1.5.0.build.suffix-4, true",
+    })
     public void test(String serverVersion, boolean inRange) {
         VersionInfo info = new VersionInfo(Semver.UNKNOWN, serverMin, serverMax);
         Semver actual = Semver.fromString(serverVersion);
