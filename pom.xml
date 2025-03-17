@@ -92,7 +92,7 @@
   <com.redhat.insights.agent.version>1.0.3</com.redhat.insights.agent.version>
 
   <com.github.spotbugs.version>4.9.2</com.github.spotbugs.version>
-  <com.github.spotbugs.plugin.version>4.9.2.0</com.github.spotbugs.plugin.version>
+  <com.github.spotbugs.plugin.version>4.9.3.0</com.github.spotbugs.plugin.version>
   <org.junit.jupiter.version>5.12.1</org.junit.jupiter.version>
   <org.hamcrest.version>3.0</org.hamcrest.version>
   <org.mockito.version>5.16.0</org.mockito.version>
