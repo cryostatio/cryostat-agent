@@ -396,7 +396,11 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
 
         @Override
         public void handle(Signal sig) {
-            log.debug("Caught SIG{}({})", sig.getName(), sig.getNumber());
+            if (sig == null) {
+                log.debug("'null' signal handler invoked");
+            } else {
+                log.debug("Caught SIG{}({})", sig.getName(), sig.getNumber());
+            }
             if (needsCleanup.getAndSet(false)) {
                 performCleanup(sig);
             }
