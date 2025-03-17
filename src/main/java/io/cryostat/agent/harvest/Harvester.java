@@ -270,7 +270,7 @@ public class Harvester implements FlightRecorderListener {
                     }
                     try {
                         if (!exitUploadInitiated.getAndSet(true)) {
-                            uploadOngoing(PushType.ON_STOP, exitSettings).get();
+                            uploadOngoing(PushType.ON_EXIT, exitSettings).get();
                         }
                     } catch (ExecutionException | InterruptedException e) {
                         log.error("Exit upload failed", e);
@@ -381,13 +381,13 @@ public class Harvester implements FlightRecorderListener {
 
     private Future<Void> uploadRecording(TemplatedRecording tr) throws IOException {
         Path exitPath = exitPaths.get(tr);
-        return client.upload(PushType.EMERGENCY, Optional.of(tr), maxFiles, exitPath);
+        return client.upload(PushType.ON_STOP, Optional.of(tr), maxFiles, exitPath);
     }
 
     public enum PushType {
         SCHEDULED,
         ON_STOP,
-        EMERGENCY,
+        ON_EXIT,
     }
 
     public static class RecordingSettings implements UnaryOperator<Recording> {
