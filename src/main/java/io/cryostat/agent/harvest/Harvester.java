@@ -30,6 +30,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.UnaryOperator;
 
 import io.cryostat.agent.CryostatClient;
@@ -65,6 +66,7 @@ public class Harvester implements FlightRecorderListener {
     private final Set<TemplatedRecording> recordings = ConcurrentHashMap.newKeySet();
     private Optional<TemplatedRecording> sownRecording = Optional.empty();
     private final Map<TemplatedRecording, Path> exitPaths = new ConcurrentHashMap<>();
+    private final AtomicBoolean exitUploadInitiated = new AtomicBoolean(false);
     private FlightRecorder flightRecorder;
     private Future<?> task;
     private boolean running;
@@ -220,8 +222,10 @@ public class Harvester implements FlightRecorderListener {
                                     break;
                                 case STOPPED:
                                     try {
-                                        tr.getRecording().dump(exitPaths.get(tr));
-                                        uploadRecording(tr).get();
+                                        if (!exitUploadInitiated.get()) {
+                                            tr.getRecording().dump(exitPaths.get(tr));
+                                            uploadRecording(tr).get();
+                                        }
                                     } catch (IOException e) {
                                         log.error("Failed to dump recording to file", e);
                                     } catch (InterruptedException | ExecutionException e) {
@@ -265,7 +269,9 @@ public class Harvester implements FlightRecorderListener {
                         return null;
                     }
                     try {
-                        uploadOngoing(PushType.ON_STOP, exitSettings).get();
+                        if (!exitUploadInitiated.getAndSet(true)) {
+                            uploadOngoing(PushType.ON_STOP, exitSettings).get();
+                        }
                     } catch (ExecutionException | InterruptedException e) {
                         log.error("Exit upload failed", e);
                         throw new CompletionException(e);
