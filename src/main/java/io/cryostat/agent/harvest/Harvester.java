@@ -50,7 +50,7 @@ import org.slf4j.LoggerFactory;
 public class Harvester implements FlightRecorderListener {
 
     public static final String RECORDING_NAME_ON_EXIT = "onexit";
-    public static final String RECORDING_NAME_HARVESTER_SNAPSHOT = "harvester_snapshot";
+    public static final String RECORDING_NAME_PERIODIC = "cryostat-agent-harvester";
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
@@ -321,9 +321,6 @@ public class Harvester implements FlightRecorderListener {
                             .ifPresent(
                                     recording -> {
                                         handleNewRecording(recording, this.periodicSettings);
-                                        recording
-                                                .getRecording()
-                                                .setName("cryostat-agent-harvester");
                                         this.sownRecording = Optional.of(recording);
                                         recording.getRecording().start();
                                         log.info(

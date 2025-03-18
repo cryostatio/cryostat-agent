@@ -51,7 +51,7 @@ public abstract class HarvestModule {
         exitSettings.maxAge = exitMaxAge;
         exitSettings.maxSize = exitMaxSize;
         RecordingSettings periodicSettings = new RecordingSettings();
-        periodicSettings.name = Harvester.RECORDING_NAME_HARVESTER_SNAPSHOT;
+        periodicSettings.name = Harvester.RECORDING_NAME_PERIODIC;
         periodicSettings.maxAge = maxAge > 0 ? maxAge : (long) (period * 1.5);
         periodicSettings.maxSize = maxSize;
         return new Harvester(
