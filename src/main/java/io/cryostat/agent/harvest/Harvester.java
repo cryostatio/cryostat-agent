@@ -285,11 +285,15 @@ public class Harvester implements FlightRecorderListener {
     }
 
     public void handleNewRecording(TemplatedRecording tr) {
+        this.handleNewRecording(tr, this.periodicSettings);
+    }
+
+    public void handleNewRecording(TemplatedRecording tr, RecordingSettings settings) {
         try {
             Recording recording = tr.getRecording();
             recording.setToDisk(true);
             recording.setDumpOnExit(true);
-            recording = this.periodicSettings.apply(recording);
+            recording = settings.apply(recording);
             Path path = Files.createTempFile(null, null);
             Files.write(path, new byte[0], StandardOpenOption.TRUNCATE_EXISTING);
             recording.setDestination(path);
@@ -316,10 +320,10 @@ public class Harvester implements FlightRecorderListener {
                             .createRecordingWithPredefinedTemplate(template)
                             .ifPresent(
                                     recording -> {
+                                        handleNewRecording(recording, this.periodicSettings);
                                         recording
                                                 .getRecording()
                                                 .setName("cryostat-agent-harvester");
-                                        handleNewRecording(recording);
                                         this.sownRecording = Optional.of(recording);
                                         recording.getRecording().start();
                                         log.info(
