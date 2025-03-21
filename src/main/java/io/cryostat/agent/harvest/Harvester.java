@@ -30,6 +30,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.UnaryOperator;
 
 import io.cryostat.agent.CryostatClient;
@@ -49,7 +50,7 @@ import org.slf4j.LoggerFactory;
 public class Harvester implements FlightRecorderListener {
 
     public static final String RECORDING_NAME_ON_EXIT = "onexit";
-    public static final String RECORDING_NAME_HARVESTER_SNAPSHOT = "harvester_snapshot";
+    public static final String RECORDING_NAME_PERIODIC = "cryostat-agent-harvester";
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
@@ -65,6 +66,7 @@ public class Harvester implements FlightRecorderListener {
     private final Set<TemplatedRecording> recordings = ConcurrentHashMap.newKeySet();
     private Optional<TemplatedRecording> sownRecording = Optional.empty();
     private final Map<TemplatedRecording, Path> exitPaths = new ConcurrentHashMap<>();
+    private final AtomicBoolean exitUploadInitiated = new AtomicBoolean(false);
     private FlightRecorder flightRecorder;
     private Future<?> task;
     private boolean running;
@@ -220,8 +222,10 @@ public class Harvester implements FlightRecorderListener {
                                     break;
                                 case STOPPED:
                                     try {
-                                        tr.getRecording().dump(exitPaths.get(tr));
-                                        uploadRecording(tr).get();
+                                        if (!exitUploadInitiated.get()) {
+                                            tr.getRecording().dump(exitPaths.get(tr));
+                                            uploadRecording(tr).get();
+                                        }
                                     } catch (IOException e) {
                                         log.error("Failed to dump recording to file", e);
                                     } catch (InterruptedException | ExecutionException e) {
@@ -265,7 +269,9 @@ public class Harvester implements FlightRecorderListener {
                         return null;
                     }
                     try {
-                        uploadOngoing(PushType.ON_STOP, exitSettings).get();
+                        if (!exitUploadInitiated.getAndSet(true)) {
+                            uploadOngoing(PushType.ON_EXIT, exitSettings).get();
+                        }
                     } catch (ExecutionException | InterruptedException e) {
                         log.error("Exit upload failed", e);
                         throw new CompletionException(e);
@@ -279,11 +285,15 @@ public class Harvester implements FlightRecorderListener {
     }
 
     public void handleNewRecording(TemplatedRecording tr) {
+        this.handleNewRecording(tr, this.periodicSettings);
+    }
+
+    public void handleNewRecording(TemplatedRecording tr, RecordingSettings settings) {
         try {
             Recording recording = tr.getRecording();
             recording.setToDisk(true);
             recording.setDumpOnExit(true);
-            recording = this.periodicSettings.apply(recording);
+            recording = settings.apply(recording);
             Path path = Files.createTempFile(null, null);
             Files.write(path, new byte[0], StandardOpenOption.TRUNCATE_EXISTING);
             recording.setDestination(path);
@@ -310,10 +320,7 @@ public class Harvester implements FlightRecorderListener {
                             .createRecordingWithPredefinedTemplate(template)
                             .ifPresent(
                                     recording -> {
-                                        recording
-                                                .getRecording()
-                                                .setName("cryostat-agent-harvester");
-                                        handleNewRecording(recording);
+                                        handleNewRecording(recording, this.periodicSettings);
                                         this.sownRecording = Optional.of(recording);
                                         recording.getRecording().start();
                                         log.info(
@@ -375,13 +382,13 @@ public class Harvester implements FlightRecorderListener {
 
     private Future<Void> uploadRecording(TemplatedRecording tr) throws IOException {
         Path exitPath = exitPaths.get(tr);
-        return client.upload(PushType.EMERGENCY, Optional.of(tr), maxFiles, exitPath);
+        return client.upload(PushType.ON_STOP, Optional.of(tr), maxFiles, exitPath);
     }
 
     public enum PushType {
         SCHEDULED,
         ON_STOP,
-        EMERGENCY,
+        ON_EXIT,
     }
 
     public static class RecordingSettings implements UnaryOperator<Recording> {
