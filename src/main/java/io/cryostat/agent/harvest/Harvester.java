@@ -20,6 +20,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -51,6 +52,7 @@ public class Harvester implements FlightRecorderListener {
 
     public static final String RECORDING_NAME_ON_EXIT = "onexit";
     public static final String RECORDING_NAME_PERIODIC = "cryostat-agent-harvester";
+    private static final String AUTOANALYZE_LABEL = "autoanalyze";
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
@@ -61,6 +63,7 @@ public class Harvester implements FlightRecorderListener {
     private final int maxFiles;
     private final RecordingSettings exitSettings;
     private final RecordingSettings periodicSettings;
+    private final boolean autoanalyze;
     private final CryostatClient client;
     private final FlightRecorderHelper flightRecorderHelper;
     private final Set<TemplatedRecording> recordings = ConcurrentHashMap.newKeySet();
@@ -80,6 +83,7 @@ public class Harvester implements FlightRecorderListener {
             int maxFiles,
             RecordingSettings exitSettings,
             RecordingSettings periodicSettings,
+            boolean autoanalyze,
             CryostatClient client,
             FlightRecorderHelper flightRecorderHelper,
             Registration registration) {
@@ -90,6 +94,7 @@ public class Harvester implements FlightRecorderListener {
         this.maxFiles = maxFiles;
         this.exitSettings = exitSettings;
         this.periodicSettings = periodicSettings;
+        this.autoanalyze = autoanalyze;
         this.client = client;
         this.flightRecorderHelper = flightRecorderHelper;
 
@@ -363,7 +368,7 @@ public class Harvester implements FlightRecorderListener {
                         new IllegalStateException("No source recording data"));
             }
             log.trace("Dumping {}({}) to {}", recording.getName(), recording.getId(), exitPath);
-            return client.upload(pushType, sownRecording, maxFiles, exitPath)
+            return client.upload(pushType, sownRecording, maxFiles, additionalLabels(), exitPath)
                     .thenRun(
                             () -> {
                                 try {
@@ -382,7 +387,16 @@ public class Harvester implements FlightRecorderListener {
 
     private Future<Void> uploadRecording(TemplatedRecording tr) throws IOException {
         Path exitPath = exitPaths.get(tr);
-        return client.upload(PushType.ON_STOP, Optional.of(tr), maxFiles, exitPath);
+        return client.upload(
+                PushType.ON_STOP, Optional.of(tr), maxFiles, additionalLabels(), exitPath);
+    }
+
+    private Map<String, String> additionalLabels() {
+        var map = new HashMap<String, String>();
+        if (autoanalyze) {
+            map.put(AUTOANALYZE_LABEL, String.valueOf(true));
+        }
+        return map;
     }
 
     public enum PushType {

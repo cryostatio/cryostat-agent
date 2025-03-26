@@ -215,6 +215,8 @@ public abstract class ConfigModule {
             "cryostat.agent.harvester.max-age-ms";
     public static final String CRYOSTAT_AGENT_HARVESTER_MAX_SIZE_B =
             "cryostat.agent.harvester.max-size-b";
+    public static final String CRYOSTAT_AGENT_HARVESTER_AUTOANALYZE =
+            "cryostat.agent.harvester.autoanalyze";
 
     public static final String CRYOSTAT_AGENT_SMART_TRIGGER_DEFINITIONS =
             "cryostat.agent.smart-trigger.definitions";
@@ -931,6 +933,13 @@ public abstract class ConfigModule {
     @Named(CRYOSTAT_AGENT_HARVESTER_MAX_SIZE_B)
     public static long provideCryostatAgentHarvesterMaxSize(Config config) {
         return config.getValue(CRYOSTAT_AGENT_HARVESTER_MAX_SIZE_B, long.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_HARVESTER_AUTOANALYZE)
+    public static boolean provideCryostatAgentHarvesterAutoanalyze(Config config) {
+        return config.getValue(CRYOSTAT_AGENT_HARVESTER_AUTOANALYZE, boolean.class);
     }
 
     @Provides
