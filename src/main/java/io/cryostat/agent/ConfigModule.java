@@ -222,6 +222,8 @@ public abstract class ConfigModule {
             "cryostat.agent.smart-trigger.definitions";
     public static final String CRYOSTAT_AGENT_SMART_TRIGGER_EVALUATION_PERIOD_MS =
             "cryostat.agent.smart-trigger.evaluation.period-ms";
+    public static final String CRYOSTAT_AGENT_SMART_TRIGGER_CONFIG_PATH =
+            "cryostat.agent.smart-trigger.config.path";
 
     public static final String CRYOSTAT_AGENT_CALLBACK_SCHEME = "cryostat.agent.callback.scheme";
     public static final String CRYOSTAT_AGENT_CALLBACK_HOST_NAME =
@@ -969,6 +971,13 @@ public abstract class ConfigModule {
     @Named(CRYOSTAT_AGENT_SMART_TRIGGER_EVALUATION_PERIOD_MS)
     public static long provideCryostatSmartTriggerEvaluationPeriodMs(Config config) {
         return config.getValue(CRYOSTAT_AGENT_SMART_TRIGGER_EVALUATION_PERIOD_MS, long.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_SMART_TRIGGER_CONFIG_PATH)
+    public static String provideCryostatSmartTriggerConfigFiles(Config config) {
+        return config.getValue(CRYOSTAT_AGENT_SMART_TRIGGER_CONFIG_PATH, String.class);
     }
 
     @Provides
