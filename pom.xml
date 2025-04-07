@@ -96,7 +96,7 @@
   <org.junit.jupiter.version>5.12.1</org.junit.jupiter.version>
   <org.hamcrest.version>3.0</org.hamcrest.version>
   <org.mockito.version>5.17.0</org.mockito.version>
-  <org.jacoco.maven.plugin.version>0.8.12</org.jacoco.maven.plugin.version>
+  <org.jacoco.maven.plugin.version>0.8.13</org.jacoco.maven.plugin.version>
   <com.diffplug.spotless.maven.plugin.version>2.44.3</com.diffplug.spotless.maven.plugin.version>
   <com.google.googlejavaformat.version>1.17.0</com.google.googlejavaformat.version>
   <org.jsoup.version>1.15.3</org.jsoup.version>
