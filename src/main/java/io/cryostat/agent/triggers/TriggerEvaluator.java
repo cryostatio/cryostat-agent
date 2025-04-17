@@ -35,6 +35,7 @@ import io.cryostat.agent.triggers.SmartTrigger.TriggerState;
 import com.google.api.expr.v1alpha1.Decl;
 import com.google.api.expr.v1alpha1.Type;
 import com.google.api.expr.v1alpha1.Type.PrimitiveType;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.projectnessie.cel.checker.Decls;
 import org.projectnessie.cel.tools.Script;
 import org.projectnessie.cel.tools.ScriptCreateException;
@@ -59,6 +60,7 @@ public class TriggerEvaluator {
     private Future<?> task;
     private final Logger log = LoggerFactory.getLogger(getClass());
 
+    @SuppressFBWarnings("EI_EXPOSE_REP2")
     public TriggerEvaluator(
             ScheduledExecutorService scheduler,
             List<String> definitions,

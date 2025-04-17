@@ -26,6 +26,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -377,6 +378,7 @@ public class CryostatClient {
             Harvester.PushType pushType,
             Optional<TemplatedRecording> opt,
             int maxFiles,
+            Map<String, String> additionalLabels,
             Path recording)
             throws IOException {
         Instant start = Instant.now();
@@ -397,7 +399,8 @@ public class CryostatClient {
                                         .orElse(""),
                         template,
                         timestamp);
-        Map<String, String> labels =
+        Map<String, String> labels = new HashMap<>(additionalLabels);
+        labels.putAll(
                 Map.of(
                         "jvmId",
                         jvmId,
@@ -406,7 +409,7 @@ public class CryostatClient {
                         "template.name",
                         template,
                         "template.type",
-                        "TARGET");
+                        "TARGET"));
 
         HttpPost req = new HttpPost(baseUri.resolve("/api/beta/recordings/" + jvmId));
 

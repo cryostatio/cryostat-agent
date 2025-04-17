@@ -43,6 +43,7 @@ public abstract class HarvestModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_HARVESTER_EXIT_MAX_SIZE_B) long exitMaxSize,
             @Named(ConfigModule.CRYOSTAT_AGENT_HARVESTER_MAX_AGE_MS) long maxAge,
             @Named(ConfigModule.CRYOSTAT_AGENT_HARVESTER_MAX_SIZE_B) long maxSize,
+            @Named(ConfigModule.CRYOSTAT_AGENT_HARVESTER_AUTOANALYZE) boolean autoanalyze,
             CryostatClient client,
             FlightRecorderHelper flightRecorderHelper,
             Registration registration) {
@@ -68,6 +69,7 @@ public abstract class HarvestModule {
                 maxFiles,
                 exitSettings,
                 periodicSettings,
+                autoanalyze,
                 client,
                 flightRecorderHelper,
                 registration);
