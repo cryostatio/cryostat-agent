@@ -53,9 +53,8 @@ public class TriggerParser {
     public List<SmartTrigger> parseFromFiles() {
         if (!checkDir()) {
             log.warn(
-                    "Configuration directory {}"
-                            + " doesn't exist or is missing permissions",
-                            triggerPath.toString());
+                    "Configuration directory {} doesn't exist or is missing permissions",
+                    triggerPath.toString());
             return Collections.emptyList();
         }
         try {
@@ -73,9 +72,10 @@ public class TriggerParser {
     private List<SmartTrigger> createFromFile(java.nio.file.Path path) {
         try {
             String triggerDefinitions = Files.readString(path);
-            return Arrays.asList(triggerDefinitions.split("\n")).stream()
-            .flatMap(definition -> parse(definition).stream())
-            .collect(Collectors.toList());
+            return Arrays.asList(triggerDefinitions.split(System.lineSeparator())).stream()
+                    .map(String::strip)
+                    .flatMap(definition -> parse(definition).stream())
+                    .collect(Collectors.toList());
         } catch (IOException ioe) {
             log.error(ioe.getMessage());
             return Collections.emptyList();
