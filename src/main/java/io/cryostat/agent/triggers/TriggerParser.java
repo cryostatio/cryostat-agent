@@ -15,12 +15,20 @@
  */
 package io.cryostat.agent.triggers;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
+import javax.inject.Named;
+
+import io.cryostat.agent.ConfigModule;
 import io.cryostat.agent.FlightRecorderHelper;
 import io.cryostat.agent.util.StringUtils;
 
@@ -35,8 +43,50 @@ public class TriggerParser {
     private final FlightRecorderHelper flightRecorderHelper;
     private final Logger log = LoggerFactory.getLogger(getClass());
 
+    @Named(ConfigModule.CRYOSTAT_AGENT_SMART_TRIGGER_CONFIG_PATH)
+    java.nio.file.Path triggerPath;
+
     public TriggerParser(FlightRecorderHelper flightRecorderHelper) {
         this.flightRecorderHelper = flightRecorderHelper;
+    }
+
+    public List<SmartTrigger> parseFromFiles() {
+        if (!checkDir()) {
+            log.warn(
+                    "Configuration directory {} doesn't exist or is missing permissions",
+                    triggerPath.toString());
+            return Collections.emptyList();
+        }
+        try {
+            return Files.walk(triggerPath)
+                    .filter(Files::isRegularFile)
+                    .filter(Files::isReadable)
+                    .flatMap(path -> createFromFile(path).stream())
+                    .collect(Collectors.toList());
+        } catch (IOException e) {
+            log.error(e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
+    private List<SmartTrigger> createFromFile(java.nio.file.Path path) {
+        try {
+            String triggerDefinitions = Files.readString(path);
+            return Arrays.asList(triggerDefinitions.split(System.lineSeparator())).stream()
+                    .map(String::strip)
+                    .flatMap(definition -> parse(definition).stream())
+                    .collect(Collectors.toList());
+        } catch (IOException ioe) {
+            log.error(ioe.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
+    private boolean checkDir() {
+        return Files.exists(triggerPath)
+                && Files.isReadable(triggerPath)
+                && Files.isExecutable(triggerPath)
+                && Files.isDirectory(triggerPath);
     }
 
     public List<SmartTrigger> parse(String str) {

@@ -77,10 +77,11 @@ public class TriggerEvaluator {
         this.evaluationPeriodMs = evaluationPeriodMs;
     }
 
-    public void start(String str) {
+    public void start(String args) {
         this.stop();
-        parser.parse(str).forEach(this::registerTrigger);
+        parser.parse(args).forEach(this::registerTrigger);
         parser.parse(String.join(",", definitions)).forEach(this::registerTrigger);
+        parser.parseFromFiles().forEach(this::registerTrigger);
         this.start();
     }
 
