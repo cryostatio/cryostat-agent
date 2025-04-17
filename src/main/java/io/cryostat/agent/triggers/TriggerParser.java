@@ -19,10 +19,12 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import javax.inject.Named;
 
@@ -49,29 +51,31 @@ public class TriggerParser {
     }
 
     public List<SmartTrigger> parseFromFiles() {
-        List<SmartTrigger> triggers = new ArrayList<SmartTrigger>();
         if (!checkDir()) {
             log.warn(
-                    "Configuration directory "
-                            + triggerPath.toString()
-                            + " doesn't exist or is missing permissions");
+                    "Configuration directory {}"
+                            + " doesn't exist or is missing permissions",
+                            triggerPath.toString());
             return Collections.emptyList();
         }
         try {
-            Files.walk(triggerPath)
+            return Files.walk(triggerPath)
                     .filter(Files::isRegularFile)
                     .filter(Files::isReadable)
-                    .map(path -> triggers.addAll(createFromFile(path)));
+                    .flatMap(path -> createFromFile(path).stream())
+                    .collect(Collectors.toList());
         } catch (IOException e) {
             log.error(e.getMessage());
+            return Collections.emptyList();
         }
-        return triggers;
     }
 
     private List<SmartTrigger> createFromFile(java.nio.file.Path path) {
         try {
             String triggerDefinitions = Files.readString(path);
-            return parse(triggerDefinitions);
+            return Arrays.asList(triggerDefinitions.split("\n")).stream()
+            .flatMap(definition -> parse(definition).stream())
+            .collect(Collectors.toList());
         } catch (IOException ioe) {
             log.error(ioe.getMessage());
             return Collections.emptyList();
