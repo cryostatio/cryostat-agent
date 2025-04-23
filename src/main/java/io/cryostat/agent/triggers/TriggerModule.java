@@ -30,6 +30,7 @@ import io.cryostat.agent.harvest.Harvester;
 
 import dagger.Module;
 import dagger.Provides;
+import org.projectnessie.cel.tools.ScriptHost;
 
 @Module
 public abstract class TriggerModule {
@@ -56,6 +57,7 @@ public abstract class TriggerModule {
     @Singleton
     public static TriggerEvaluator provideTriggerEvaluatorFactory(
             @Named(TRIGGER_SCHEDULER) ScheduledExecutorService scheduler,
+            ScriptHost scriptHost,
             @Named(ConfigModule.CRYOSTAT_AGENT_SMART_TRIGGER_DEFINITIONS) List<String> definitions,
             TriggerParser parser,
             FlightRecorderHelper helper,
@@ -63,6 +65,6 @@ public abstract class TriggerModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_SMART_TRIGGER_EVALUATION_PERIOD_MS)
                     long evaluationPeriodMs) {
         return new TriggerEvaluator(
-                scheduler, definitions, parser, helper, harvester, evaluationPeriodMs);
+                scheduler, scriptHost, definitions, parser, helper, harvester, evaluationPeriodMs);
     }
 }

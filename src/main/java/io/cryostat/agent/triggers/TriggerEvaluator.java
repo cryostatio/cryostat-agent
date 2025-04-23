@@ -63,6 +63,7 @@ public class TriggerEvaluator {
     @SuppressFBWarnings("EI_EXPOSE_REP2")
     public TriggerEvaluator(
             ScheduledExecutorService scheduler,
+            ScriptHost scriptHost,
             List<String> definitions,
             TriggerParser parser,
             FlightRecorderHelper flightRecorderHelper,
@@ -71,7 +72,7 @@ public class TriggerEvaluator {
         this.scheduler = scheduler;
         this.definitions = Collections.unmodifiableList(definitions);
         this.parser = parser;
-        this.scriptHost = ScriptHost.newBuilder().build();
+        this.scriptHost = scriptHost;
         this.flightRecorderHelper = flightRecorderHelper;
         this.harvester = harvester;
         this.evaluationPeriodMs = evaluationPeriodMs;

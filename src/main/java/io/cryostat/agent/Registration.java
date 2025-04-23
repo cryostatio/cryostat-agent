@@ -51,7 +51,7 @@ public class Registration {
 
     private final ScheduledExecutorService executor;
     private final CryostatClient cryostat;
-    private final URI callback;
+    private final CallbackResolver callbackResolver;
     private final WebServer webServer;
     private final String instanceId;
     private final String jvmId;
@@ -67,12 +67,13 @@ public class Registration {
     private final PluginInfo pluginInfo = new PluginInfo();
     private final Set<Consumer<RegistrationEvent>> listeners = new HashSet<>();
 
+    private volatile URI callback;
     private ScheduledFuture<?> registrationCheckTask;
 
     Registration(
             ScheduledExecutorService executor,
             CryostatClient cryostat,
-            URI callback,
+            CallbackResolver callbackResolver,
             WebServer webServer,
             String instanceId,
             String jvmId,
@@ -86,7 +87,7 @@ public class Registration {
             boolean registrationJmxUseCallbackHost) {
         this.executor = executor;
         this.cryostat = cryostat;
-        this.callback = callback;
+        this.callbackResolver = callbackResolver;
         this.webServer = webServer;
         this.instanceId = instanceId;
         this.jvmId = jvmId;
@@ -112,7 +113,7 @@ public class Registration {
                             executor.submit(
                                     () -> {
                                         webServer
-                                                .generateCredentials()
+                                                .generateCredentials(callback)
                                                 .handle(
                                                         (v, t) -> {
                                                             if (t != null) {
@@ -222,6 +223,7 @@ public class Registration {
                                 }
                             })
                     .get();
+            this.callback = callbackResolver.determineSelfCallback();
             URI credentialedCallback =
                     new URIBuilder(callback)
                             .setUserInfo("storedcredentials", String.valueOf(credentialId))
