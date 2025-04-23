@@ -15,15 +15,20 @@
  */
 package io.cryostat.agent.triggers;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
+import java.util.stream.Stream;
 
 import io.cryostat.agent.FlightRecorderHelper;
 import io.cryostat.agent.triggers.SmartTrigger.TriggerState;
 
 import org.hamcrest.MatcherAssert;
 import org.hamcrest.Matchers;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -31,6 +36,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.NullSource;
 import org.mockito.Mock;
+import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -38,12 +44,20 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class TriggerParserTest {
 
     @Mock FlightRecorderHelper helper;
+    @Mock Path triggerPath;
+    MockedStatic<Files> filesMock;
 
     TriggerParser parser;
 
     @BeforeEach
     void setup() {
-        this.parser = new TriggerParser(helper);
+        this.parser = new TriggerParser(helper, Optional.of(triggerPath));
+        this.filesMock = Mockito.mockStatic(Files.class);
+    }
+
+    @AfterEach
+    void tearDown() {
+        this.filesMock.close();
     }
 
     @ParameterizedTest
@@ -53,6 +67,38 @@ class TriggerParserTest {
         MatcherAssert.assertThat(
                 parser.parse(args == null ? null : String.join(",", args.toArray(new String[0]))),
                 Matchers.equalTo(List.of()));
+    }
+
+    @Test
+    void testFromFile() {
+        Path file = Mockito.mock(Path.class);
+
+        filesMock.when(() -> Files.exists(triggerPath)).thenReturn(true);
+        filesMock.when(() -> Files.isReadable(triggerPath)).thenReturn(true);
+        filesMock.when(() -> Files.isExecutable(triggerPath)).thenReturn(true);
+        filesMock.when(() -> Files.isDirectory(triggerPath)).thenReturn(true);
+
+        filesMock.when(() -> Files.walk(triggerPath)).thenReturn(Stream.of(file));
+        filesMock.when(() -> Files.isReadable(file)).thenReturn(true);
+        filesMock.when(() -> Files.isRegularFile(file)).thenReturn(true);
+        filesMock.when(() -> Files.readString(file)).thenReturn("[ProcessCpuLoad>0.2]~profile");
+
+        Mockito.when(helper.isValidTemplate(Mockito.anyString())).thenReturn(true);
+
+        List<SmartTrigger> out = parser.parseFromFiles();
+
+        MatcherAssert.assertThat(out, Matchers.hasSize(1));
+        SmartTrigger trigger = out.get(0);
+
+        MatcherAssert.assertThat(trigger.getExpression(), Matchers.equalTo("ProcessCpuLoad>0.2"));
+        MatcherAssert.assertThat(trigger.getRecordingTemplateName(), Matchers.equalTo("profile"));
+        MatcherAssert.assertThat(trigger.getDurationConstraint(), Matchers.emptyString());
+        MatcherAssert.assertThat(
+                trigger.getTriggerCondition(), Matchers.equalTo("ProcessCpuLoad>0.2"));
+        MatcherAssert.assertThat(trigger.getState(), Matchers.equalTo(TriggerState.NEW));
+        MatcherAssert.assertThat(
+                trigger.getTargetDuration(), Matchers.equalTo(Duration.ofSeconds(0)));
+        MatcherAssert.assertThat(trigger.getTimeConditionFirstMet(), Matchers.nullValue());
     }
 
     @Test

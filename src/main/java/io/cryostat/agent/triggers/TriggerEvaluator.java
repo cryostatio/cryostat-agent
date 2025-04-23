@@ -79,9 +79,9 @@ public class TriggerEvaluator {
 
     public void start(String args) {
         this.stop();
+        parser.parseFromFiles().forEach(this::registerTrigger);
         parser.parse(args).forEach(this::registerTrigger);
         parser.parse(String.join(",", definitions)).forEach(this::registerTrigger);
-        parser.parseFromFiles().forEach(this::registerTrigger);
         this.start();
     }
 

@@ -24,6 +24,7 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.net.UnknownHostException;
 import java.nio.charset.Charset;
+import java.nio.file.Path;
 import java.security.AccessController;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -976,8 +977,8 @@ public abstract class ConfigModule {
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_SMART_TRIGGER_CONFIG_PATH)
-    public static String provideCryostatSmartTriggerConfigFiles(Config config) {
-        return config.getValue(CRYOSTAT_AGENT_SMART_TRIGGER_CONFIG_PATH, String.class);
+    public static Optional<Path> provideCryostatSmartTriggerConfigFiles(Config config) {
+        return config.getOptionalValue(CRYOSTAT_AGENT_SMART_TRIGGER_CONFIG_PATH, Path.class);
     }
 
     @Provides
