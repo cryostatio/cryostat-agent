@@ -1112,7 +1112,11 @@ public abstract class ConfigModule {
         public CallbackCandidate(String scheme, String hostname, String domainName, int port) {
             this.scheme = scheme.strip();
             this.hostname = hostname.strip();
-            this.domainName = domainName.strip();
+            if (domainName == null) {
+                this.domainName = null;
+            } else {
+                this.domainName = domainName.strip();
+            }
             this.port = port;
         }
 
