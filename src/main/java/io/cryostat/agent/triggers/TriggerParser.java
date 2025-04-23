@@ -17,18 +17,17 @@ package io.cryostat.agent.triggers;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-import javax.inject.Named;
-
-import io.cryostat.agent.ConfigModule;
 import io.cryostat.agent.FlightRecorderHelper;
 import io.cryostat.agent.util.StringUtils;
 
@@ -41,13 +40,12 @@ public class TriggerParser {
             "\\[(.*(&&)*|(\\|\\|)*)\\]~([\\w\\-]+)(?:\\.jfc)?";
     private static final Pattern EXPRESSION_PATTERN = Pattern.compile(EXPRESSION_PATTERN_STRING);
     private final FlightRecorderHelper flightRecorderHelper;
+    private final Optional<Path> triggerPath;
     private final Logger log = LoggerFactory.getLogger(getClass());
 
-    @Named(ConfigModule.CRYOSTAT_AGENT_SMART_TRIGGER_CONFIG_PATH)
-    java.nio.file.Path triggerPath;
-
-    public TriggerParser(FlightRecorderHelper flightRecorderHelper) {
+    public TriggerParser(FlightRecorderHelper flightRecorderHelper, Optional<Path> triggerPath) {
         this.flightRecorderHelper = flightRecorderHelper;
+        this.triggerPath = triggerPath;
     }
 
     public List<SmartTrigger> parseFromFiles() {
@@ -58,7 +56,7 @@ public class TriggerParser {
             return Collections.emptyList();
         }
         try {
-            return Files.walk(triggerPath)
+            return Files.walk(triggerPath.get())
                     .filter(Files::isRegularFile)
                     .filter(Files::isReadable)
                     .flatMap(path -> createFromFile(path).stream())
@@ -69,7 +67,7 @@ public class TriggerParser {
         }
     }
 
-    private List<SmartTrigger> createFromFile(java.nio.file.Path path) {
+    private List<SmartTrigger> createFromFile(Path path) {
         try {
             String triggerDefinitions = Files.readString(path);
             return Arrays.asList(triggerDefinitions.split(System.lineSeparator())).stream()
@@ -83,10 +81,11 @@ public class TriggerParser {
     }
 
     private boolean checkDir() {
-        return Files.exists(triggerPath)
-                && Files.isReadable(triggerPath)
-                && Files.isExecutable(triggerPath)
-                && Files.isDirectory(triggerPath);
+        return triggerPath.isPresent()
+                && Files.exists(triggerPath.get())
+                && Files.isReadable(triggerPath.get())
+                && Files.isExecutable(triggerPath.get())
+                && Files.isDirectory(triggerPath.get());
     }
 
     public List<SmartTrigger> parse(String str) {
