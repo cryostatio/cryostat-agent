@@ -110,7 +110,14 @@ public class Registration {
                                 this.registrationCheckTask.cancel(false);
                                 this.registrationCheckTask = null;
                             }
-                            this.callback = callbackResolver.determineSelfCallback();
+                            try {
+                                this.callback = callbackResolver.determineSelfCallback();
+                            } catch (RuntimeException e) {
+                                executor.schedule(
+                                        () -> notify(RegistrationEvent.State.UNREGISTERED),
+                                        registrationRetryMs,
+                                        TimeUnit.MILLISECONDS);
+                            }
                             executor.submit(
                                     () -> {
                                         webServer
