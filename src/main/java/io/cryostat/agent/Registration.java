@@ -112,7 +112,7 @@ public class Registration {
                             }
                             try {
                                 this.callback = callbackResolver.determineSelfCallback();
-                            } catch (RuntimeException e) {
+                            } catch (UnknownHostException e) {
                                 executor.schedule(
                                         () -> notify(RegistrationEvent.State.UNREGISTERED),
                                         registrationRetryMs,

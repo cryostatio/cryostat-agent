@@ -54,7 +54,7 @@ public class CallbackResolver {
         this.callbacks = new ArrayList<>(callbacks);
     }
 
-    public URI determineSelfCallback() {
+    public URI determineSelfCallback() throws UnknownHostException {
         // Try resolving each provided host name in order as a DNS name
         Optional<URI> resolvedCallback =
                 callbacks.stream()
@@ -67,7 +67,7 @@ public class CallbackResolver {
         URI callback =
                 resolvedCallback.orElseThrow(
                         () ->
-                                new RuntimeException(
+                                new UnknownHostException(
                                         "Failed to resolve hostname, consider disabling hostname"
                                             + " verification in Cryostat for the agent callback"));
         log.debug("Using {} as callback", callback);
