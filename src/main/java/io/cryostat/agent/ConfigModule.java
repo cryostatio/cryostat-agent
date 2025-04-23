@@ -1099,7 +1099,6 @@ public abstract class ConfigModule {
             String host, domain;
             String hostname = uri.getHost();
             if (hostname.contains(".")) {
-
                 host = hostname.substring(0, hostname.indexOf('.'));
                 domain = hostname.substring(hostname.indexOf('.') + 1);
             } else {
