@@ -64,11 +64,14 @@ public class CallbackResolver {
                         .findFirst();
 
         // If none of the above resolved, then throw an error
-        return resolvedCallback.orElseThrow(
-                () ->
-                        new RuntimeException(
-                                "Failed to resolve hostname, consider disabling hostname"
-                                        + " verification in Cryostat for the agent callback"));
+        URI callback =
+                resolvedCallback.orElseThrow(
+                        () ->
+                                new RuntimeException(
+                                        "Failed to resolve hostname, consider disabling hostname"
+                                            + " verification in Cryostat for the agent callback"));
+        log.debug("Using {} as callback");
+        return callback;
     }
 
     private URI tryResolveCallback(CallbackCandidate cb) {
