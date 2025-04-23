@@ -49,6 +49,9 @@ public class TriggerParser {
     }
 
     public List<SmartTrigger> parseFromFiles() {
+        if (triggerPath.isEmpty()) {
+            return Collections.emptyList();
+        }
         if (triggerPath.isPresent() && !checkDir()) {
             log.warn(
                     "Configuration directory {} doesn't exist or is missing permissions",
