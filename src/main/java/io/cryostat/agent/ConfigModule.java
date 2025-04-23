@@ -19,7 +19,6 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.net.UnknownHostException;
@@ -33,6 +32,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.Callable;
@@ -53,13 +53,8 @@ import io.cryostat.agent.util.StringUtils;
 import dagger.Module;
 import dagger.Provides;
 import org.apache.commons.lang3.tuple.Pair;
-import org.apache.http.client.utils.URIBuilder;
 import org.eclipse.microprofile.config.Config;
 import org.eclipse.microprofile.config.ConfigProvider;
-import org.projectnessie.cel.extension.StringsLib;
-import org.projectnessie.cel.tools.Script;
-import org.projectnessie.cel.tools.ScriptException;
-import org.projectnessie.cel.tools.ScriptHost;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -67,6 +62,10 @@ import org.slf4j.LoggerFactory;
 public abstract class ConfigModule {
 
     private static final Logger log = LoggerFactory.getLogger(ConfigModule.class);
+
+    // this is a non-config injection key
+    public static final String CRYOSTAT_AGENT_CALLBACK_CANDIDATES =
+            "cryostat-agent-callback-candidates";
 
     public static final String CRYOSTAT_AGENT_INSTANCE_ID = "cryostat.agent.instance-id";
     public static final String CRYOSTAT_AGENT_BASEURI_RANGE = "cryostat.agent.baseuri-range";
@@ -231,10 +230,6 @@ public abstract class ConfigModule {
     public static final String CRYOSTAT_AGENT_API_WRITES_ENABLED =
             "cryostat.agent.api.writes-enabled";
 
-    private static final String HOST_SCRIPT_PATTERN_STRING =
-            "(?<host>[A-Za-z0-9-.]+)(?:\\[(?<script>.+)\\])?";
-    private static final Pattern HOST_SCRIPT_PATTERN = Pattern.compile(HOST_SCRIPT_PATTERN_STRING);
-
     @Provides
     @Singleton
     public static Config provideConfig() {
@@ -321,13 +316,13 @@ public abstract class ConfigModule {
 
     @Provides
     @Singleton
-    @Named(CRYOSTAT_AGENT_CALLBACK)
-    public static URI provideCryostatAgentCallback(Config config) {
-        Optional<URI> callback = buildCallbackFromComponents(config);
-        if (callback.isPresent()) {
-            return callback.get();
+    @Named(CRYOSTAT_AGENT_CALLBACK_CANDIDATES)
+    public static List<CallbackCandidate> provideCryostatAgentCallback(Config config) {
+        List<CallbackCandidate> callbacks = buildCallbacksFromComponents(config);
+        if (!callbacks.isEmpty()) {
+            return callbacks;
         }
-        return config.getValue(CRYOSTAT_AGENT_CALLBACK, URI.class);
+        return List.of(CallbackCandidate.from(config.getValue(CRYOSTAT_AGENT_CALLBACK, URI.class)));
     }
 
     @Provides
@@ -1052,7 +1047,7 @@ public abstract class ConfigModule {
         }
     }
 
-    private static Optional<URI> buildCallbackFromComponents(Config config) {
+    private static List<CallbackCandidate> buildCallbacksFromComponents(Config config) {
         Optional<String> scheme =
                 config.getOptionalValue(CRYOSTAT_AGENT_CALLBACK_SCHEME, String.class);
         Optional<String[]> hostNames =
@@ -1065,83 +1060,96 @@ public abstract class ConfigModule {
                 && hostNames.isPresent()
                 && domainName.isPresent()
                 && port.isPresent()) {
-
-            // Try resolving the each provided host name in order as a DNS name
-            Optional<String> resolvedHost =
-                    computeHostNames(hostNames.get()).stream()
-                            .sequential()
-                            .map(name -> name + "." + domainName.get())
-                            .filter(host -> tryResolveHostname(host))
-                            .findFirst();
-
-            // If none of the above resolved, then throw an error
-            if (resolvedHost.isEmpty()) {
-                throw new RuntimeException(
-                        "Failed to resolve hostname, consider disabling hostname verification in"
-                                + " Cryostat for the agent callback");
-            }
-
-            try {
-                URI result =
-                        new URIBuilder()
-                                .setScheme(scheme.get())
-                                .setHost(resolvedHost.get())
-                                .setPort(port.get())
-                                .build();
-                log.debug("Using {} for callback URL", result.toASCIIString());
-                return Optional.of(result);
-            } catch (URISyntaxException e) {
-                throw new IllegalArgumentException(e);
-            }
+            return Arrays.asList(hostNames.get()).stream()
+                    .map(
+                            hostname ->
+                                    new CallbackCandidate(
+                                            scheme.get(), hostname, domainName.get(), port.get()))
+                    .collect(Collectors.toList());
         }
-        return Optional.empty();
+        return List.of();
     }
 
-    private static List<String> computeHostNames(String[] hostNames) {
-        ScriptHost scriptHost = ScriptHost.newBuilder().build();
-        List<String> result = new ArrayList<>(hostNames.length);
-        for (String hostName : hostNames) {
-            hostName = hostName.trim();
-            Matcher m = HOST_SCRIPT_PATTERN.matcher(hostName);
-            if (!m.matches()) {
-                throw new RuntimeException(
-                        "Invalid hostname argument encountered: "
-                                + hostName
-                                + ". Expected format: \"hostname\" or \"hostname[cel-script]\".");
-            }
-            if (m.group("script") == null) {
-                result.add(m.group("host"));
+    public static class CallbackCandidate {
+        private final String scheme;
+        private final String hostname;
+        private final String domainName;
+        private final int port;
+
+        public static CallbackCandidate from(URI uri) {
+            String host, domain;
+            String hostname = uri.getHost();
+            if (hostname.contains(".")) {
+                host = hostname.substring(0, hostname.indexOf('.'));
+                domain = hostname.substring(hostname.indexOf('.') + 1);
             } else {
-                result.add(evaluateHostnameScript(scriptHost, m.group("script"), m.group("host")));
+                host = hostname;
+                domain = null;
             }
+            return new CallbackCandidate(uri.getScheme(), host, domain, uri.getPort());
         }
 
-        return result;
-    }
-
-    private static String evaluateHostnameScript(
-            ScriptHost scriptHost, String scriptText, String hostname) {
-        try {
-            Script script =
-                    scriptHost
-                            .buildScript("\"" + hostname + "\"." + scriptText)
-                            .withLibraries(new StringsLib())
-                            .build();
-            Map<String, Object> args = new HashMap<>();
-            return script.execute(String.class, args);
-        } catch (ScriptException e) {
-            throw new RuntimeException("Failed to execute provided CEL script", e);
+        public CallbackCandidate(String scheme, String hostname, String domainName, int port) {
+            this.scheme = scheme.strip();
+            this.hostname = hostname.strip();
+            if (domainName == null) {
+                this.domainName = null;
+            } else {
+                this.domainName = domainName.strip();
+            }
+            this.port = port;
         }
-    }
 
-    private static boolean tryResolveHostname(String hostname) {
-        try {
-            log.debug("Attempting to resolve {}", hostname);
-            InetAddress addr = InetAddress.getByName(hostname);
-            log.debug("Resolved {} to {}", hostname, addr.getHostAddress());
-            return true;
-        } catch (UnknownHostException ignored) {
-            return false;
+        public String getScheme() {
+            return scheme;
+        }
+
+        public String getHostname() {
+            return hostname;
+        }
+
+        public String getDomainName() {
+            return domainName;
+        }
+
+        public int getPort() {
+            return port;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(scheme, hostname, domainName, port);
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) {
+                return true;
+            }
+            if (obj == null) {
+                return false;
+            }
+            if (getClass() != obj.getClass()) {
+                return false;
+            }
+            CallbackCandidate other = (CallbackCandidate) obj;
+            return Objects.equals(scheme, other.scheme)
+                    && Objects.equals(hostname, other.hostname)
+                    && Objects.equals(domainName, other.domainName)
+                    && port == other.port;
+        }
+
+        @Override
+        public String toString() {
+            return "CallbackCandidate [scheme="
+                    + scheme
+                    + ", hostname="
+                    + hostname
+                    + ", domainName="
+                    + domainName
+                    + ", port="
+                    + port
+                    + "]";
         }
     }
 }

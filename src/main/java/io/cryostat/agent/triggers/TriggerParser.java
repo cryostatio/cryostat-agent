@@ -37,6 +37,52 @@ public class TriggerParser {
 
     public TriggerParser(FlightRecorderHelper flightRecorderHelper) {
         this.flightRecorderHelper = flightRecorderHelper;
+<<<<<<< HEAD
+=======
+        this.triggerPath = triggerPath;
+    }
+
+    public List<SmartTrigger> parseFromFiles() {
+        if (triggerPath.isEmpty()) {
+            return Collections.emptyList();
+        }
+        if (triggerPath.isPresent() && !checkDir()) {
+            log.warn(
+                    "Configuration directory {} doesn't exist or is missing permissions",
+                    triggerPath.toString());
+            return Collections.emptyList();
+        }
+        try {
+            return Files.walk(triggerPath.get())
+                    .filter(Files::isRegularFile)
+                    .filter(Files::isReadable)
+                    .flatMap(path -> createFromFile(path).stream())
+                    .collect(Collectors.toList());
+        } catch (IOException e) {
+            log.error(e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
+    private List<SmartTrigger> createFromFile(Path path) {
+        try {
+            String triggerDefinitions = Files.readString(path);
+            return Arrays.asList(triggerDefinitions.split(System.lineSeparator())).stream()
+                    .map(String::strip)
+                    .flatMap(definition -> parse(definition).stream())
+                    .collect(Collectors.toList());
+        } catch (IOException ioe) {
+            log.error(ioe.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
+    private boolean checkDir() {
+        return Files.exists(triggerPath.get())
+                && Files.isReadable(triggerPath.get())
+                && Files.isExecutable(triggerPath.get())
+                && Files.isDirectory(triggerPath.get());
+>>>>>>> 74d96a4 (fix(callback): perform callback resolution within registration loop (#635))
     }
 
     public List<SmartTrigger> parse(String str) {
