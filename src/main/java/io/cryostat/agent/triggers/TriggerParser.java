@@ -49,7 +49,10 @@ public class TriggerParser {
     }
 
     public List<SmartTrigger> parseFromFiles() {
-        if (!checkDir()) {
+        if (triggerPath.isEmpty()) {
+            return Collections.emptyList();
+        }
+        if (triggerPath.isPresent() && !checkDir()) {
             log.warn(
                     "Configuration directory {} doesn't exist or is missing permissions",
                     triggerPath.toString());
@@ -81,8 +84,7 @@ public class TriggerParser {
     }
 
     private boolean checkDir() {
-        return triggerPath.isPresent()
-                && Files.exists(triggerPath.get())
+        return Files.exists(triggerPath.get())
                 && Files.isReadable(triggerPath.get())
                 && Files.isExecutable(triggerPath.get())
                 && Files.isDirectory(triggerPath.get());

@@ -51,7 +51,6 @@ class WebServer {
     private final Lazy<Set<RemoteContext>> remoteContexts;
     private final Lazy<CryostatClient> cryostat;
     private final Credentials credentials;
-    private final URI callback;
     private final Lazy<Registration> registration;
     private HttpServer http;
     private volatile int credentialId = -1;
@@ -67,13 +66,11 @@ class WebServer {
             MessageDigest digest,
             String user,
             int passLength,
-            URI callback,
             Lazy<Registration> registration) {
         this.remoteContexts = remoteContexts;
         this.cryostat = cryostat;
         this.http = http;
         this.credentials = new Credentials(digest, user, passLength);
-        this.callback = callback;
         this.registration = registration;
 
         this.agentAuthenticator = new AgentAuthenticator();
@@ -112,11 +109,12 @@ class WebServer {
         this.credentialId = -1;
     }
 
-    CompletableFuture<Void> generateCredentials() {
+    CompletableFuture<Void> generateCredentials(URI callback) {
         this.credentials.regenerate();
         return this.cryostat
                 .get()
-                .submitCredentialsIfRequired(this.credentialId, this.credentials, this.callback)
+                .submitCredentialsIfRequired(
+                        this.credentialId, this.credentials, Objects.requireNonNull(callback))
                 .handle(
                         (v, t) -> {
                             this.credentials.clear();
