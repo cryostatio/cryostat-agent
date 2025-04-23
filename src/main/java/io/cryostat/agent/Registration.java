@@ -110,6 +110,7 @@ public class Registration {
                                 this.registrationCheckTask.cancel(false);
                                 this.registrationCheckTask = null;
                             }
+                            this.callback = callbackResolver.determineSelfCallback();
                             executor.submit(
                                     () -> {
                                         webServer
@@ -223,7 +224,6 @@ public class Registration {
                                 }
                             })
                     .get();
-            this.callback = callbackResolver.determineSelfCallback();
             URI credentialedCallback =
                     new URIBuilder(callback)
                             .setUserInfo("storedcredentials", String.valueOf(credentialId))
