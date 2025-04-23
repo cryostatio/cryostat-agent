@@ -70,7 +70,7 @@ public class CallbackResolver {
                                 new RuntimeException(
                                         "Failed to resolve hostname, consider disabling hostname"
                                             + " verification in Cryostat for the agent callback"));
-        log.debug("Using {} as callback");
+        log.debug("Using {} as callback", callback);
         return callback;
     }
 
