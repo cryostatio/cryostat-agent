@@ -22,7 +22,11 @@ import static org.mockito.Mockito.when;
 import java.net.InetAddress;
 import java.net.URI;
 import java.net.UnknownHostException;
-import java.util.Optional;
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
+
+import io.cryostat.agent.ConfigModule.CallbackCandidate;
 
 import org.eclipse.microprofile.config.Config;
 import org.junit.jupiter.api.AfterEach;
@@ -33,17 +37,20 @@ import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.projectnessie.cel.tools.ScriptHost;
 
 @ExtendWith(MockitoExtension.class)
-public class ConfigModuleTest {
+public class CallbackResolverTest {
 
     @Mock Config config;
     @Mock InetAddress addr;
     MockedStatic<InetAddress> addrMock;
+    CallbackResolver resolver;
 
     @BeforeEach
     void setupEach() throws Exception {
         addrMock = Mockito.mockStatic(InetAddress.class);
+        addr = Mockito.mock(InetAddress.class);
     }
 
     @AfterEach
@@ -56,8 +63,9 @@ public class ConfigModuleTest {
         when(config.getValue(ConfigModule.CRYOSTAT_AGENT_CALLBACK, URI.class))
                 .thenReturn(new URI("https://callback.example.com:9977"));
 
-        URI result = ConfigModule.provideCryostatAgentCallback(config);
-        assertEquals("https://callback.example.com:9977", result.toASCIIString());
+        List<CallbackCandidate> result = ConfigModule.provideCryostatAgentCallback(config);
+        assertEquals(
+                List.of(new CallbackCandidate("https", "callback", "example.com", 9977)), result);
     }
 
     @Test
@@ -67,7 +75,7 @@ public class ConfigModuleTest {
         when(addr.getHostAddress()).thenReturn("10.2.3.4");
         addrMock.when(() -> InetAddress.getByName("foo.headless.svc.example.com")).thenReturn(addr);
 
-        URI result = ConfigModule.provideCryostatAgentCallback(config);
+        URI result = resolver.determineSelfCallback();
         assertEquals("https://foo.headless.svc.example.com:9977", result.toASCIIString());
     }
 
@@ -81,7 +89,7 @@ public class ConfigModuleTest {
         addrMock.when(() -> InetAddress.getByName("10-2-3-4.headless.svc.example.com"))
                 .thenReturn(addr);
 
-        URI result = ConfigModule.provideCryostatAgentCallback(config);
+        URI result = resolver.determineSelfCallback();
         assertEquals("https://10-2-3-4.headless.svc.example.com:9977", result.toASCIIString());
     }
 
@@ -108,7 +116,7 @@ public class ConfigModuleTest {
         addrMock.when(() -> InetAddress.getByName("10-2-3-4.headless.svc.example.com"))
                 .thenReturn(addr);
 
-        URI result = ConfigModule.provideCryostatAgentCallback(config);
+        URI result = resolver.determineSelfCallback();
         assertEquals("https://10-2-3-4.headless.svc.example.com:9977", result.toASCIIString());
     }
 
@@ -117,15 +125,17 @@ public class ConfigModuleTest {
     }
 
     private void setupCallbackComponents(String[] hostnames) {
-        when(config.getOptionalValue(
-                        ConfigModule.CRYOSTAT_AGENT_CALLBACK_DOMAIN_NAME, String.class))
-                .thenReturn(Optional.of("headless.svc.example.com"));
-        when(config.getOptionalValue(
-                        ConfigModule.CRYOSTAT_AGENT_CALLBACK_HOST_NAME, String[].class))
-                .thenReturn(Optional.of(hostnames));
-        when(config.getOptionalValue(ConfigModule.CRYOSTAT_AGENT_CALLBACK_PORT, Integer.class))
-                .thenReturn(Optional.of(9977));
-        when(config.getOptionalValue(ConfigModule.CRYOSTAT_AGENT_CALLBACK_SCHEME, String.class))
-                .thenReturn(Optional.of("https"));
+        resolver =
+                new CallbackResolver(
+                        ScriptHost.newBuilder().build(),
+                        Arrays.asList(hostnames).stream()
+                                .map(
+                                        hostname ->
+                                                new CallbackCandidate(
+                                                        "https",
+                                                        hostname,
+                                                        "headless.svc.example.com",
+                                                        9977))
+                                .collect(Collectors.toList()));
     }
 }

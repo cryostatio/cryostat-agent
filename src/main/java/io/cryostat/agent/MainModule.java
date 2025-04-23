@@ -64,6 +64,7 @@ import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
 
 import io.cryostat.agent.ConfigModule.BytePass;
+import io.cryostat.agent.ConfigModule.CallbackCandidate;
 import io.cryostat.agent.harvest.HarvestModule;
 import io.cryostat.agent.remote.RemoteContext;
 import io.cryostat.agent.remote.RemoteModule;
@@ -96,6 +97,7 @@ import org.apache.http.impl.client.HttpClients;
 import org.apache.http.impl.client.StandardHttpRequestRetryHandler;
 import org.apache.http.impl.conn.BasicHttpClientConnectionManager;
 import org.apache.http.protocol.HttpContext;
+import org.projectnessie.cel.tools.ScriptHost;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -135,6 +137,12 @@ public abstract class MainModule {
 
     @Provides
     @Singleton
+    public static ScriptHost provideScriptHost() {
+        return ScriptHost.newBuilder().build();
+    }
+
+    @Provides
+    @Singleton
     public static WebServer provideWebServer(
             Lazy<Set<RemoteContext>> remoteContexts,
             Lazy<CryostatClient> cryostat,
@@ -143,10 +151,9 @@ public abstract class MainModule {
                     MessageDigest digest,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_CREDENTIALS_USER) String user,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_CREDENTIALS_PASS_LENGTH) int passLength,
-            @Named(ConfigModule.CRYOSTAT_AGENT_CALLBACK) URI callback,
             Lazy<Registration> registration) {
         return new WebServer(
-                remoteContexts, cryostat, http, digest, user, passLength, callback, registration);
+                remoteContexts, cryostat, http, digest, user, passLength, registration);
     }
 
     private static Optional<CharBuffer> readPass(
@@ -751,10 +758,19 @@ public abstract class MainModule {
 
     @Provides
     @Singleton
+    public static CallbackResolver provideCallbackResolver(
+            ScriptHost scriptHost,
+            @Named(ConfigModule.CRYOSTAT_AGENT_CALLBACK_CANDIDATES)
+                    List<CallbackCandidate> candidates) {
+        return new CallbackResolver(scriptHost, candidates);
+    }
+
+    @Provides
+    @Singleton
     public static Registration provideRegistration(
             ScheduledExecutorService executor,
             CryostatClient cryostat,
-            @Named(ConfigModule.CRYOSTAT_AGENT_CALLBACK) URI callback,
+            CallbackResolver callbackResolver,
             WebServer webServer,
             @Named(ConfigModule.CRYOSTAT_AGENT_INSTANCE_ID) String instanceId,
             @Named(JVM_ID) String jvmId,
@@ -784,7 +800,7 @@ public abstract class MainModule {
                             return t;
                         }),
                 cryostat,
-                callback,
+                callbackResolver,
                 webServer,
                 instanceId,
                 jvmId,
