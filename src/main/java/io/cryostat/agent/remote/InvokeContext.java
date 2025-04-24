@@ -18,6 +18,7 @@ package io.cryostat.agent.remote;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.OutputStreamWriter;
 import java.lang.management.ManagementFactory;
 import java.util.Objects;
 
@@ -34,6 +35,9 @@ import org.slf4j.LoggerFactory;
 
 class InvokeContext extends MutatingRemoteContext {
 
+    private static final String DUMP_THREADS = "threadPrint";
+    private static final String DUMP_THREADS_TO_FIlE = "threadDumpToFile";
+    private static final String DIAGNOSTIC_BEAN_NAME = "com.sun.management:type=DiagnosticCommand";
     private final Logger log = LoggerFactory.getLogger(getClass());
     private final ObjectMapper mapper;
 
@@ -68,10 +72,23 @@ class InvokeContext extends MutatingRemoteContext {
                                         req.operation,
                                         req.parameters,
                                         req.signature);
+
                         if (Objects.nonNull(response)) {
-                            exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
-                            try (OutputStream responseStream = exchange.getResponseBody()) {
-                                mapper.writeValue(responseStream, response);
+                            // If a thread dump was requested we need to send it back
+                            if (req.operation.equals(DUMP_THREADS)) {
+                                exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
+                                try (OutputStreamWriter writer =
+                                        new OutputStreamWriter(
+                                                exchange.getResponseBody(), "UTF_8")) {
+                                    writer.write(response.toString());
+                                } catch (Exception e) {
+                                    log.error("Failed to write thread dump to response: ", e);
+                                }
+                            } else {
+                                exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
+                                try (OutputStream responseStream = exchange.getResponseBody()) {
+                                    mapper.writeValue(responseStream, response);
+                                }
                             }
                         } else {
                             exchange.sendResponseHeaders(HttpStatus.SC_ACCEPTED, BODY_LENGTH_NONE);
@@ -102,6 +119,10 @@ class InvokeContext extends MutatingRemoteContext {
         public boolean isValid() {
             if (this.beanName.equals(ManagementFactory.MEMORY_MXBEAN_NAME)) {
                 return true;
+            } else if (this.beanName.equals(DIAGNOSTIC_BEAN_NAME)
+                    && (this.operation.equals(DUMP_THREADS)
+                            || this.operation.equals(DUMP_THREADS_TO_FIlE))) {
+                return true;
             }
             return false;
         }
@@ -112,6 +133,14 @@ class InvokeContext extends MutatingRemoteContext {
 
         public void setBeanName(String beanName) {
             this.beanName = beanName;
+        }
+
+        public String getOperation() {
+            return operation;
+        }
+
+        public void setOperation(String operation) {
+            this.operation = operation;
         }
     }
 }
