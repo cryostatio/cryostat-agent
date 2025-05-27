@@ -34,14 +34,17 @@ import com.redhat.insights.agent.InsightsAgentHttpClient;
 import com.redhat.insights.agent.shaded.InsightsReportController;
 import com.redhat.insights.agent.shaded.http.InsightsHttpClient;
 import com.redhat.insights.agent.shaded.jars.JarInfo;
+import com.redhat.insights.agent.shaded.logging.InsightsLogger;
 import com.redhat.insights.agent.shaded.reports.InsightsReport;
 import com.redhat.insights.agent.shaded.tls.PEMSupport;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.eclipse.microprofile.config.Config;
+import org.slf4j.simple.SimpleLogger;
 
 public class InsightsAgentHelper {
 
     private static final String INSIGHTS_SVC = "INSIGHTS_SVC";
+    private static final String SHADE_PREFIX = "io.cryostat.agent.shaded.";
     static final String RHT_INSIGHTS_JAVA_OPT_OUT = "rht.insights.java.opt-out";
     static final String RHT_INSIGHTS_JAVA_DEBUG = "rht.insights.java.debug";
 
@@ -51,12 +54,10 @@ public class InsightsAgentHelper {
     private final Instrumentation instrumentation;
 
     private final Config config;
-    private final AgentLogger log;
 
     public InsightsAgentHelper(Config config, Instrumentation instrumentation) {
         this.config = config;
         this.instrumentation = instrumentation;
-        this.log = AgentLogger.getLogger();
     }
 
     public boolean isInsightsEnabled(PluginInfo pluginInfo) {
@@ -67,7 +68,31 @@ public class InsightsAgentHelper {
     }
 
     public void runInsightsAgent(PluginInfo pluginInfo) {
+        Map<String, String> out = new HashMap<>();
+
+        // Check if debug logging should be enabled
+        final String defaultLogLevel;
+        boolean debug =
+                config.getOptionalValue(RHT_INSIGHTS_JAVA_DEBUG, boolean.class).orElse(false);
+        if (debug) {
+            out.put("debug", "true");
+            defaultLogLevel = "debug";
+        } else {
+            // Otherwise, apply any log level set for the Cryostat agent
+            defaultLogLevel = System.getProperty(SHADE_PREFIX + SimpleLogger.DEFAULT_LOG_LEVEL_KEY);
+        }
+        if (defaultLogLevel != null) {
+            // Set Insights logger default log level property
+            System.setProperty(
+                    com.redhat.insights.agent.shaded.org.slf4j.simple.SimpleLogger
+                            .DEFAULT_LOG_LEVEL_KEY,
+                    defaultLogLevel);
+        }
+
+        // Create Insights logger after setting log level
+        InsightsLogger log = AgentLogger.getLogger();
         log.info("Starting Red Hat Insights client");
+
         String server = pluginInfo.getEnvAsMap().get(INSIGHTS_SVC);
         Objects.requireNonNull(server, "Insights server is missing");
         String appName = config.getValue(ConfigModule.CRYOSTAT_AGENT_APP_NAME, String.class);
@@ -75,7 +100,6 @@ public class InsightsAgentHelper {
         // Add Insights instrumentation
         instrument(instrumentation);
 
-        Map<String, String> out = new HashMap<>();
         out.put("name", appName);
         out.put("base_url", server);
         // If the user's application already contains Insights support,
@@ -85,13 +109,6 @@ public class InsightsAgentHelper {
         // Will be replaced by the Insights Proxy
         out.put("token", "dummy");
 
-        // Check if debug logging should be enabled
-        boolean debug =
-                config.getOptionalValue(RHT_INSIGHTS_JAVA_DEBUG, boolean.class).orElse(false);
-        if (debug) {
-            out.put("debug", "true");
-            log.setDebugDelegate();
-        }
         AgentConfiguration config = new AgentConfiguration(out);
 
         final InsightsReport simpleReport = AgentBasicReport.of(config);
