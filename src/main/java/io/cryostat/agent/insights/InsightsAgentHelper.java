@@ -25,6 +25,7 @@ import java.util.function.Supplier;
 
 import io.cryostat.agent.ConfigModule;
 import io.cryostat.agent.model.PluginInfo;
+import io.cryostat.agent.shaded.ShadeLogger;
 
 import com.redhat.insights.agent.AgentBasicReport;
 import com.redhat.insights.agent.AgentConfiguration;
@@ -44,7 +45,6 @@ import org.slf4j.simple.SimpleLogger;
 public class InsightsAgentHelper {
 
     private static final String INSIGHTS_SVC = "INSIGHTS_SVC";
-    private static final String SHADE_PREFIX = "io.cryostat.agent.shaded.";
     static final String RHT_INSIGHTS_JAVA_OPT_OUT = "rht.insights.java.opt-out";
     static final String RHT_INSIGHTS_JAVA_DEBUG = "rht.insights.java.debug";
 
@@ -79,7 +79,11 @@ public class InsightsAgentHelper {
             defaultLogLevel = "debug";
         } else {
             // Otherwise, apply any log level set for the Cryostat agent
-            defaultLogLevel = System.getProperty(SHADE_PREFIX + SimpleLogger.DEFAULT_LOG_LEVEL_KEY);
+            defaultLogLevel =
+                    System.getProperty(
+                            ShadeLogger.class.getPackageName()
+                                    + "."
+                                    + SimpleLogger.DEFAULT_LOG_LEVEL_KEY);
         }
         if (defaultLogLevel != null) {
             // Set Insights logger default log level property
