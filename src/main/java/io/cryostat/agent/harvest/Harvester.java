@@ -131,33 +131,33 @@ public class Harvester implements FlightRecorderListener {
                         log.error("FlightRecorder is unavailable");
                         return;
                     }
-                    log.info("JFR Harvester starting");
+                    log.debug("JFR Harvester starting");
                     try {
                         FlightRecorder.addListener(this);
                         this.flightRecorder = FlightRecorder.getFlightRecorder();
                         if (exitSettings.maxAge > 0) {
-                            log.info(
+                            log.debug(
                                     "On-stop uploads will contain approximately the most recent"
                                             + " {}ms ({}) of data",
                                     exitSettings.maxAge,
                                     Duration.ofMillis(exitSettings.maxAge));
                         }
                         if (exitSettings.maxSize > 0) {
-                            log.info(
+                            log.debug(
                                     "On-stop uploads will contain approximately the most recent {}"
                                             + " bytes ({}) of data",
                                     exitSettings.maxSize,
                                     FileUtils.byteCountToDisplaySize(exitSettings.maxSize));
                         }
                         if (periodicSettings.maxAge > 0) {
-                            log.info(
+                            log.debug(
                                     "Periodic uploads will contain approximately the most recent"
                                             + " {}ms ({}) of data",
                                     periodicSettings.maxAge,
                                     Duration.ofMillis(periodicSettings.maxAge));
                         }
                         if (periodicSettings.maxSize > 0) {
-                            log.info(
+                            log.debug(
                                     "On-stop uploads will contain approximately the most recent {}"
                                             + " bytes ({}) of data",
                                     periodicSettings.maxSize,
@@ -172,12 +172,13 @@ public class Harvester implements FlightRecorderListener {
                         this.task.cancel(true);
                     }
                     if (period > 0) {
-                        log.info("JFR Harvester started with period {}", Duration.ofMillis(period));
+                        log.debug(
+                                "JFR Harvester started with period {}", Duration.ofMillis(period));
                         this.task =
                                 workerPool.scheduleAtFixedRate(
                                         this::uploadOngoing, period, period, TimeUnit.MILLISECONDS);
                     } else {
-                        log.info(
+                        log.debug(
                                 "JFR Harvester started, periodic uploads disabled (period {} < 0)",
                                 period);
                     }
@@ -190,13 +191,13 @@ public class Harvester implements FlightRecorderListener {
                     if (!running) {
                         return;
                     }
-                    log.info("Harvester stopping");
+                    log.trace("Harvester stopping");
                     if (this.task != null) {
                         this.task.cancel(true);
                         this.task = null;
                     }
                     FlightRecorder.removeListener(this);
-                    log.info("Harvester stopped");
+                    log.trace("Harvester stopped");
                     running = false;
                 });
     }
@@ -278,7 +279,7 @@ public class Harvester implements FlightRecorderListener {
                     } finally {
                         safeCloseCurrentRecording();
                     }
-                    log.info("Harvester stopped");
+                    log.trace("Harvester stopped");
                     return null;
                 },
                 executor);
@@ -323,7 +324,7 @@ public class Harvester implements FlightRecorderListener {
                                         handleNewRecording(recording, this.periodicSettings);
                                         this.sownRecording = Optional.of(recording);
                                         recording.getRecording().start();
-                                        log.info(
+                                        log.debug(
                                                 "JFR Harvester started recording using template"
                                                         + " \"{}\"",
                                                 template);
