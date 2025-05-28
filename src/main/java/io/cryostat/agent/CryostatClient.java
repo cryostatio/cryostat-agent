@@ -110,7 +110,7 @@ public class CryostatClient {
         this.baseUri = baseUri;
         this.realm = realm;
 
-        log.info("Using Cryostat baseuri {}", baseUri);
+        log.trace("Using Cryostat baseuri {}", baseUri);
     }
 
     public CompletableFuture<ServerHealth> serverHealth() {

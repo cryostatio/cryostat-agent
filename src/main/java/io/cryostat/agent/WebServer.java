@@ -91,7 +91,7 @@ class WebServer {
                             ctx.getFilters().add(compressionFilter);
                         });
         this.http.start();
-        log.info("WebServer listening on {}", this.http.getAddress());
+        log.debug("WebServer listening on {}", this.http.getAddress());
     }
 
     void stop() {
@@ -128,7 +128,7 @@ class WebServer {
                 .thenAccept(
                         i -> {
                             this.credentialId = i;
-                            log.info("Defined credentials with id {}", i);
+                            log.trace("Defined credentials with id {}", i);
                         });
     }
 

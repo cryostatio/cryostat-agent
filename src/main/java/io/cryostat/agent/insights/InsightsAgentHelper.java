@@ -95,7 +95,7 @@ public class InsightsAgentHelper {
 
         // Create Insights logger after setting log level
         InsightsLogger log = AgentLogger.getLogger();
-        log.info("Starting Red Hat Insights client");
+        log.debug("Starting Red Hat Insights client");
 
         String server = pluginInfo.getEnvAsMap().get(INSIGHTS_SVC);
         Objects.requireNonNull(server, "Insights server is missing");
