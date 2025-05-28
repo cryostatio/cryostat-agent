@@ -42,6 +42,7 @@ import io.cryostat.agent.VersionInfo.Semver;
 import io.cryostat.agent.harvest.Harvester;
 import io.cryostat.agent.insights.InsightsAgentHelper;
 import io.cryostat.agent.model.PluginInfo;
+import io.cryostat.agent.shaded.ShadeLogger;
 import io.cryostat.agent.triggers.TriggerEvaluator;
 
 import com.sun.tools.attach.AgentInitializationException;
@@ -72,7 +73,6 @@ import sun.misc.SignalHandler;
                         + " JVMs")
 public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
 
-    private static Logger log = LoggerFactory.getLogger(Agent.class);
     private static final AtomicBoolean needsCleanup = new AtomicBoolean(true);
     private static final String ALL_PIDS = "*";
     static final String AUTO_ATTACH_PID = "0";
@@ -119,7 +119,6 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
                     AgentInitializationException,
                     AgentLoadException,
                     URISyntaxException {
-        log.trace("main");
         List<String> pids = getAttachPid(pid);
         if (pids.isEmpty()) {
             throw new IllegalStateException("No candidate JVM PIDs");
@@ -129,10 +128,10 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
                                 properties,
                                 String.join(",", smartTriggers != null ? smartTriggers : List.of()))
                         .toAgentMain();
-        log.trace("agentmain arg: \"{}\"", agentmainArg);
         for (String pid : pids) {
             VirtualMachine vm = VirtualMachine.attach(pid);
-            log.trace("Injecting agent into PID {}", pid);
+            ShadeLogger.getAnonymousLogger()
+                    .fine(String.format("Injecting agent into PID %s", pid));
             try {
                 vm.loadAgent(Path.of(selfJarLocation()).toAbsolutePath().toString(), agentmainArg);
             } finally {
@@ -144,15 +143,17 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
 
     // -javaagent entry point, Agent is starting before the host JVM application
     public static void premain(String args, Instrumentation instrumentation) {
-        log.trace("premain");
         agentmain(args, instrumentation);
     }
 
     // dynamic attach entry point, Agent is starting after being loaded and attached to a running
     // JVM application
     public static void agentmain(String args, Instrumentation instrumentation) {
-        log.trace("agentmain");
         AgentArgs aa = AgentArgs.from(instrumentation, args);
+        // set properties early before instantiating the Agent proper, in case properties include
+        // things like log level overrides which must be done before instances are created and may
+        // be cached
+        aa.getProperties().forEach((k, v) -> System.setProperty(k, v));
         Agent agent = new Agent();
         Thread t =
                 new Thread(
@@ -190,7 +191,13 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
         }
         return vms.stream()
                 .filter(vmFilter)
-                .peek(vmd -> log.trace("Attaching to VM: {} {}", vmd.displayName(), vmd.id()))
+                .peek(
+                        vmd ->
+                                ShadeLogger.getAnonymousLogger()
+                                        .fine(
+                                                String.format(
+                                                        "Attaching to VM: %s %s",
+                                                        vmd.displayName(), vmd.id())))
                 .map(VirtualMachineDescriptor::id)
                 .collect(Collectors.toList());
     }
@@ -206,25 +213,29 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
         properties.put("build.git.commit-hash", new BuildInfo().getGitInfo().getHash());
         Semver agentVersion = Semver.UNKNOWN;
         Pair<Semver, Semver> serverVersionRange = Pair.of(Semver.UNKNOWN, Semver.UNKNOWN);
+        IOException propsIoe = null;
         try {
             VersionInfo versionInfo = VersionInfo.load();
             serverVersionRange = Pair.of(versionInfo.getServerMin(), versionInfo.getServerMax());
             agentVersion = versionInfo.getAgentVersion();
             properties.putAll(versionInfo.asMap());
         } catch (IOException ioe) {
-            log.warn("Unable to read versions.properties file", ioe);
+            propsIoe = ioe;
         }
-        log.info(
+        // set properties first, since properties may include log level override
+        properties.forEach((k, v) -> System.setProperty(k, v));
+        // after setting properties, log what we did
+        Logger log = LoggerFactory.getLogger(getClass());
+        if (propsIoe != null) {
+            log.warn("Unable to read versions.properties file", propsIoe);
+        }
+        properties.forEach((k, v) -> log.trace("Set system property {} = {}", k, v));
+        log.debug(
                 "Cryostat Agent version {} (for Cryostat server version range [{}, {}) )"
                         + " starting...",
                 agentVersion,
                 serverVersionRange.getLeft(),
                 serverVersionRange.getRight());
-        properties.forEach(
-                (k, v) -> {
-                    log.trace("Set system property {} = {}", k, v);
-                    System.setProperty(k, v);
-                });
         AgentExitHandler agentExitHandler = null;
         try {
             final Client client = DaggerAgent_Client.builder().build();
@@ -250,6 +261,7 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
 
             agentExitHandler =
                     installSignalHandlers(
+                            log,
                             exitSignals,
                             registration,
                             harvester,
@@ -272,15 +284,15 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
                     evt -> {
                         switch (evt.state) {
                             case REGISTERED:
-                                log.info("Registration state: {}", evt.state);
+                                log.debug("Registration state: {}", evt.state);
                                 // If Red Hat Insights support is enabled, set it up
-                                setupInsightsIfEnabled(insights, registration.getPluginInfo());
+                                setupInsightsIfEnabled(log, insights, registration.getPluginInfo());
                                 break;
                             case UNREGISTERED:
                             case REFRESHING:
                             case REFRESHED:
                             case PUBLISHED:
-                                log.info("Registration state: {}", evt.state);
+                                log.debug("Registration state: {}", evt.state);
                                 break;
                             default:
                                 log.warn("Unknown registration state: {}", evt.state);
@@ -290,7 +302,7 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
             webServer.start();
             registration.start();
             client.triggerEvaluator().start(args.getSmartTriggers());
-            log.info("Startup complete");
+            log.trace("Startup complete");
         } catch (Exception e) {
             log.error(Agent.class.getSimpleName() + " startup failure", e);
             if (agentExitHandler != null) {
@@ -300,6 +312,7 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
     }
 
     private static AgentExitHandler installSignalHandlers(
+            Logger log,
             List<String> exitSignals,
             Registration registration,
             Harvester harvester,
@@ -322,11 +335,11 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
     }
 
     private static void setupInsightsIfEnabled(
-            InsightsAgentHelper insights, PluginInfo pluginInfo) {
+            Logger log, InsightsAgentHelper insights, PluginInfo pluginInfo) {
         if (insights != null && insights.isInsightsEnabled(pluginInfo)) {
             try {
                 insights.runInsightsAgent(pluginInfo);
-                log.info("Started Red Hat Insights client");
+                log.debug("Started Red Hat Insights client");
             } catch (Throwable e) {
                 log.error("Unable to start Red Hat Insights client", e);
             }
@@ -368,7 +381,7 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
 
     private static class AgentExitHandler implements SignalHandler {
 
-        private static Logger log = LoggerFactory.getLogger(Agent.class);
+        private static Logger log = LoggerFactory.getLogger(AgentExitHandler.class);
 
         private final Map<Signal, SignalHandler> oldHandlers = new HashMap<>();
         private final Registration registration;
@@ -407,7 +420,7 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
         }
 
         void performCleanup(Signal sig) {
-            log.info("Performing cleanup...");
+            log.trace("Performing cleanup...");
             try {
                 harvester.exitUpload().get();
             } catch (InterruptedException | ExecutionException e) {
@@ -422,12 +435,12 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
                                         log.warn("Exception during deregistration", t);
                                     }
                                     try {
-                                        log.info("Shutting down...");
+                                        log.debug("Shutting down...");
                                         safeCall(webServer::stop);
                                         safeCall(registration::stop);
                                         safeCall(executor::shutdown);
                                     } finally {
-                                        log.info("Shutdown complete");
+                                        log.debug("Shutdown complete");
                                         if (sig != null) {
                                             // pass signal on to whatever would have handled it had
                                             // this Agent not been installed, so host application
