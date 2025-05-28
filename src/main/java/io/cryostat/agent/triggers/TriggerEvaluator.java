@@ -93,7 +93,7 @@ public class TriggerEvaluator {
     }
 
     private void registerTrigger(SmartTrigger t) {
-        log.info("Registering Smart Trigger: {}", t);
+        log.trace("Registering Smart Trigger: {}", t);
         if (!triggers.contains(t)) {
             triggers.add(t);
         }
@@ -185,7 +185,7 @@ public class TriggerEvaluator {
                             harvester.handleNewRecording(tr);
                             tr.getRecording().start();
                             t.setState(TriggerState.COMPLETE);
-                            log.info(
+                            log.debug(
                                     "Started recording \"{}\" using template \"{}\" due to trigger"
                                             + " \"{}\"",
                                     recordingName,

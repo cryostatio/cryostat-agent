@@ -194,7 +194,7 @@ public class Registration {
                     }
                 });
         notify(RegistrationEvent.State.UNREGISTERED);
-        log.info("{} started", getClass().getName());
+        log.trace("{} started", getClass().getName());
     }
 
     public void addRegistrationListener(Consumer<RegistrationEvent> listener) {
@@ -243,7 +243,7 @@ public class Registration {
                                             boolean previouslyRegistered =
                                                     this.pluginInfo.isInitialized();
                                             this.pluginInfo.copyFrom(plugin);
-                                            log.info("Registered as {}", this.pluginInfo.getId());
+                                            log.debug("Registered as {}", this.pluginInfo.getId());
                                             if (previouslyRegistered) {
                                                 notify(RegistrationEvent.State.REFRESHED);
                                             } else {
@@ -261,7 +261,7 @@ public class Registration {
             f.get();
         } catch (URISyntaxException | ExecutionException | InterruptedException e) {
             log.error("Registration failure", e);
-            log.info("Registration retry period: {}", Duration.ofMillis(registrationRetryMs));
+            log.trace("Registration retry period: {}", Duration.ofMillis(registrationRetryMs));
             executor.schedule(this::tryRegister, registrationRetryMs, TimeUnit.MILLISECONDS);
         }
     }
@@ -278,7 +278,7 @@ public class Registration {
             log.error("Unable to define self", e);
             return;
         }
-        log.info(
+        log.trace(
                 "publishing self as {}",
                 selfNodes.stream()
                         .map(n -> n.getTarget().getConnectUrl())
@@ -291,7 +291,7 @@ public class Registration {
                                         log.error("Update failure", t);
                                         deregister();
                                     } else {
-                                        log.info("Publish success");
+                                        log.trace("Publish success");
                                         notify(RegistrationEvent.State.PUBLISHED);
                                     }
                                     return (Void) null;
@@ -378,7 +378,7 @@ public class Registration {
                                         "Failed to deregister as Cryostat discovery plugin [{}]",
                                         this.pluginInfo.getId());
                             } else {
-                                log.info(
+                                log.debug(
                                         "Deregistered from Cryostat discovery plugin [{}]",
                                         this.pluginInfo.getId());
                             }

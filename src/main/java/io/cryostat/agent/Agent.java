@@ -119,7 +119,6 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
                     AgentInitializationException,
                     AgentLoadException,
                     URISyntaxException {
-        log.trace("main");
         List<String> pids = getAttachPid(pid);
         if (pids.isEmpty()) {
             throw new IllegalStateException("No candidate JVM PIDs");
@@ -144,14 +143,12 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
 
     // -javaagent entry point, Agent is starting before the host JVM application
     public static void premain(String args, Instrumentation instrumentation) {
-        log.trace("premain");
         agentmain(args, instrumentation);
     }
 
     // dynamic attach entry point, Agent is starting after being loaded and attached to a running
     // JVM application
     public static void agentmain(String args, Instrumentation instrumentation) {
-        log.trace("agentmain");
         AgentArgs aa = AgentArgs.from(instrumentation, args);
         Agent agent = new Agent();
         Thread t =
@@ -272,7 +269,7 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
                     evt -> {
                         switch (evt.state) {
                             case REGISTERED:
-                                log.info("Registration state: {}", evt.state);
+                                log.debug("Registration state: {}", evt.state);
                                 // If Red Hat Insights support is enabled, set it up
                                 setupInsightsIfEnabled(insights, registration.getPluginInfo());
                                 break;
@@ -280,7 +277,7 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
                             case REFRESHING:
                             case REFRESHED:
                             case PUBLISHED:
-                                log.info("Registration state: {}", evt.state);
+                                log.debug("Registration state: {}", evt.state);
                                 break;
                             default:
                                 log.warn("Unknown registration state: {}", evt.state);
@@ -290,7 +287,7 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
             webServer.start();
             registration.start();
             client.triggerEvaluator().start(args.getSmartTriggers());
-            log.info("Startup complete");
+            log.trace("Startup complete");
         } catch (Exception e) {
             log.error(Agent.class.getSimpleName() + " startup failure", e);
             if (agentExitHandler != null) {
@@ -326,7 +323,7 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
         if (insights != null && insights.isInsightsEnabled(pluginInfo)) {
             try {
                 insights.runInsightsAgent(pluginInfo);
-                log.info("Started Red Hat Insights client");
+                log.debug("Started Red Hat Insights client");
             } catch (Throwable e) {
                 log.error("Unable to start Red Hat Insights client", e);
             }
@@ -407,7 +404,7 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
         }
 
         void performCleanup(Signal sig) {
-            log.info("Performing cleanup...");
+            log.trace("Performing cleanup...");
             try {
                 harvester.exitUpload().get();
             } catch (InterruptedException | ExecutionException e) {
@@ -422,12 +419,12 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
                                         log.warn("Exception during deregistration", t);
                                     }
                                     try {
-                                        log.info("Shutting down...");
+                                        log.debug("Shutting down...");
                                         safeCall(webServer::stop);
                                         safeCall(registration::stop);
                                         safeCall(executor::shutdown);
                                     } finally {
-                                        log.info("Shutdown complete");
+                                        log.debug("Shutdown complete");
                                         if (sig != null) {
                                             // pass signal on to whatever would have handled it had
                                             // this Agent not been installed, so host application
