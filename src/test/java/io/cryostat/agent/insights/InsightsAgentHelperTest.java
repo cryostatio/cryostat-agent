@@ -18,7 +18,6 @@ package io.cryostat.agent.insights;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNotNull;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -59,12 +58,10 @@ public class InsightsAgentHelperTest {
     @Mock Config config;
     @Mock AgentBasicReport report;
     @Mock InsightsReportController controller;
-    @Mock AgentLogger log;
     @Captor ArgumentCaptor<AgentConfiguration> configCaptor;
     @Captor ArgumentCaptor<Supplier<InsightsHttpClient>> clientSupplierCaptor;
     MockedStatic<AgentBasicReport> reportStatic;
     MockedStatic<InsightsReportController> controllerStatic;
-    MockedStatic<AgentLogger> logStatic;
     InsightsAgentHelper helper;
 
     @BeforeEach
@@ -77,9 +74,6 @@ public class InsightsAgentHelperTest {
                 .when(() -> InsightsReportController.of(any(), any(), any(), any(), any()))
                 .thenReturn(controller);
 
-        logStatic = Mockito.mockStatic(AgentLogger.class);
-        logStatic.when(() -> AgentLogger.getLogger()).thenReturn(log);
-
         Map<String, String> env =
                 Collections.singletonMap("INSIGHTS_SVC", "http://insights-proxy.example.com:8080");
         when(pluginInfo.getEnvAsMap()).thenReturn(env);
@@ -91,7 +85,8 @@ public class InsightsAgentHelperTest {
     void teardownEach() {
         reportStatic.close();
         controllerStatic.close();
-        logStatic.close();
+        System.clearProperty(
+                "com.redhat.insights.agent.shaded.org.slf4j.simpleLogger.defaultLogLevel");
     }
 
     @Test
@@ -139,7 +134,9 @@ public class InsightsAgentHelperTest {
         Assertions.assertEquals(false, agentConfig.shouldDefer());
         Assertions.assertEquals(false, agentConfig.isDebug());
 
-        verify(log, never()).setDebugDelegate();
+        Assertions.assertNull(
+                System.getProperty(
+                        "com.redhat.insights.agent.shaded.org.slf4j.simpleLogger.defaultLogLevel"));
 
         controllerStatic.verify(
                 () ->
@@ -168,6 +165,9 @@ public class InsightsAgentHelperTest {
         AgentConfiguration agentConfig = configCaptor.getValue();
         Assertions.assertEquals(true, agentConfig.isDebug());
 
-        verify(log).setDebugDelegate();
+        Assertions.assertEquals(
+                "debug",
+                System.getProperty(
+                        "com.redhat.insights.agent.shaded.org.slf4j.simpleLogger.defaultLogLevel"));
     }
 }

@@ -128,7 +128,7 @@ Smart Triggers may define more complex conditions that test multiple metrics:
 These may be passed as an argument to the Cryostat Agent, for example:
 
 ```
-JAVA_OPTIONS="-javaagent:-Dcryostat.agent.baseuri=http://cryostat.local!/deployments/app/cryostat-agent-${CRYOSTAT_AGENT_VERSION}.jar=[ProcessCpuLoad>0.2]~profile
+JAVA_OPTIONS="-javaagent:/deployments/app/cryostat-agent-${CRYOSTAT_AGENT_VERSION}.jar=-Dcryostat.agent.baseuri=http://cryostat.local![ProcessCpuLoad>0.2]~profile
 ```
 
 (note the '!' separator between system properties overrides and Smart Triggers)
