@@ -27,6 +27,7 @@ import javax.management.MBeanServer;
 import javax.management.ObjectName;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.redhat.insights.agent.shaded.org.apache.commons.codec.Charsets;
 import com.sun.net.httpserver.HttpExchange;
 import org.apache.http.HttpStatus;
 import org.eclipse.microprofile.config.Config;
@@ -79,10 +80,11 @@ class InvokeContext extends MutatingRemoteContext {
                                 exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
                                 try (OutputStreamWriter writer =
                                         new OutputStreamWriter(
-                                                exchange.getResponseBody(), "UTF_8")) {
+                                                exchange.getResponseBody(), Charsets.UTF_8)) {
                                     writer.write(response.toString());
                                 } catch (Exception e) {
                                     log.error("Failed to write thread dump to response: ", e);
+                                    throw e;
                                 }
                             } else {
                                 exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
