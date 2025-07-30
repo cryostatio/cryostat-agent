@@ -18,7 +18,6 @@ package io.cryostat.agent.remote;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.io.OutputStreamWriter;
 import java.lang.management.ManagementFactory;
 import java.util.Objects;
 
@@ -27,7 +26,6 @@ import javax.management.MBeanServer;
 import javax.management.ObjectName;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.redhat.insights.agent.shaded.org.apache.commons.codec.Charsets;
 import com.sun.net.httpserver.HttpExchange;
 import org.apache.http.HttpStatus;
 import org.eclipse.microprofile.config.Config;
@@ -75,22 +73,9 @@ class InvokeContext extends MutatingRemoteContext {
                                         req.signature);
 
                         if (Objects.nonNull(response)) {
-                            // If a thread dump was requested we need to send it back
-                            if (req.operation.equals(DUMP_THREADS)) {
-                                exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
-                                try (OutputStreamWriter writer =
-                                        new OutputStreamWriter(
-                                                exchange.getResponseBody(), Charsets.UTF_8)) {
-                                    writer.write(response.toString());
-                                } catch (Exception e) {
-                                    log.error("Failed to write thread dump to response: ", e);
-                                    throw e;
-                                }
-                            } else {
-                                exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
-                                try (OutputStream responseStream = exchange.getResponseBody()) {
-                                    mapper.writeValue(responseStream, response);
-                                }
+                            exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
+                            try (OutputStream responseStream = exchange.getResponseBody()) {
+                                mapper.writeValue(responseStream, response);
                             }
                         } else {
                             exchange.sendResponseHeaders(HttpStatus.SC_ACCEPTED, BODY_LENGTH_NONE);
