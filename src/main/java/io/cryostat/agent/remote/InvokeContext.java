@@ -34,6 +34,9 @@ import org.slf4j.LoggerFactory;
 
 class InvokeContext extends MutatingRemoteContext {
 
+    private static final String DUMP_THREADS = "threadPrint";
+    private static final String DUMP_THREADS_TO_FIlE = "threadDumpToFile";
+    private static final String DIAGNOSTIC_BEAN_NAME = "com.sun.management:type=DiagnosticCommand";
     private final Logger log = LoggerFactory.getLogger(getClass());
     private final ObjectMapper mapper;
 
@@ -68,6 +71,7 @@ class InvokeContext extends MutatingRemoteContext {
                                         req.operation,
                                         req.parameters,
                                         req.signature);
+
                         if (Objects.nonNull(response)) {
                             exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
                             try (OutputStream responseStream = exchange.getResponseBody()) {
@@ -102,6 +106,10 @@ class InvokeContext extends MutatingRemoteContext {
         public boolean isValid() {
             if (this.beanName.equals(ManagementFactory.MEMORY_MXBEAN_NAME)) {
                 return true;
+            } else if (this.beanName.equals(DIAGNOSTIC_BEAN_NAME)
+                    && (this.operation.equals(DUMP_THREADS)
+                            || this.operation.equals(DUMP_THREADS_TO_FIlE))) {
+                return true;
             }
             return false;
         }
@@ -112,6 +120,14 @@ class InvokeContext extends MutatingRemoteContext {
 
         public void setBeanName(String beanName) {
             this.beanName = beanName;
+        }
+
+        public String getOperation() {
+            return operation;
+        }
+
+        public void setOperation(String operation) {
+            this.operation = operation;
         }
     }
 }
