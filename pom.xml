@@ -102,7 +102,7 @@
   <org.jsoup.version>1.15.3</org.jsoup.version>
 
   <maven-source-plugin.version>3.3.1</maven-source-plugin.version>
-  <maven-javadoc-plugin.version>3.11.2</maven-javadoc-plugin.version>
+  <maven-javadoc-plugin.version>3.11.3</maven-javadoc-plugin.version>
   <jreleaser-maven-plugin.version>1.19.0</jreleaser-maven-plugin.version>
   <org.codehaus.mojo.exec.plugin.version>3.5.1</org.codehaus.mojo.exec.plugin.version>
 
