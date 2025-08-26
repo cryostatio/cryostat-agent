@@ -103,13 +103,8 @@
 
   <maven-source-plugin.version>3.3.1</maven-source-plugin.version>
   <maven-javadoc-plugin.version>3.11.2</maven-javadoc-plugin.version>
-<<<<<<< HEAD
-  <jreleaser-maven-plugin.version>1.14.0</jreleaser-maven-plugin.version>
-  <org.codehaus.mojo.exec.plugin.version>3.5.0</org.codehaus.mojo.exec.plugin.version>
-=======
   <jreleaser-maven-plugin.version>1.19.0</jreleaser-maven-plugin.version>
-  <org.codehaus.mojo.exec.plugin.version>3.5.1</org.codehaus.mojo.exec.plugin.version>
->>>>>>> 118df23 (build(deps): bump org.jreleaser:jreleaser-maven-plugin (#667))
+  <org.codehaus.mojo.exec.plugin.version>3.5.0</org.codehaus.mojo.exec.plugin.version>
 
   <shade.prefix>io.cryostat.agent.shaded</shade.prefix>
 
