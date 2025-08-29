@@ -374,11 +374,9 @@ public class CryostatClient {
         }
     }
 
-    public CompletableFuture<Void> pushHeapDump(int maxFiles, String uuid, Path heapDump)
+    public CompletableFuture<Void> pushHeapDump(int maxFiles, String fileName, Path heapDump)
             throws IOException {
         Instant start = Instant.now();
-        String timestamp = start.truncatedTo(ChronoUnit.SECONDS).toString();
-        String fileName = String.format("%s_%s.hprof", uuid, timestamp);
 
         HttpPost req =
                 new HttpPost(baseUri.resolve("/api/beta/diagnostics/heapdump/upload/" + jvmId));
@@ -389,7 +387,7 @@ public class CryostatClient {
                 MultipartEntityBuilder.create()
                         .addPart(
                                 FormBodyPartBuilder.create(
-                                                "recording",
+                                                "heapDump",
                                                 new InputStreamBody(
                                                         is,
                                                         ContentType.APPLICATION_OCTET_STREAM,

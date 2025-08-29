@@ -20,6 +20,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.management.ManagementFactory;
 import java.nio.file.Paths;
+import java.util.Arrays;
 import java.util.Objects;
 
 import javax.inject.Inject;
@@ -70,6 +71,9 @@ class InvokeContext extends MutatingRemoteContext {
                             exchange.sendResponseHeaders(
                                     HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
                         }
+                        log.warn(
+                                "Dumping heap with parameters: "
+                                        + Arrays.asList(req.parameters).toString());
                         MBeanServer server = ManagementFactory.getPlatformMBeanServer();
                         Object response =
                                 server.invoke(
