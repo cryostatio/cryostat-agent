@@ -77,7 +77,7 @@ class InvokeContext extends MutatingRemoteContext {
                                         req.operation,
                                         req.parameters,
                                         req.signature);
-                                        
+
                         // TODO: Verify if dumpHeap is blocking, if so we should split the
                         // invocation
                         // into a separate thread and listen for when it finishes
@@ -138,14 +138,6 @@ class InvokeContext extends MutatingRemoteContext {
 
         public void setParameters(Object[] parameters) {
             this.parameters = parameters;
-        }
-
-        public String getOperation() {
-            return operation;
-        }
-
-        public void setOperation(String operation) {
-            this.operation = operation;
         }
 
         public String getBeanName() {
