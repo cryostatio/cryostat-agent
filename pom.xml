@@ -79,11 +79,11 @@
 
   <io.cryostat.libcryostat.version>4.1.0-SNAPSHOT</io.cryostat.libcryostat.version>
 
-  <org.apache.commons.lang3.version>3.17.0</org.apache.commons.lang3.version>
+  <org.apache.commons.lang3.version>3.18.0</org.apache.commons.lang3.version>
   <org.apache.commons.io.version>2.19.0</org.apache.commons.io.version>
   <org.apache.httpcomponents.httpclient.version>4.5.14</org.apache.httpcomponents.httpclient.version>
   <org.apache.httpcomponents.httpmime.version>${org.apache.httpcomponents.httpclient.version}</org.apache.httpcomponents.httpmime.version>
-  <com.fasterxml.jackson.version>2.18.3</com.fasterxml.jackson.version>
+  <com.fasterxml.jackson.version>2.18.4</com.fasterxml.jackson.version>
   <io.smallrye.config.version>3.11.4</io.smallrye.config.version>
   <org.slf4j.version>2.0.17</org.slf4j.version>
   <org.projectnessie.cel.bom.version>0.4.5</org.projectnessie.cel.bom.version>
@@ -91,18 +91,18 @@
   <info.picocli.version>4.7.7</info.picocli.version>
   <com.redhat.insights.agent.version>1.0.3</com.redhat.insights.agent.version>
 
-  <com.github.spotbugs.version>4.9.3</com.github.spotbugs.version>
-  <com.github.spotbugs.plugin.version>4.9.3.2</com.github.spotbugs.plugin.version>
-  <org.junit.jupiter.version>5.13.3</org.junit.jupiter.version>
+  <com.github.spotbugs.version>4.9.4</com.github.spotbugs.version>
+  <com.github.spotbugs.plugin.version>4.9.4.0</com.github.spotbugs.plugin.version>
+  <org.junit.jupiter.version>5.13.4</org.junit.jupiter.version>
   <org.hamcrest.version>3.0</org.hamcrest.version>
-  <org.mockito.version>5.18.0</org.mockito.version>
+  <org.mockito.version>5.19.0</org.mockito.version>
   <org.jacoco.maven.plugin.version>0.8.13</org.jacoco.maven.plugin.version>
-  <com.diffplug.spotless.maven.plugin.version>2.44.5</com.diffplug.spotless.maven.plugin.version>
+  <com.diffplug.spotless.maven.plugin.version>2.46.1</com.diffplug.spotless.maven.plugin.version>
   <com.google.googlejavaformat.version>1.17.0</com.google.googlejavaformat.version>
   <org.jsoup.version>1.15.3</org.jsoup.version>
 
   <maven-source-plugin.version>3.3.1</maven-source-plugin.version>
-  <maven-javadoc-plugin.version>3.11.2</maven-javadoc-plugin.version>
+  <maven-javadoc-plugin.version>3.11.3</maven-javadoc-plugin.version>
   <jreleaser-maven-plugin.version>1.19.0</jreleaser-maven-plugin.version>
   <org.codehaus.mojo.exec.plugin.version>3.5.1</org.codehaus.mojo.exec.plugin.version>
 
