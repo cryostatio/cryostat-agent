@@ -19,11 +19,15 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.management.ManagementFactory;
+import java.nio.file.Paths;
+import java.util.Arrays;
 import java.util.Objects;
 
 import javax.inject.Inject;
 import javax.management.MBeanServer;
 import javax.management.ObjectName;
+
+import io.cryostat.agent.CryostatClient;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
@@ -40,10 +44,13 @@ class InvokeContext extends MutatingRemoteContext {
     private final Logger log = LoggerFactory.getLogger(getClass());
     private final ObjectMapper mapper;
 
+    private CryostatClient client;
+
     @Inject
-    InvokeContext(ObjectMapper mapper, Config config) {
+    InvokeContext(ObjectMapper mapper, Config config, CryostatClient client) {
         super(config);
         this.mapper = mapper;
+        this.client = client;
     }
 
     @Override
@@ -64,6 +71,9 @@ class InvokeContext extends MutatingRemoteContext {
                             exchange.sendResponseHeaders(
                                     HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
                         }
+                        log.warn(
+                                "Dumping heap with parameters: "
+                                        + Arrays.asList(req.parameters).toString());
                         MBeanServer server = ManagementFactory.getPlatformMBeanServer();
                         Object response =
                                 server.invoke(
@@ -71,6 +81,14 @@ class InvokeContext extends MutatingRemoteContext {
                                         req.operation,
                                         req.parameters,
                                         req.signature);
+
+                        // TODO: Verify if dumpHeap is blocking, if so we should split the
+                        // invocation
+                        // into a separate thread and listen for when it finishes
+                        if (req.getOperation().equals("dumpHeap")) {
+                            String fileName = req.getParameters()[0].toString();
+                            client.pushHeapDump(1, fileName, Paths.get(fileName));
+                        }
 
                         if (Objects.nonNull(response)) {
                             exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
@@ -103,8 +121,12 @@ class InvokeContext extends MutatingRemoteContext {
         public Object[] parameters;
         public String[] signature;
 
+        private static final String HOTSPOT_DIAGNOSTIC_BEAN_NAME =
+                "com.sun.management:type=HotSpotDiagnostic";
+
         public boolean isValid() {
-            if (this.beanName.equals(ManagementFactory.MEMORY_MXBEAN_NAME)) {
+            if (this.beanName.equals(ManagementFactory.MEMORY_MXBEAN_NAME)
+                    || this.beanName.equals(HOTSPOT_DIAGNOSTIC_BEAN_NAME)) {
                 return true;
             } else if (this.beanName.equals(DIAGNOSTIC_BEAN_NAME)
                     && (this.operation.equals(DUMP_THREADS)
@@ -112,6 +134,14 @@ class InvokeContext extends MutatingRemoteContext {
                 return true;
             }
             return false;
+        }
+
+        public Object[] getParameters() {
+            return parameters;
+        }
+
+        public void setParameters(Object[] parameters) {
+            this.parameters = parameters;
         }
 
         public String getBeanName() {
