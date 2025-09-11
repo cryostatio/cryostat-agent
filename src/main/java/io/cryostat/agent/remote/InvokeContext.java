@@ -20,8 +20,8 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.management.ManagementFactory;
 import java.nio.file.Paths;
-import java.util.Arrays;
 import java.util.Objects;
+import java.util.UUID;
 
 import javax.inject.Inject;
 import javax.management.MBeanServer;
@@ -67,13 +67,18 @@ class InvokeContext extends MutatingRemoteContext {
                     try (InputStream body = exchange.getRequestBody()) {
                         MBeanInvocationRequest req =
                                 mapper.readValue(body, MBeanInvocationRequest.class);
+                        String filename = "";
                         if (!req.isValid()) {
                             exchange.sendResponseHeaders(
                                     HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
                         }
-                        log.warn(
-                                "Dumping heap with parameters: "
-                                        + Arrays.asList(req.parameters).toString());
+
+                        if (req.getOperation().equals("dumpHeap")) {
+                            String jvmId = req.getParameters()[0].toString();
+                            filename = jvmId + "-" + UUID.randomUUID().toString() + ".hprof";
+                            req.parameters[0] = filename;
+                        }
+
                         MBeanServer server = ManagementFactory.getPlatformMBeanServer();
                         Object response =
                                 server.invoke(
@@ -86,8 +91,8 @@ class InvokeContext extends MutatingRemoteContext {
                         // invocation
                         // into a separate thread and listen for when it finishes
                         if (req.getOperation().equals("dumpHeap")) {
-                            String fileName = req.getParameters()[0].toString();
-                            client.pushHeapDump(1, fileName, Paths.get(fileName));
+                            log.warn("Calling pushHeapDump");
+                            client.pushHeapDump(1, filename, Paths.get(filename));
                         }
 
                         if (Objects.nonNull(response)) {
