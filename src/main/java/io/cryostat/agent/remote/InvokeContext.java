@@ -19,11 +19,16 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.management.ManagementFactory;
+import java.nio.file.Paths;
 import java.util.Objects;
+import java.util.UUID;
 
 import javax.inject.Inject;
 import javax.management.MBeanServer;
 import javax.management.ObjectName;
+
+import io.cryostat.agent.ConfigModule;
+import io.cryostat.agent.CryostatClient;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
@@ -40,10 +45,13 @@ class InvokeContext extends MutatingRemoteContext {
     private final Logger log = LoggerFactory.getLogger(getClass());
     private final ObjectMapper mapper;
 
+    private CryostatClient client;
+
     @Inject
-    InvokeContext(ObjectMapper mapper, Config config) {
+    InvokeContext(ObjectMapper mapper, Config config, CryostatClient client) {
         super(config);
         this.mapper = mapper;
+        this.client = client;
     }
 
     @Override
@@ -60,10 +68,18 @@ class InvokeContext extends MutatingRemoteContext {
                     try (InputStream body = exchange.getRequestBody()) {
                         MBeanInvocationRequest req =
                                 mapper.readValue(body, MBeanInvocationRequest.class);
+                        String filename =
+                                config.getValue(ConfigModule.CRYOSTAT_AGENT_APP_NAME, String.class);
                         if (!req.isValid()) {
                             exchange.sendResponseHeaders(
                                     HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
                         }
+
+                        if (req.getOperation().equals("dumpHeap")) {
+                            filename += "-" + UUID.randomUUID().toString() + ".hprof";
+                            req.parameters[0] = filename;
+                        }
+
                         MBeanServer server = ManagementFactory.getPlatformMBeanServer();
                         Object response =
                                 server.invoke(
@@ -71,6 +87,14 @@ class InvokeContext extends MutatingRemoteContext {
                                         req.operation,
                                         req.parameters,
                                         req.signature);
+
+                        // TODO: Verify if dumpHeap is blocking, if so we should split the
+                        // invocation
+                        // into a separate thread and listen for when it finishes
+                        if (req.getOperation().equals("dumpHeap")) {
+                            log.warn("Calling pushHeapDump");
+                            client.pushHeapDump(1, filename, Paths.get(filename));
+                        }
 
                         if (Objects.nonNull(response)) {
                             exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
@@ -80,7 +104,7 @@ class InvokeContext extends MutatingRemoteContext {
                         } else {
                             exchange.sendResponseHeaders(HttpStatus.SC_ACCEPTED, BODY_LENGTH_NONE);
                         }
-                    } catch (Exception e) {
+                    } catch (Throwable e) {
                         log.error("mbean serialization failure", e);
                         exchange.sendResponseHeaders(HttpStatus.SC_BAD_GATEWAY, BODY_LENGTH_NONE);
                     }
@@ -103,8 +127,12 @@ class InvokeContext extends MutatingRemoteContext {
         public Object[] parameters;
         public String[] signature;
 
+        private static final String HOTSPOT_DIAGNOSTIC_BEAN_NAME =
+                "com.sun.management:type=HotSpotDiagnostic";
+
         public boolean isValid() {
-            if (this.beanName.equals(ManagementFactory.MEMORY_MXBEAN_NAME)) {
+            if (this.beanName.equals(ManagementFactory.MEMORY_MXBEAN_NAME)
+                    || this.beanName.equals(HOTSPOT_DIAGNOSTIC_BEAN_NAME)) {
                 return true;
             } else if (this.beanName.equals(DIAGNOSTIC_BEAN_NAME)
                     && (this.operation.equals(DUMP_THREADS)
@@ -112,6 +140,14 @@ class InvokeContext extends MutatingRemoteContext {
                 return true;
             }
             return false;
+        }
+
+        public Object[] getParameters() {
+            return parameters;
+        }
+
+        public void setParameters(Object[] parameters) {
+            this.parameters = parameters;
         }
 
         public String getBeanName() {
