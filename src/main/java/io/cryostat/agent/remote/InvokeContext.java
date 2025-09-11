@@ -27,6 +27,7 @@ import javax.inject.Inject;
 import javax.management.MBeanServer;
 import javax.management.ObjectName;
 
+import io.cryostat.agent.ConfigModule;
 import io.cryostat.agent.CryostatClient;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -67,15 +68,15 @@ class InvokeContext extends MutatingRemoteContext {
                     try (InputStream body = exchange.getRequestBody()) {
                         MBeanInvocationRequest req =
                                 mapper.readValue(body, MBeanInvocationRequest.class);
-                        String filename = "";
+                        String filename =
+                                config.getValue(ConfigModule.CRYOSTAT_AGENT_APP_NAME, String.class);
                         if (!req.isValid()) {
                             exchange.sendResponseHeaders(
                                     HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
                         }
 
                         if (req.getOperation().equals("dumpHeap")) {
-                            String jvmId = req.getParameters()[0].toString();
-                            filename = jvmId + "-" + UUID.randomUUID().toString() + ".hprof";
+                            filename += "-" + UUID.randomUUID().toString() + ".hprof";
                             req.parameters[0] = filename;
                         }
 
@@ -103,7 +104,7 @@ class InvokeContext extends MutatingRemoteContext {
                         } else {
                             exchange.sendResponseHeaders(HttpStatus.SC_ACCEPTED, BODY_LENGTH_NONE);
                         }
-                    } catch (Exception e) {
+                    } catch (Throwable e) {
                         log.error("mbean serialization failure", e);
                         exchange.sendResponseHeaders(HttpStatus.SC_BAD_GATEWAY, BODY_LENGTH_NONE);
                     }
