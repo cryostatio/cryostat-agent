@@ -374,10 +374,12 @@ public class CryostatClient {
         }
     }
 
-    public CompletableFuture<Void> pushHeapDump(int maxFiles, String fileName, Path heapDump)
-            throws IOException {
+    public CompletableFuture<Void> pushHeapDump(Path heapDump, String requestId)
+            throws IOException, IllegalArgumentException {
         Instant start = Instant.now();
-
+        if (heapDump.toFile().getName().isBlank()) {
+            throw new IllegalArgumentException("Failed to generate heap dump");
+        }
         HttpPost req =
                 new HttpPost(baseUri.resolve("/api/beta/diagnostics/heapdump/upload/" + jvmId));
 
@@ -391,14 +393,12 @@ public class CryostatClient {
                                                 new InputStreamBody(
                                                         is,
                                                         ContentType.APPLICATION_OCTET_STREAM,
-                                                        fileName))
+                                                        heapDump.toFile().getName()))
                                         .build())
                         .addPart(
                                 FormBodyPartBuilder.create(
-                                                "maxFiles",
-                                                new StringBody(
-                                                        Integer.toString(maxFiles),
-                                                        ContentType.TEXT_PLAIN))
+                                                "jobId",
+                                                new StringBody(requestId, ContentType.TEXT_PLAIN))
                                         .build());
         req.setEntity(entityBuilder.build());
         return supply(
@@ -409,7 +409,7 @@ public class CryostatClient {
                                     "{} {} ({} -> {}): {}/{}",
                                     req.getMethod(),
                                     res.getStatusLine().getStatusCode(),
-                                    fileName,
+                                    heapDump.getFileName().toString(),
                                     req.getURI(),
                                     FileUtils.byteCountToDisplaySize(is.getByteCount()),
                                     Duration.between(start, finish));

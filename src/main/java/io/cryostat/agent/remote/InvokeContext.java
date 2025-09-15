@@ -88,12 +88,10 @@ class InvokeContext extends MutatingRemoteContext {
                                         req.parameters,
                                         req.signature);
 
-                        // TODO: Verify if dumpHeap is blocking, if so we should split the
-                        // invocation
-                        // into a separate thread and listen for when it finishes
                         if (req.getOperation().equals("dumpHeap")) {
-                            log.warn("Calling pushHeapDump");
-                            client.pushHeapDump(1, filename, Paths.get(filename));
+                            // Send the request Id back with the heap dump so the server
+                            // can match it with the open requests.
+                            client.pushHeapDump(Paths.get(filename), req.getRequestId());
                         }
 
                         if (Objects.nonNull(response)) {
@@ -104,7 +102,7 @@ class InvokeContext extends MutatingRemoteContext {
                         } else {
                             exchange.sendResponseHeaders(HttpStatus.SC_ACCEPTED, BODY_LENGTH_NONE);
                         }
-                    } catch (Throwable e) {
+                    } catch (Exception e) {
                         log.error("mbean serialization failure", e);
                         exchange.sendResponseHeaders(HttpStatus.SC_BAD_GATEWAY, BODY_LENGTH_NONE);
                     }
@@ -126,6 +124,7 @@ class InvokeContext extends MutatingRemoteContext {
         public String operation;
         public Object[] parameters;
         public String[] signature;
+        public String requestId;
 
         private static final String HOTSPOT_DIAGNOSTIC_BEAN_NAME =
                 "com.sun.management:type=HotSpotDiagnostic";
@@ -164,6 +163,14 @@ class InvokeContext extends MutatingRemoteContext {
 
         public void setOperation(String operation) {
             this.operation = operation;
+        }
+
+        public void setRequestId(String requestId) {
+            this.requestId = requestId;
+        }
+
+        public String getRequestId() {
+            return requestId;
         }
     }
 }
