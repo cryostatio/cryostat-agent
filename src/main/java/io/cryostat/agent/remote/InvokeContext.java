@@ -24,8 +24,12 @@ import java.util.Objects;
 import java.util.UUID;
 
 import javax.inject.Inject;
+import javax.management.InstanceNotFoundException;
+import javax.management.MBeanException;
 import javax.management.MBeanServer;
+import javax.management.MalformedObjectNameException;
 import javax.management.ObjectName;
+import javax.management.ReflectionException;
 
 import io.cryostat.agent.ConfigModule;
 import io.cryostat.agent.CryostatClient;
@@ -68,6 +72,7 @@ class InvokeContext extends MutatingRemoteContext {
                     try (InputStream body = exchange.getRequestBody()) {
                         MBeanInvocationRequest req =
                                 mapper.readValue(body, MBeanInvocationRequest.class);
+                        String requestId = (String) req.parameters[2];
                         String filename =
                                 config.getValue(ConfigModule.CRYOSTAT_AGENT_APP_NAME, String.class);
                         if (!req.isValid()) {
@@ -78,6 +83,9 @@ class InvokeContext extends MutatingRemoteContext {
                         if (req.getOperation().equals("dumpHeap")) {
                             filename += "-" + UUID.randomUUID().toString() + ".hprof";
                             req.parameters[0] = filename;
+                            // Job ID is passed along in parameters[2]
+                            Object[] parameters = {req.parameters[0], req.parameters[1]};
+                            req.parameters = parameters;
                         }
 
                         MBeanServer server = ManagementFactory.getPlatformMBeanServer();
@@ -91,7 +99,7 @@ class InvokeContext extends MutatingRemoteContext {
                         if (req.getOperation().equals("dumpHeap")) {
                             // Send the request Id back with the heap dump so the server
                             // can match it with the open requests.
-                            client.pushHeapDump(Paths.get(filename), req.getRequestId());
+                            client.pushHeapDump(Paths.get(filename), requestId);
                         }
 
                         if (Objects.nonNull(response)) {
@@ -102,7 +110,11 @@ class InvokeContext extends MutatingRemoteContext {
                         } else {
                             exchange.sendResponseHeaders(HttpStatus.SC_ACCEPTED, BODY_LENGTH_NONE);
                         }
-                    } catch (Exception e) {
+                    } catch (InstanceNotFoundException
+                            | IOException
+                            | MBeanException
+                            | MalformedObjectNameException
+                            | ReflectionException e) {
                         log.error("mbean serialization failure", e);
                         exchange.sendResponseHeaders(HttpStatus.SC_BAD_GATEWAY, BODY_LENGTH_NONE);
                     }
@@ -124,7 +136,6 @@ class InvokeContext extends MutatingRemoteContext {
         public String operation;
         public Object[] parameters;
         public String[] signature;
-        public String requestId;
 
         private static final String HOTSPOT_DIAGNOSTIC_BEAN_NAME =
                 "com.sun.management:type=HotSpotDiagnostic";
@@ -163,14 +174,6 @@ class InvokeContext extends MutatingRemoteContext {
 
         public void setOperation(String operation) {
             this.operation = operation;
-        }
-
-        public void setRequestId(String requestId) {
-            this.requestId = requestId;
-        }
-
-        public String getRequestId() {
-            return requestId;
         }
     }
 }
