@@ -61,7 +61,7 @@
 
   <io.reactiverse.plugin.version>1.0.27</io.reactiverse.plugin.version>
   <org.apache.maven.plugins.jar.version>3.4.2</org.apache.maven.plugins.jar.version>
-  <org.apache.maven.plugins.shade.version>3.6.0</org.apache.maven.plugins.shade.version>
+  <org.apache.maven.plugins.shade.version>3.6.1</org.apache.maven.plugins.shade.version>
   <org.apache.maven.plugins.compiler.version>3.14.0</org.apache.maven.plugins.compiler.version>
   <org.apache.maven.plugins.surefire.version>2.22.2</org.apache.maven.plugins.surefire.version>
   <org.apache.maven.plugins.failsafe.version>${org.apache.maven.plugins.surefire.version}</org.apache.maven.plugins.failsafe.version>
@@ -80,19 +80,19 @@
   <io.cryostat.libcryostat.version>4.1.0-SNAPSHOT</io.cryostat.libcryostat.version>
 
   <org.apache.commons.lang3.version>3.18.0</org.apache.commons.lang3.version>
-  <org.apache.commons.io.version>2.19.0</org.apache.commons.io.version>
+  <org.apache.commons.io.version>2.20.0</org.apache.commons.io.version>
   <org.apache.httpcomponents.httpclient.version>4.5.14</org.apache.httpcomponents.httpclient.version>
   <org.apache.httpcomponents.httpmime.version>${org.apache.httpcomponents.httpclient.version}</org.apache.httpcomponents.httpmime.version>
-  <com.fasterxml.jackson.version>2.18.4</com.fasterxml.jackson.version>
-  <io.smallrye.config.version>3.11.4</io.smallrye.config.version>
+  <com.fasterxml.jackson.version>2.19.2</com.fasterxml.jackson.version>
+  <io.smallrye.config.version>3.13.4</io.smallrye.config.version>
   <org.slf4j.version>2.0.17</org.slf4j.version>
   <org.projectnessie.cel.bom.version>0.4.5</org.projectnessie.cel.bom.version>
   <com.google.protobuf-java.version>3.25.5</com.google.protobuf-java.version>
   <info.picocli.version>4.7.7</info.picocli.version>
   <com.redhat.insights.agent.version>1.0.3</com.redhat.insights.agent.version>
 
-  <com.github.spotbugs.version>4.9.4</com.github.spotbugs.version>
-  <com.github.spotbugs.plugin.version>4.9.4.0</com.github.spotbugs.plugin.version>
+  <com.github.spotbugs.version>4.9.5</com.github.spotbugs.version>
+  <com.github.spotbugs.plugin.version>4.9.5.0</com.github.spotbugs.plugin.version>
   <org.junit.jupiter.version>5.13.4</org.junit.jupiter.version>
   <org.hamcrest.version>3.0</org.hamcrest.version>
   <org.mockito.version>5.19.0</org.mockito.version>
