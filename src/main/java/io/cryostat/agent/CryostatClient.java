@@ -374,6 +374,60 @@ public class CryostatClient {
         }
     }
 
+    public CompletableFuture<Void> pushHeapDump(Path heapDump, String requestId)
+            throws IOException, IllegalArgumentException {
+        Instant start = Instant.now();
+        if (heapDump.toFile().getName().isBlank()) {
+            throw new IllegalArgumentException("Failed to generate heap dump");
+        }
+        HttpPost req =
+                new HttpPost(baseUri.resolve("/api/beta/diagnostics/heapdump/upload/" + jvmId));
+
+        CountingInputStream is = getRecordingInputStream(heapDump);
+
+        MultipartEntityBuilder entityBuilder =
+                MultipartEntityBuilder.create()
+                        .addPart(
+                                FormBodyPartBuilder.create(
+                                                "heapDump",
+                                                new InputStreamBody(
+                                                        is,
+                                                        ContentType.APPLICATION_OCTET_STREAM,
+                                                        heapDump.toFile().getName()))
+                                        .build())
+                        .addPart(
+                                FormBodyPartBuilder.create(
+                                                "jobId",
+                                                new StringBody(requestId, ContentType.TEXT_PLAIN))
+                                        .build());
+        req.setEntity(entityBuilder.build());
+        return supply(
+                        req,
+                        (res) -> {
+                            Instant finish = Instant.now();
+                            log.trace(
+                                    "{} {} ({} -> {}): {}/{}",
+                                    req.getMethod(),
+                                    res.getStatusLine().getStatusCode(),
+                                    heapDump.getFileName().toString(),
+                                    req.getURI(),
+                                    FileUtils.byteCountToDisplaySize(is.getByteCount()),
+                                    Duration.between(start, finish));
+                            assertOkStatus(req, res);
+                            return (Void) null;
+                        })
+                .whenComplete(
+                        (v, t) -> {
+                            // Heap dump files tend to be very large, clean up after uploading
+                            try {
+                                Files.delete(heapDump);
+                            } catch (IOException ioe) {
+                                log.warn("Failed to delete heap dump: ", heapDump.toString());
+                            }
+                            req.reset();
+                        });
+    }
+
     public CompletableFuture<Void> upload(
             Harvester.PushType pushType,
             Optional<TemplatedRecording> opt,
