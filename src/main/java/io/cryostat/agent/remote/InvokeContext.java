@@ -72,7 +72,7 @@ class InvokeContext extends MutatingRemoteContext {
                     try (InputStream body = exchange.getRequestBody()) {
                         MBeanInvocationRequest req =
                                 mapper.readValue(body, MBeanInvocationRequest.class);
-                        String requestId = (String) req.parameters[2];
+                        String requestId = "";
                         String filename =
                                 config.getValue(ConfigModule.CRYOSTAT_AGENT_APP_NAME, String.class);
                         if (!req.isValid()) {
@@ -81,6 +81,7 @@ class InvokeContext extends MutatingRemoteContext {
                         }
 
                         if (req.getOperation().equals("dumpHeap")) {
+                            requestId = (String) req.parameters[2];
                             filename += "-" + UUID.randomUUID().toString() + ".hprof";
                             req.parameters[0] = filename;
                             // Job ID is passed along in parameters[2]
