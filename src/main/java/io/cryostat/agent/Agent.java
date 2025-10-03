@@ -239,6 +239,21 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
         AgentExitHandler agentExitHandler = null;
         try {
             final Client client = DaggerAgent_Client.builder().build();
+
+            boolean sample = client.fleetSampleValue() < client.fleetSamplingRatio();
+            log.trace(
+                    "fleetSampleValue: {} , fleetSampleRatio: {}",
+                    client.fleetSampleValue(),
+                    client.fleetSamplingRatio());
+            if (!sample) {
+                log.debug(
+                        "Cryostat Agent aborting startup - fleet sample value {} is greater than"
+                                + " the configured sampling ratio {}",
+                        client.fleetSampleValue(),
+                        client.fleetSamplingRatio());
+                return;
+            }
+
             InsightsAgentHelper insights =
                     new InsightsAgentHelper(client.config(), args.getInstrumentation());
 
@@ -350,6 +365,12 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
     @Component(modules = {MainModule.class})
     interface Client {
         Config config();
+
+        @Named(ConfigModule.CRYOSTAT_AGENT_FLEET_SAMPLING_RATIO)
+        double fleetSamplingRatio();
+
+        @Named(MainModule.CRYOSTAT_AGENT_FLEET_SAMPLE_VALUE)
+        double fleetSampleValue();
 
         @Named(ConfigModule.CRYOSTAT_AGENT_BASEURI)
         URI baseUri();
