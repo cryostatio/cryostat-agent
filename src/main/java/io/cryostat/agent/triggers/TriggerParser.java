@@ -55,7 +55,7 @@ public class TriggerParser {
         if (triggerPath.isPresent() && !checkDir()) {
             log.warn(
                     "Configuration directory {} doesn't exist or is missing permissions",
-                    triggerPath.toString());
+                    triggerPath.get().toString());
             return Collections.emptyList();
         }
         try {
