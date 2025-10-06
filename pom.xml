@@ -108,7 +108,7 @@
 
   <shade.prefix>io.cryostat.agent.shaded</shade.prefix>
 
-  <cryostat.server.version.min>4.0.0</cryostat.server.version.min>
+  <cryostat.server.version.min>4.1.0</cryostat.server.version.min>
   <cryostat.server.version.max>5.0.0</cryostat.server.version.max>
 </properties>
 
