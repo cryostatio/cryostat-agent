@@ -91,7 +91,7 @@
   <info.picocli.version>4.7.7</info.picocli.version>
   <com.redhat.insights.agent.version>1.0.3</com.redhat.insights.agent.version>
 
-  <com.github.spotbugs.version>4.9.6</com.github.spotbugs.version>
+  <com.github.spotbugs.version>4.9.7</com.github.spotbugs.version>
   <com.github.spotbugs.plugin.version>4.9.7.0</com.github.spotbugs.plugin.version>
   <org.junit.jupiter.version>6.0.0</org.junit.jupiter.version>
   <org.hamcrest.version>3.0</org.hamcrest.version>
