@@ -115,6 +115,8 @@ public abstract class MainModule {
     private static final String JVM_ID = "JVM_ID";
     private static final String HTTP_CLIENT_SSL_CTX = "HTTP_CLIENT_SSL_CTX";
     private static final String HTTP_SERVER_SSL_CTX = "HTTP_SERVER_SSL_CTX";
+    public static final String CRYOSTAT_AGENT_FLEET_SAMPLE_VALUE =
+            "CRYOSTAT_AGENT_FLEET_SAMPLE_VALUE";
 
     @Provides
     @Singleton
@@ -829,5 +831,12 @@ public abstract class MainModule {
         } catch (IDException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_FLEET_SAMPLE_VALUE)
+    public static double provideCryostatAgentFleetSampleValue() {
+        return Math.random();
     }
 }

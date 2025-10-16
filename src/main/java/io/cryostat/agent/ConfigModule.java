@@ -235,6 +235,9 @@ public abstract class ConfigModule {
     public static final String CRYOSTAT_AGENT_API_WRITES_ENABLED =
             "cryostat.agent.api.writes-enabled";
 
+    public static final String CRYOSTAT_AGENT_FLEET_SAMPLING_RATIO =
+            "cryostat.agent.fleet-sampling-ratio";
+
     @Provides
     @Singleton
     public static Config provideConfig() {
@@ -981,6 +984,13 @@ public abstract class ConfigModule {
     @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_REQUIRED)
     public static boolean provideCryostatAgentTlsEnabled(Config config) {
         return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_TLS_REQUIRED, boolean.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_FLEET_SAMPLING_RATIO)
+    public static double provideCryostatAgentFleetSamplingRatio(Config config) {
+        return config.getValue(CRYOSTAT_AGENT_FLEET_SAMPLING_RATIO, double.class);
     }
 
     public enum URIRange {
