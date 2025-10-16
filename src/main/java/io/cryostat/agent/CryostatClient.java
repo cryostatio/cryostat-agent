@@ -27,7 +27,6 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -48,7 +47,6 @@ import io.cryostat.agent.model.RegistrationInfo;
 import io.cryostat.agent.model.ServerHealth;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import jdk.jfr.Recording;
@@ -76,6 +74,7 @@ public class CryostatClient {
 
     private static final String DISCOVERY_API_PATH = "/api/v4/discovery";
     private static final String CREDENTIALS_API_PATH = "/api/v4/credentials";
+    private static final String CHECK_CREDENTIAL_API_PATH = "/api/beta/discovery/credential_exists";
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
@@ -223,38 +222,39 @@ public class CryostatClient {
     }
 
     private CompletableFuture<Integer> queryExistingCredentials(URI callback) {
-        HttpGet req = new HttpGet(baseUri.resolve(CREDENTIALS_API_PATH));
+        HttpPost req = new HttpPost(baseUri.resolve(CHECK_CREDENTIAL_API_PATH));
+        MultipartEntityBuilder entityBuilder =
+                MultipartEntityBuilder.create()
+                        .addPart(
+                                FormBodyPartBuilder.create(
+                                                "script",
+                                                new StringBody(
+                                                        selfMatchExpression(callback),
+                                                        ContentType.TEXT_PLAIN))
+                                        .build());
         log.trace("{}", req);
+        req.setEntity(entityBuilder.build());
         return supply(req, (res) -> logResponse(req, res))
                 .handle(
                         (res, t) -> {
                             if (t != null) {
-                                log.error("Failed to get credentials", t);
+                                log.error("Failed to check credential", t);
                                 throw new CompletionException(t);
                             }
-                            return assertOkStatus(req, res);
+                            return res;
                         })
                 .thenApply(
                         res -> {
+                            if (!isOkStatus(res)) {
+                                return -1;
+                            }
                             try (InputStream is = res.getEntity().getContent()) {
-                                return mapper.readValue(
-                                        is, new TypeReference<List<StoredCredential>>() {});
+                                return mapper.readValue(is, StoredCredential.class).id;
                             } catch (IOException e) {
                                 log.error("Unable to parse response as JSON", e);
                                 throw new RegistrationException(e);
                             }
                         })
-                .thenApply(
-                        l ->
-                                l.stream()
-                                        .filter(
-                                                sc ->
-                                                        Objects.equals(
-                                                                sc.matchExpression,
-                                                                selfMatchExpression(callback)))
-                                        .map(sc -> sc.id)
-                                        .findFirst()
-                                        .orElse(-1))
                 .whenComplete((v, t) -> req.reset());
     }
 
