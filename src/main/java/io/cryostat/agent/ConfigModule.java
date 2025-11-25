@@ -821,6 +821,13 @@ public abstract class ConfigModule {
 
     @Provides
     @Singleton
+    public static CryostatAgentMXBean provideCryostatAgentMXBean(
+            @Named(CRYOSTAT_AGENT_INSTANCE_ID) String id) {
+        return new CryostatAgent(id);
+    }
+
+    @Provides
+    @Singleton
     @Named(CRYOSTAT_AGENT_APP_NAME)
     public static String provideCryostatAgentAppName(Config config) {
         return config.getValue(CRYOSTAT_AGENT_APP_NAME, String.class);
