@@ -77,7 +77,7 @@
   <com.google.dagger.version>2.55</com.google.dagger.version>
   <com.google.dagger.compiler.version>${com.google.dagger.version}</com.google.dagger.compiler.version>
 
-  <io.cryostat.libcryostat.version>4.1.0-SNAPSHOT</io.cryostat.libcryostat.version>
+  <io.cryostat.libcryostat.version>4.2.0-SNAPSHOT</io.cryostat.libcryostat.version>
 
   <org.apache.commons.lang3.version>3.18.0</org.apache.commons.lang3.version>
   <org.apache.commons.io.version>2.20.0</org.apache.commons.io.version>
@@ -108,7 +108,7 @@
 
   <shade.prefix>io.cryostat.agent.shaded</shade.prefix>
 
-  <cryostat.server.version.min>4.1.0</cryostat.server.version.min>
+  <cryostat.server.version.min>4.2.0</cryostat.server.version.min>
   <cryostat.server.version.max>5.0.0</cryostat.server.version.max>
 </properties>
 
