@@ -80,7 +80,7 @@
   <io.cryostat.libcryostat.version>4.2.0-SNAPSHOT</io.cryostat.libcryostat.version>
 
   <org.apache.commons.lang3.version>3.18.0</org.apache.commons.lang3.version>
-  <org.apache.commons.io.version>2.20.0</org.apache.commons.io.version>
+  <org.apache.commons.io.version>2.21.0</org.apache.commons.io.version>
   <org.apache.httpcomponents.httpclient.version>4.5.14</org.apache.httpcomponents.httpclient.version>
   <org.apache.httpcomponents.httpmime.version>${org.apache.httpcomponents.httpclient.version}</org.apache.httpcomponents.httpmime.version>
   <com.fasterxml.jackson.version>2.19.2</com.fasterxml.jackson.version>
