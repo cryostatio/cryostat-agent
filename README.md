@@ -34,6 +34,7 @@ is an available version upgrade and ensure both your Agent and server match this
 | 3.0.0            | v3.0.0         | v0.4.0        |
 | 3.0.1            | v3.0.1         | v0.4.1        |
 | 4.0.0            | v4.0.0         | v0.5.0        |
+| 4.1.0            | v4.1.0         | v0.6.0        |
 
 ### Build Requirements
 - Git
