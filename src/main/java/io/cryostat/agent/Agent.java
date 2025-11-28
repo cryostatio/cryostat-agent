@@ -17,6 +17,7 @@ package io.cryostat.agent;
 
 import java.io.IOException;
 import java.lang.instrument.Instrumentation;
+import java.lang.management.ManagementFactory;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.file.Path;
@@ -36,6 +37,8 @@ import java.util.stream.Collectors;
 
 import javax.inject.Named;
 import javax.inject.Singleton;
+import javax.management.MBeanServer;
+import javax.management.ObjectName;
 
 import io.cryostat.agent.ConfigModule.URIRange;
 import io.cryostat.agent.VersionInfo.Semver;
@@ -44,6 +47,7 @@ import io.cryostat.agent.insights.InsightsAgentHelper;
 import io.cryostat.agent.model.PluginInfo;
 import io.cryostat.agent.shaded.ShadeLogger;
 import io.cryostat.agent.triggers.TriggerEvaluator;
+import io.cryostat.libcryostat.net.CryostatAgentMXBean;
 
 import com.sun.tools.attach.AgentInitializationException;
 import com.sun.tools.attach.AgentLoadException;
@@ -240,6 +244,10 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
         try {
             final Client client = DaggerAgent_Client.builder().build();
 
+            CryostatAgentMXBean mxBean = client.agentMXBean();
+            MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();
+            mbs.registerMBean(mxBean, new ObjectName(CryostatAgentMXBean.OBJECT_NAME));
+
             boolean sample = client.fleetSampleValue() < client.fleetSamplingRatio();
             log.trace(
                     "fleetSampleValue: {} , fleetSampleRatio: {}",
@@ -377,6 +385,8 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
 
         @Named(ConfigModule.CRYOSTAT_AGENT_BASEURI_RANGE)
         URIRange uriRange();
+
+        CryostatAgent agentMXBean();
 
         WebServer webServer();
 

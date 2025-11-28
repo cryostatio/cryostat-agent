@@ -825,9 +825,9 @@ public abstract class MainModule {
     @Provides
     @Singleton
     @Named(JVM_ID)
-    public static String provideJvmId() {
+    public static String provideJvmId(@Named(ConfigModule.CRYOSTAT_AGENT_INSTANCE_ID) String id) {
         try {
-            return JvmIdentifier.getLocal().getHash();
+            return JvmIdentifier.getLocal(id).getHash();
         } catch (IDException e) {
             throw new RuntimeException(e);
         }

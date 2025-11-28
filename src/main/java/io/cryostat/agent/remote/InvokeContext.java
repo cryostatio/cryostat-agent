@@ -19,6 +19,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.management.ManagementFactory;
+import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.Objects;
 import java.util.UUID;
@@ -45,7 +46,6 @@ class InvokeContext extends MutatingRemoteContext {
 
     private static final String DUMP_THREADS = "threadPrint";
     private static final String DUMP_THREADS_TO_FIlE = "threadDumpToFile";
-    private static final String DIAGNOSTIC_BEAN_NAME = "com.sun.management:type=DiagnosticCommand";
     private final Logger log = LoggerFactory.getLogger(getClass());
     private final ObjectMapper mapper;
 
@@ -74,7 +74,12 @@ class InvokeContext extends MutatingRemoteContext {
                                 mapper.readValue(body, MBeanInvocationRequest.class);
                         String requestId = "";
                         String filename =
-                                config.getValue(ConfigModule.CRYOSTAT_AGENT_APP_NAME, String.class);
+                                Files.createTempFile(
+                                                config.getValue(
+                                                        ConfigModule.CRYOSTAT_AGENT_APP_NAME,
+                                                        String.class),
+                                                (String) null)
+                                        .toString();
                         if (!req.isValid()) {
                             exchange.sendResponseHeaders(
                                     HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
@@ -138,16 +143,24 @@ class InvokeContext extends MutatingRemoteContext {
         public Object[] parameters;
         public String[] signature;
 
+        private static final String CRYOSTAT_AGENT_BEAN_NAME =
+                "io.cryostat.agent.CryostatAgent:name=agent";
         private static final String HOTSPOT_DIAGNOSTIC_BEAN_NAME =
                 "com.sun.management:type=HotSpotDiagnostic";
+        private static final String DIAGNOSTIC_COMMAND_BEAN_NAME =
+                "com.sun.management:type=DiagnosticCommand";
 
         public boolean isValid() {
-            if (this.beanName.equals(ManagementFactory.MEMORY_MXBEAN_NAME)
-                    || this.beanName.equals(HOTSPOT_DIAGNOSTIC_BEAN_NAME)) {
+            if (CRYOSTAT_AGENT_BEAN_NAME.equals(beanName)) {
                 return true;
-            } else if (this.beanName.equals(DIAGNOSTIC_BEAN_NAME)
-                    && (this.operation.equals(DUMP_THREADS)
-                            || this.operation.equals(DUMP_THREADS_TO_FIlE))) {
+            }
+            if (ManagementFactory.MEMORY_MXBEAN_NAME.equals(beanName)
+                    || HOTSPOT_DIAGNOSTIC_BEAN_NAME.equals(beanName)) {
+                return true;
+            }
+            if (DIAGNOSTIC_COMMAND_BEAN_NAME.equals(beanName)
+                    && (DUMP_THREADS.equals(this.operation)
+                            || DUMP_THREADS_TO_FIlE.equals(this.operation))) {
                 return true;
             }
             return false;
