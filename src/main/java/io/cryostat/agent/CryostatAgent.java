@@ -18,6 +18,8 @@ package io.cryostat.agent;
 import javax.inject.Inject;
 import javax.inject.Named;
 
+import io.cryostat.libcryostat.net.CryostatAgentMXBean;
+
 public class CryostatAgent implements CryostatAgentMXBean {
 
     private final String id;
