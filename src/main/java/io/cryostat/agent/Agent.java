@@ -47,6 +47,7 @@ import io.cryostat.agent.insights.InsightsAgentHelper;
 import io.cryostat.agent.model.PluginInfo;
 import io.cryostat.agent.shaded.ShadeLogger;
 import io.cryostat.agent.triggers.TriggerEvaluator;
+import io.cryostat.libcryostat.net.CryostatAgentMXBean;
 
 import com.sun.tools.attach.AgentInitializationException;
 import com.sun.tools.attach.AgentLoadException;
@@ -76,7 +77,6 @@ import sun.misc.SignalHandler;
                         + " JVMs")
 public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
 
-    private static final String MXBEAN_OBJECT_NAME = "io.cryostat.agent.CryostatAgent:name=agent";
     private static final AtomicBoolean needsCleanup = new AtomicBoolean(true);
     private static final String ALL_PIDS = "*";
     static final String AUTO_ATTACH_PID = "0";
@@ -246,7 +246,7 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
 
             CryostatAgentMXBean mxBean = client.agentMXBean();
             MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();
-            mbs.registerMBean(mxBean, new ObjectName(MXBEAN_OBJECT_NAME));
+            mbs.registerMBean(mxBean, new ObjectName(CryostatAgentMXBean.OBJECT_NAME));
 
             boolean sample = client.fleetSampleValue() < client.fleetSamplingRatio();
             log.trace(
