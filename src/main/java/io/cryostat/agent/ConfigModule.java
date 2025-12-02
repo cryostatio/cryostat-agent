@@ -51,6 +51,7 @@ import javax.inject.Singleton;
 import io.cryostat.agent.util.ResourcesUtil;
 import io.cryostat.agent.util.StringUtils;
 import io.cryostat.libcryostat.net.CryostatAgentMXBean;
+
 import dagger.Module;
 import dagger.Provides;
 import org.apache.commons.lang3.tuple.Pair;
