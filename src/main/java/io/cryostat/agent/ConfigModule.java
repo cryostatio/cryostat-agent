@@ -50,6 +50,7 @@ import javax.inject.Singleton;
 
 import io.cryostat.agent.util.ResourcesUtil;
 import io.cryostat.agent.util.StringUtils;
+import io.cryostat.libcryostat.net.CryostatAgentMXBean;
 
 import dagger.Module;
 import dagger.Provides;
@@ -817,6 +818,13 @@ public abstract class ConfigModule {
     public static String provideCryostatAgentInstanceId(Config config) {
         return config.getOptionalValue(CRYOSTAT_AGENT_INSTANCE_ID, String.class)
                 .orElseGet(() -> UUID.randomUUID().toString());
+    }
+
+    @Provides
+    @Singleton
+    public static CryostatAgentMXBean provideCryostatAgentMXBean(
+            @Named(CRYOSTAT_AGENT_INSTANCE_ID) String id) {
+        return new CryostatAgent(id);
     }
 
     @Provides
