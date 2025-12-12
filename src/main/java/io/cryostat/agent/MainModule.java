@@ -50,6 +50,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 
@@ -83,20 +84,21 @@ import dagger.Module;
 import dagger.Provides;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
-import org.apache.http.HttpResponse;
-import org.apache.http.client.HttpClient;
-import org.apache.http.client.config.RequestConfig;
-import org.apache.http.client.protocol.HttpClientContext;
-import org.apache.http.config.RegistryBuilder;
-import org.apache.http.conn.HttpClientConnectionManager;
-import org.apache.http.conn.socket.ConnectionSocketFactory;
-import org.apache.http.conn.socket.PlainConnectionSocketFactory;
-import org.apache.http.conn.ssl.NoopHostnameVerifier;
-import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
-import org.apache.http.impl.client.HttpClients;
-import org.apache.http.impl.client.StandardHttpRequestRetryHandler;
-import org.apache.http.impl.conn.BasicHttpClientConnectionManager;
-import org.apache.http.protocol.HttpContext;
+import org.apache.hc.client5.http.classic.HttpClient;
+import org.apache.hc.client5.http.config.RequestConfig;
+import org.apache.hc.client5.http.impl.DefaultHttpRequestRetryStrategy;
+import org.apache.hc.client5.http.impl.classic.HttpClients;
+import org.apache.hc.client5.http.impl.io.BasicHttpClientConnectionManager;
+import org.apache.hc.client5.http.io.HttpClientConnectionManager;
+import org.apache.hc.client5.http.socket.ConnectionSocketFactory;
+import org.apache.hc.client5.http.socket.PlainConnectionSocketFactory;
+import org.apache.hc.client5.http.ssl.DefaultHostnameVerifier;
+import org.apache.hc.client5.http.ssl.NoopHostnameVerifier;
+import org.apache.hc.client5.http.ssl.SSLConnectionSocketFactory;
+import org.apache.hc.core5.http.HttpResponse;
+import org.apache.hc.core5.http.config.RegistryBuilder;
+import org.apache.hc.core5.http.protocol.HttpContext;
+import org.apache.hc.core5.util.TimeValue;
 import org.projectnessie.cel.tools.ScriptHost;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -634,7 +636,7 @@ public abstract class MainModule {
                 new SSLConnectionSocketFactory(
                         sslContext,
                         verifyHostname
-                                ? SSLConnectionSocketFactory.getDefaultHostnameVerifier()
+                                ? new DefaultHostnameVerifier()
                                 : NoopHostnameVerifier.INSTANCE);
 
         RegistryBuilder<ConnectionSocketFactory> socketFactoryRegistryBuilder =
@@ -646,24 +648,21 @@ public abstract class MainModule {
         HttpClientConnectionManager connMan =
                 new BasicHttpClientConnectionManager(socketFactoryRegistryBuilder.build());
         return HttpClients.custom()
-                .setSSLContext(sslContext)
-                .setSSLSocketFactory(sslSocketFactory)
                 .setConnectionManager(connMan)
                 .setDefaultRequestConfig(
                         RequestConfig.custom()
                                 .setAuthenticationEnabled(true)
                                 .setExpectContinueEnabled(true)
-                                .setConnectTimeout(connectTimeout)
-                                .setSocketTimeout(responseTimeout)
+                                .setConnectTimeout(connectTimeout, TimeUnit.MILLISECONDS)
+                                .setResponseTimeout(responseTimeout, TimeUnit.MILLISECONDS)
                                 .setRedirectsEnabled(true)
                                 .build())
-                .setRetryHandler(
-                        new StandardHttpRequestRetryHandler(retryCount, true) {
+                .setRetryStrategy(
+                        // TODO configurable retry time
+                        new DefaultHttpRequestRetryStrategy(retryCount, TimeValue.ofSeconds(5)) {
                             @Override
                             public boolean retryRequest(
-                                    IOException exception,
-                                    int executionCount,
-                                    HttpContext context) {
+                                    HttpResponse resp, int executionCount, HttpContext context) {
                                 // if the Authorization header we should send may change
                                 // over time, ex. we read a Bearer token from a file, then
                                 // it is possible that we get a 401 or 403 response because
@@ -672,18 +671,14 @@ public abstract class MainModule {
                                 // authenticator. So, in this set of conditions, we should
                                 // refresh our header value and try again right away
                                 if (authorizationType.isDynamic()) {
-                                    HttpClientContext clientCtx = HttpClientContext.adapt(context);
-                                    if (clientCtx.isRequestSent()) {
-                                        HttpResponse resp = clientCtx.getResponse();
-                                        if (resp != null && resp.getStatusLine() != null) {
-                                            int sc = resp.getStatusLine().getStatusCode();
-                                            if (executionCount < 2 && (sc == 401 || sc == 403)) {
-                                                return true;
-                                            }
+                                    if (resp != null) {
+                                        int sc = resp.getCode();
+                                        if (executionCount < 2 && (sc == 401 || sc == 403)) {
+                                            return true;
                                         }
                                     }
                                 }
-                                return super.retryRequest(exception, executionCount, context);
+                                return super.retryRequest(resp, executionCount, context);
                             }
                         })
                 .build();
