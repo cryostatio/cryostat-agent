@@ -19,9 +19,13 @@ import java.io.BufferedInputStream;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InterruptedIOException;
 import java.math.BigInteger;
+import java.net.ConnectException;
 import java.net.InetSocketAddress;
+import java.net.NoRouteToHostException;
 import java.net.URI;
+import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.Charset;
@@ -45,6 +49,7 @@ import java.security.spec.KeySpec;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -60,6 +65,7 @@ import javax.net.ssl.KeyManager;
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
+import javax.net.ssl.SSLException;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
@@ -87,6 +93,7 @@ import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.hc.client5.http.classic.HttpClient;
 import org.apache.hc.client5.http.config.RequestConfig;
 import org.apache.hc.client5.http.impl.DefaultHttpRequestRetryStrategy;
+import org.apache.hc.client5.http.impl.classic.HttpClientBuilder;
 import org.apache.hc.client5.http.impl.classic.HttpClients;
 import org.apache.hc.client5.http.impl.io.BasicHttpClientConnectionManager;
 import org.apache.hc.client5.http.io.HttpClientConnectionManager;
@@ -95,7 +102,15 @@ import org.apache.hc.client5.http.socket.PlainConnectionSocketFactory;
 import org.apache.hc.client5.http.ssl.DefaultHostnameVerifier;
 import org.apache.hc.client5.http.ssl.NoopHostnameVerifier;
 import org.apache.hc.client5.http.ssl.SSLConnectionSocketFactory;
+import org.apache.hc.core5.http.ConnectionClosedException;
+import org.apache.hc.core5.http.EntityDetails;
+import org.apache.hc.core5.http.HttpException;
+import org.apache.hc.core5.http.HttpHeaders;
+import org.apache.hc.core5.http.HttpRequest;
+import org.apache.hc.core5.http.HttpRequestInterceptor;
+import org.apache.hc.core5.http.HttpStatus;
 import org.apache.hc.core5.http.config.RegistryBuilder;
+import org.apache.hc.core5.http.protocol.HttpContext;
 import org.apache.hc.core5.util.TimeValue;
 import org.projectnessie.cel.tools.ScriptHost;
 import org.slf4j.Logger;
@@ -622,7 +637,11 @@ public abstract class MainModule {
     @Provides
     @Singleton
     public static HttpClient provideHttpClient(
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_HTTP_USE_PREEMPTIVE_AUTHENTICATION)
+                    boolean preemptiveAuth,
             AuthorizationType authorizationType,
+            @Named(ConfigModule.CRYOSTAT_AGENT_AUTHORIZATION)
+                    Supplier<Optional<String>> authorizationSupplier,
             @Named(HTTP_CLIENT_SSL_CTX) SSLContext sslContext,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_VERIFY_HOSTNAME)
                     boolean verifyHostname,
@@ -646,20 +665,78 @@ public abstract class MainModule {
         }
         HttpClientConnectionManager connMan =
                 new BasicHttpClientConnectionManager(socketFactoryRegistryBuilder.build());
-        return HttpClients.custom()
-                .setConnectionManager(connMan)
-                .setDefaultRequestConfig(
-                        RequestConfig.custom()
-                                .setAuthenticationEnabled(true)
-                                .setExpectContinueEnabled(true)
-                                .setConnectTimeout(connectTimeout, TimeUnit.MILLISECONDS)
-                                .setResponseTimeout(responseTimeout, TimeUnit.MILLISECONDS)
-                                .setRedirectsEnabled(true)
-                                .build())
-                .setRetryStrategy(
-                        new DefaultHttpRequestRetryStrategy(
-                                retryCount, TimeValue.ofSeconds(retryTime)))
-                .build();
+        HttpClientBuilder builder =
+                HttpClients.custom()
+                        .setConnectionManager(connMan)
+                        .setDefaultRequestConfig(
+                                RequestConfig.custom()
+                                        .setAuthenticationEnabled(!preemptiveAuth)
+                                        .setExpectContinueEnabled(true)
+                                        .setConnectTimeout(connectTimeout, TimeUnit.MILLISECONDS)
+                                        .setResponseTimeout(responseTimeout, TimeUnit.MILLISECONDS)
+                                        .setRedirectsEnabled(true)
+                                        .build())
+                        .setRetryStrategy(
+                                new AgentHttpRetryStrategy(
+                                        authorizationType,
+                                        retryTime,
+                                        TimeValue.ofSeconds(retryTime)));
+        if (preemptiveAuth) {
+            builder =
+                    builder.addRequestInterceptorLast(
+                            new AgentPreemptiveAuthInterceptor(authorizationSupplier));
+        }
+        return builder.build();
+    }
+
+    private static class AgentPreemptiveAuthInterceptor implements HttpRequestInterceptor {
+        private final Supplier<Optional<String>> authorizationSupplier;
+
+        private AgentPreemptiveAuthInterceptor(Supplier<Optional<String>> authorizationSupplier) {
+            this.authorizationSupplier = authorizationSupplier;
+        }
+
+        @Override
+        public void process(HttpRequest request, EntityDetails entity, HttpContext context)
+                throws HttpException, IOException {
+            authorizationSupplier
+                    .get()
+                    .ifPresent(c -> request.setHeader(HttpHeaders.AUTHORIZATION, c));
+        }
+    }
+
+    private static class AgentHttpRetryStrategy extends DefaultHttpRequestRetryStrategy {
+        AgentHttpRetryStrategy(
+                AuthorizationType authorizationType,
+                int maxRetries,
+                TimeValue defaultRetryInterval) {
+            super(
+                    maxRetries,
+                    defaultRetryInterval,
+                    Arrays.asList(
+                            InterruptedIOException.class,
+                            UnknownHostException.class,
+                            ConnectException.class,
+                            ConnectionClosedException.class,
+                            NoRouteToHostException.class,
+                            SSLException.class),
+                    getRetriableCodes(authorizationType));
+        }
+
+        private static Set<Integer> getRetriableCodes(AuthorizationType authorizationType) {
+            Set<Integer> codes = new HashSet<>();
+            codes.addAll(
+                    Set.of(HttpStatus.SC_TOO_MANY_REQUESTS, HttpStatus.SC_SERVICE_UNAVAILABLE));
+            if (authorizationType.isDynamic()) {
+                // if the Authorization header we should send may change over time, ex. we read a
+                // Bearer token from a file, then it is possible that we get a 401 or 403 response
+                // because the token expired in between the time that we read it from our filesystem
+                // and when it was processed by the authenticator. So, in this set of conditions, we
+                // should refresh our header value and try again
+                codes.addAll(Set.of(HttpStatus.SC_UNAUTHORIZED, HttpStatus.SC_FORBIDDEN));
+            }
+            return codes;
+        }
     }
 
     @Provides
@@ -712,23 +789,13 @@ public abstract class MainModule {
             ScheduledExecutorService executor,
             ObjectMapper objectMapper,
             HttpClient http,
-            @Named(ConfigModule.CRYOSTAT_AGENT_AUTHORIZATION)
-                    Supplier<Optional<String>> authorizationSupplier,
             @Named(ConfigModule.CRYOSTAT_AGENT_INSTANCE_ID) String instanceId,
             @Named(JVM_ID) String jvmId,
             @Named(ConfigModule.CRYOSTAT_AGENT_APP_NAME) String appName,
             @Named(ConfigModule.CRYOSTAT_AGENT_BASEURI) URI baseUri,
             @Named(ConfigModule.CRYOSTAT_AGENT_REALM) String realm) {
         return new CryostatClient(
-                executor,
-                objectMapper,
-                http,
-                authorizationSupplier,
-                instanceId,
-                jvmId,
-                appName,
-                baseUri,
-                realm);
+                executor, objectMapper, http, instanceId, jvmId, appName, baseUri, realm);
     }
 
     @Provides

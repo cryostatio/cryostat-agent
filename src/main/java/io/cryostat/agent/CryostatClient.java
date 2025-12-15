@@ -35,7 +35,6 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.function.Function;
-import java.util.function.Supplier;
 
 import io.cryostat.agent.FlightRecorderHelper.ConfigurationInfo;
 import io.cryostat.agent.FlightRecorderHelper.TemplatedRecording;
@@ -84,7 +83,6 @@ public class CryostatClient {
     private final ObjectMapper mapper;
     private final HttpHost host;
     private final HttpClient http;
-    private final Supplier<Optional<String>> authorizationSupplier;
 
     private final String appName;
     private final String instanceId;
@@ -96,7 +94,6 @@ public class CryostatClient {
             Executor executor,
             ObjectMapper mapper,
             HttpClient http,
-            Supplier<Optional<String>> authorizationSupplier,
             String instanceId,
             String jvmId,
             String appName,
@@ -106,7 +103,6 @@ public class CryostatClient {
         this.mapper = mapper;
         this.host = HttpHost.create(baseUri);
         this.http = http;
-        this.authorizationSupplier = authorizationSupplier;
         this.instanceId = instanceId;
         this.jvmId = jvmId;
         this.appName = appName;
@@ -506,12 +502,6 @@ public class CryostatClient {
 
     private <T> CompletableFuture<T> supply(
             HttpUriRequestBase req, Function<ClassicHttpResponse, T> fn) {
-        // FIXME Apache httpclient 4 does not support Bearer token auth easily, so we explicitly set
-        // the header here. This is a form of preemptive auth - the token is always sent with the
-        // request. It would be better to attempt to send the request to the server first and see if
-        // it responds with an auth challenge, and then send the auth information we have, and use
-        // the client auth cache. This flow is supported for Bearer tokens in httpclient 5.
-        authorizationSupplier.get().ifPresent(v -> req.addHeader(HttpHeaders.AUTHORIZATION, v));
         return CompletableFuture.supplyAsync(() -> fn.apply(executeQuiet(req)), executor);
     }
 
