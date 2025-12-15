@@ -95,9 +95,7 @@ import org.apache.hc.client5.http.socket.PlainConnectionSocketFactory;
 import org.apache.hc.client5.http.ssl.DefaultHostnameVerifier;
 import org.apache.hc.client5.http.ssl.NoopHostnameVerifier;
 import org.apache.hc.client5.http.ssl.SSLConnectionSocketFactory;
-import org.apache.hc.core5.http.HttpResponse;
 import org.apache.hc.core5.http.config.RegistryBuilder;
-import org.apache.hc.core5.http.protocol.HttpContext;
 import org.apache.hc.core5.util.TimeValue;
 import org.projectnessie.cel.tools.ScriptHost;
 import org.slf4j.Logger;
@@ -631,6 +629,7 @@ public abstract class MainModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_CONNECT_TIMEOUT_MS) int connectTimeout,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_TIMEOUT_MS) int responseTimeout,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_RETRY_COUNT) int retryCount,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_RETRY_TIME) int retryTime,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_REQUIRED) boolean tlsRequired) {
         SSLConnectionSocketFactory sslSocketFactory =
                 new SSLConnectionSocketFactory(
@@ -658,29 +657,8 @@ public abstract class MainModule {
                                 .setRedirectsEnabled(true)
                                 .build())
                 .setRetryStrategy(
-                        // TODO configurable retry time
-                        new DefaultHttpRequestRetryStrategy(retryCount, TimeValue.ofSeconds(5)) {
-                            @Override
-                            public boolean retryRequest(
-                                    HttpResponse resp, int executionCount, HttpContext context) {
-                                // if the Authorization header we should send may change
-                                // over time, ex. we read a Bearer token from a file, then
-                                // it is possible that we get a 401 or 403 response because
-                                // the token expired in between the time that we read it
-                                // from our filesystem and when it was received by the
-                                // authenticator. So, in this set of conditions, we should
-                                // refresh our header value and try again right away
-                                if (authorizationType.isDynamic()) {
-                                    if (resp != null) {
-                                        int sc = resp.getCode();
-                                        if (executionCount < 2 && (sc == 401 || sc == 403)) {
-                                            return true;
-                                        }
-                                    }
-                                }
-                                return super.retryRequest(resp, executionCount, context);
-                            }
-                        })
+                        new DefaultHttpRequestRetryStrategy(
+                                retryCount, TimeValue.ofSeconds(retryTime)))
                 .build();
     }
 
