@@ -48,8 +48,8 @@ import java.util.stream.StreamSupport;
 import javax.inject.Named;
 import javax.inject.Singleton;
 
+import io.cryostat.agent.mxbean.CryostatAgentMXBeanImpl;
 import io.cryostat.agent.util.ResourcesUtil;
-import io.cryostat.agent.util.StringUtils;
 import io.cryostat.libcryostat.net.CryostatAgentMXBean;
 
 import dagger.Module;
@@ -844,7 +844,7 @@ public abstract class ConfigModule {
     @Singleton
     public static CryostatAgentMXBean provideCryostatAgentMXBean(
             @Named(CRYOSTAT_AGENT_INSTANCE_ID) String id) {
-        return new CryostatAgent(id);
+        return new CryostatAgentMXBeanImpl(id);
     }
 
     @Provides

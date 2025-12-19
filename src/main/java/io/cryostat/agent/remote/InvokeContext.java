@@ -34,6 +34,7 @@ import javax.management.ReflectionException;
 
 import io.cryostat.agent.ConfigModule;
 import io.cryostat.agent.CryostatClient;
+import io.cryostat.libcryostat.net.CryostatAgentMXBean;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
@@ -143,8 +144,6 @@ class InvokeContext extends MutatingRemoteContext {
         public Object[] parameters;
         public String[] signature;
 
-        private static final String CRYOSTAT_AGENT_BEAN_NAME =
-                "io.cryostat.agent.CryostatAgent:name=agent";
         private static final String HOTSPOT_DIAGNOSTIC_BEAN_NAME =
                 "com.sun.management:type=HotSpotDiagnostic";
         private static final String DIAGNOSTIC_COMMAND_BEAN_NAME =
@@ -153,7 +152,7 @@ class InvokeContext extends MutatingRemoteContext {
                 "org.openjdk.jmc.jfr.agent:type=AgentController";
 
         public boolean isValid() {
-            if (CRYOSTAT_AGENT_BEAN_NAME.equals(beanName)) {
+            if (CryostatAgentMXBean.OBJECT_NAME.equals(beanName)) {
                 return true;
             }
             if (ManagementFactory.MEMORY_MXBEAN_NAME.equals(beanName)
