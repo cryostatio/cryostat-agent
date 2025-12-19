@@ -13,19 +13,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.cryostat.agent;
+package io.cryostat.agent.mxbean;
 
 import javax.inject.Inject;
 import javax.inject.Named;
 
+import io.cryostat.agent.ConfigModule;
 import io.cryostat.libcryostat.net.CryostatAgentMXBean;
 
-public class CryostatAgent implements CryostatAgentMXBean {
+public class CryostatAgentMXBeanImpl implements CryostatAgentMXBean {
 
     private final String id;
 
     @Inject
-    CryostatAgent(@Named(ConfigModule.CRYOSTAT_AGENT_INSTANCE_ID) String id) {
+    public CryostatAgentMXBeanImpl(@Named(ConfigModule.CRYOSTAT_AGENT_INSTANCE_ID) String id) {
         this.id = id;
     }
 
