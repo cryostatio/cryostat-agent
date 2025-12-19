@@ -75,10 +75,10 @@ class RecordingsContext implements RemoteContext {
     @Override
     public void handle(HttpExchange exchange) throws IOException {
         try {
-            String mtd = exchange.getRequestMethod();
             if (!ensureMethodAccepted(exchange)) {
                 return;
             }
+            String mtd = exchange.getRequestMethod();
             long id = Long.MIN_VALUE;
             switch (mtd) {
                 case "GET":

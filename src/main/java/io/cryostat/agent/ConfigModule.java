@@ -23,6 +23,7 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.net.UnknownHostException;
 import java.nio.charset.Charset;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.AccessController;
 import java.security.MessageDigest;
@@ -223,6 +224,9 @@ public abstract class ConfigModule {
             "cryostat.agent.harvester.max-size-b";
     public static final String CRYOSTAT_AGENT_HARVESTER_AUTOANALYZE =
             "cryostat.agent.harvester.autoanalyze";
+
+    public static final String CRYOSTAT_AGENT_ASYNC_PROFILER_REPOSITORY_PATH =
+            "cryostat.agent.async-profiler.repository.path";
 
     public static final String CRYOSTAT_AGENT_SMART_TRIGGER_DEFINITIONS =
             "cryostat.agent.smart-trigger.definitions";
@@ -970,6 +974,24 @@ public abstract class ConfigModule {
     @Named(CRYOSTAT_AGENT_HARVESTER_AUTOANALYZE)
     public static boolean provideCryostatAgentHarvesterAutoanalyze(Config config) {
         return config.getValue(CRYOSTAT_AGENT_HARVESTER_AUTOANALYZE, boolean.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_ASYNC_PROFILER_REPOSITORY_PATH)
+    public static Path provideCryostatAgentAsyncProfilerRepositoryPath(Config config) {
+        try {
+            Path repository =
+                    config.getOptionalValue(
+                                    CRYOSTAT_AGENT_ASYNC_PROFILER_REPOSITORY_PATH, String.class)
+                            .map(Path::of)
+                            .orElse(Files.createTempDirectory("cryostat-async-profiler"));
+            log.debug("Using async-profiler repository: {}", repository);
+            return repository;
+        } catch (IOException ioe) {
+            log.error("Failed to create async-profiler repository", ioe);
+            throw new RuntimeException(ioe);
+        }
     }
 
     @Provides
