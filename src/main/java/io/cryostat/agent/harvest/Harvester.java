@@ -38,13 +38,13 @@ import io.cryostat.agent.CryostatClient;
 import io.cryostat.agent.FlightRecorderHelper;
 import io.cryostat.agent.FlightRecorderHelper.TemplatedRecording;
 import io.cryostat.agent.Registration;
-import io.cryostat.agent.util.StringUtils;
 
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import jdk.jfr.FlightRecorder;
 import jdk.jfr.FlightRecorderListener;
 import jdk.jfr.Recording;
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

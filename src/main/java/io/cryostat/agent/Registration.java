@@ -37,9 +37,10 @@ import java.util.stream.Collectors;
 import io.cryostat.agent.VersionInfo.Semver;
 import io.cryostat.agent.model.DiscoveryNode;
 import io.cryostat.agent.model.PluginInfo;
-import io.cryostat.agent.util.StringUtils;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hc.core5.net.URIBuilder;
+import org.apache.http.client.utils.URIBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
