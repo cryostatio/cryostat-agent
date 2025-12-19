@@ -45,6 +45,7 @@ import io.cryostat.agent.VersionInfo.Semver;
 import io.cryostat.agent.harvest.Harvester;
 import io.cryostat.agent.insights.InsightsAgentHelper;
 import io.cryostat.agent.model.PluginInfo;
+import io.cryostat.agent.mxbean.CryostatAgentMXBeanImpl;
 import io.cryostat.agent.shaded.ShadeLogger;
 import io.cryostat.agent.triggers.TriggerEvaluator;
 import io.cryostat.libcryostat.net.CryostatAgentMXBean;
@@ -386,7 +387,7 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
         @Named(ConfigModule.CRYOSTAT_AGENT_BASEURI_RANGE)
         URIRange uriRange();
 
-        CryostatAgent agentMXBean();
+        CryostatAgentMXBeanImpl agentMXBean();
 
         WebServer webServer();
 
