@@ -54,6 +54,7 @@ import io.cryostat.libcryostat.net.CryostatAgentMXBean;
 
 import dagger.Module;
 import dagger.Provides;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.eclipse.microprofile.config.Config;
 import org.eclipse.microprofile.config.ConfigProvider;
