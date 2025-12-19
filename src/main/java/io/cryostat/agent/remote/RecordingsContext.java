@@ -34,7 +34,6 @@ import java.util.stream.Collectors;
 import javax.inject.Inject;
 
 import io.cryostat.agent.FlightRecorderHelper;
-import io.cryostat.agent.util.StringUtils;
 import io.cryostat.libcryostat.serialization.SerializableRecordingDescriptor;
 import io.cryostat.libcryostat.templates.InvalidEventTemplateException;
 
@@ -43,6 +42,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
 import jdk.jfr.Recording;
 import jdk.jfr.RecordingState;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.http.HttpStatus;
 import org.eclipse.microprofile.config.Config;
 import org.slf4j.Logger;
