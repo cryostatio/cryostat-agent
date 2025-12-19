@@ -149,6 +149,8 @@ class InvokeContext extends MutatingRemoteContext {
                 "com.sun.management:type=HotSpotDiagnostic";
         private static final String DIAGNOSTIC_COMMAND_BEAN_NAME =
                 "com.sun.management:type=DiagnosticCommand";
+        private static final String JMC_AGENT_BEAN_NAME =
+                "org.openjdk.jmc.jfr.agent:type=AgentController";
 
         public boolean isValid() {
             if (CRYOSTAT_AGENT_BEAN_NAME.equals(beanName)) {
@@ -161,6 +163,9 @@ class InvokeContext extends MutatingRemoteContext {
             if (DIAGNOSTIC_COMMAND_BEAN_NAME.equals(beanName)
                     && (DUMP_THREADS.equals(this.operation)
                             || DUMP_THREADS_TO_FIlE.equals(this.operation))) {
+                return true;
+            }
+            if (JMC_AGENT_BEAN_NAME.equals(beanName)) {
                 return true;
             }
             return false;
