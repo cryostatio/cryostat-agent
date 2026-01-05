@@ -89,7 +89,6 @@ import com.sun.net.httpserver.HttpsServer;
 import dagger.Lazy;
 import dagger.Module;
 import dagger.Provides;
-import one.profiler.AsyncProfiler;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.hc.client5.http.classic.HttpClient;
@@ -863,21 +862,6 @@ public abstract class MainModule {
     @Singleton
     public static FlightRecorderHelper provideFlightRecorderHelper() {
         return new FlightRecorderHelper();
-    }
-
-    @Provides
-    @Singleton
-    public static Optional<AsyncProfiler> provideAsyncProfiler() {
-        Logger log = LoggerFactory.getLogger(Agent.class);
-        try {
-            // FIXME replace this with MBean instance. Instantiating directly is convenient for
-            // prototyping, but in practice we will need to check for an optional MBean to be
-            // available
-            return Optional.of(AsyncProfiler.getInstance());
-        } catch (Exception e) {
-            log.error("Failed to initialize async-profiler", e);
-            return Optional.empty();
-        }
     }
 
     @Provides

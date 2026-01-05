@@ -34,6 +34,7 @@ import javax.management.ReflectionException;
 
 import io.cryostat.agent.ConfigModule;
 import io.cryostat.agent.CryostatClient;
+import io.cryostat.agent.remote.AsyncProfilerContext.AsyncProfilerMXBean;
 import io.cryostat.libcryostat.net.CryostatAgentMXBean;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -165,6 +166,9 @@ class InvokeContext extends MutatingRemoteContext {
                 return true;
             }
             if (JMC_AGENT_BEAN_NAME.equals(beanName)) {
+                return true;
+            }
+            if (AsyncProfilerMXBean.OBJECT_NAME.equals(beanName)) {
                 return true;
             }
             return false;

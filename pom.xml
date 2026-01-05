@@ -78,7 +78,6 @@
   <com.google.dagger.compiler.version>${com.google.dagger.version}</com.google.dagger.compiler.version>
 
   <io.cryostat.libcryostat.version>4.2.0-SNAPSHOT</io.cryostat.libcryostat.version>
-  <async-profiler.version>4.2</async-profiler.version>
 
   <org.apache.commons.lang3.version>3.20.0</org.apache.commons.lang3.version>
   <org.apache.commons.io.version>2.21.0</org.apache.commons.io.version>
@@ -238,12 +237,6 @@
         <artifactId>jdk.tools</artifactId>
       </exclusion>
     </exclusions>
-  </dependency>
-  <!-- FIXME remove explicit dependency, this is just for ease of prototyping -->
-  <dependency>
-    <groupId>tools.profiler</groupId>
-    <artifactId>async-profiler</artifactId>
-    <version>${async-profiler.version}</version>
   </dependency>
 
   <!-- test deps -->
