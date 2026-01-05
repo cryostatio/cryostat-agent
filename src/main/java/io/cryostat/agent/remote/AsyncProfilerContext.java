@@ -129,6 +129,7 @@ class AsyncProfilerContext extends MutatingRemoteContext {
 
     private Optional<AsyncProfilerMXBean> profilerInstance() {
         try {
+            // TODO cache instance once we get one
             return Optional.of(
                     MBeanServerInvocationHandler.newProxyInstance(
                             ManagementFactory.getPlatformMBeanServer(),
