@@ -18,6 +18,7 @@ package io.cryostat.agent.remote;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.lang.management.ManagementFactory;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -34,12 +35,15 @@ import java.util.stream.Collectors;
 
 import javax.inject.Inject;
 import javax.inject.Named;
+import javax.management.MBeanServerInvocationHandler;
+import javax.management.MalformedObjectNameException;
+import javax.management.ObjectName;
 
 import io.cryostat.agent.ConfigModule;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
-import one.profiler.AsyncProfiler;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.http.HttpStatus;
 import org.eclipse.microprofile.config.Config;
@@ -56,7 +60,6 @@ class AsyncProfilerContext extends MutatingRemoteContext {
                     "^" + PATH + "(" + UUID_PATTERN + "|status)$",
                     Pattern.MULTILINE | Pattern.CASE_INSENSITIVE);
 
-    private final Optional<AsyncProfiler> profiler;
     private final Path repository;
     private final ProfileIdGenerator idGenerator = () -> UUID.randomUUID().toString();
     private final ObjectMapper mapper;
@@ -66,11 +69,9 @@ class AsyncProfilerContext extends MutatingRemoteContext {
     AsyncProfilerContext(
             Config config,
             ObjectMapper mapper,
-            Optional<AsyncProfiler> profiler,
             @Named(ConfigModule.CRYOSTAT_AGENT_ASYNC_PROFILER_REPOSITORY_PATH) Path repository) {
         super(config);
         this.mapper = mapper;
-        this.profiler = profiler;
         this.repository = repository;
     }
 
@@ -126,6 +127,20 @@ class AsyncProfilerContext extends MutatingRemoteContext {
         }
     }
 
+    private Optional<AsyncProfilerMXBean> profilerInstance() {
+        try {
+            return Optional.of(
+                    MBeanServerInvocationHandler.newProxyInstance(
+                            ManagementFactory.getPlatformMBeanServer(),
+                            new ObjectName(AsyncProfilerMXBean.OBJECT_NAME),
+                            AsyncProfilerMXBean.class,
+                            false));
+        } catch (MalformedObjectNameException e) {
+            log.error("AsyncProfilerMXBean lookup failure", e);
+            return Optional.empty();
+        }
+    }
+
     private boolean ensureMethodAccepted(HttpExchange exchange) throws IOException {
         Set<String> alwaysAllowed = Set.of("GET");
         String mtd = exchange.getRequestMethod();
@@ -155,7 +170,8 @@ class AsyncProfilerContext extends MutatingRemoteContext {
 
     private boolean ensureProfilerAvailable(HttpExchange exchange) {
         try {
-            return profiler.map(AsyncProfiler::getVersion)
+            return profilerInstance()
+                    .map(AsyncProfilerMXBean::getVersion)
                     .map(StringUtils::isNotBlank)
                     .orElse(false);
         } catch (Exception e) {
@@ -193,14 +209,14 @@ class AsyncProfilerContext extends MutatingRemoteContext {
     }
 
     private ProfilerStatus getProfilerStatus() throws IOException {
-        String status = profiler.orElseThrow().execute("status");
+        String status = profilerInstance().orElseThrow().execute("status");
         return ProfilerStatus.fromExecOutput(status);
     }
 
     private Map<String, List<String>> getAvailableEvents() throws IOException {
         HashMap<String, List<String>> map = new HashMap<>();
         List<String> parts =
-                Arrays.asList(profiler.orElseThrow().execute("list").split("\n")).stream()
+                Arrays.asList(profilerInstance().orElseThrow().execute("list").split("\n")).stream()
                         .map(String::strip)
                         .filter(StringUtils::isNotBlank)
                         .collect(Collectors.toList());
@@ -248,6 +264,7 @@ class AsyncProfilerContext extends MutatingRemoteContext {
                         () -> sendHeader(exchange, HttpStatus.SC_NOT_FOUND));
     }
 
+    @SuppressFBWarnings("NP_UNWRITTEN_PUBLIC_OR_PROTECTED_FIELD")
     private void handleStart(HttpExchange exchange) throws IOException {
         if (getProfilerStatus().equals(ProfilerStatus.RUNNING)) {
             sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
@@ -266,7 +283,8 @@ class AsyncProfilerContext extends MutatingRemoteContext {
                     req.events.stream()
                             .map(s -> String.format("event=%s", s))
                             .collect(Collectors.joining(","));
-            profiler.orElseThrow()
+            profilerInstance()
+                    .orElseThrow()
                     .execute(
                             String.format(
                                     "start,jfr,%s,timeout=%d,file=%s",
@@ -312,6 +330,7 @@ class AsyncProfilerContext extends MutatingRemoteContext {
         }
     }
 
+    @SuppressFBWarnings("NP_UNWRITTEN_PUBLIC_OR_PROTECTED_FIELD")
     static class StartProfileRequest {
         public List<String> events;
         public long duration;
@@ -340,5 +359,15 @@ class AsyncProfilerContext extends MutatingRemoteContext {
 
     interface ProfileIdGenerator {
         String next();
+    }
+
+    // https://github.com/async-profiler/async-profiler/blob/2a4f329cbae8f849642d4cd74b766ced79ed3557/src/api/one/profiler/AsyncProfilerMXBean.java#L19
+    public interface AsyncProfilerMXBean {
+        public String OBJECT_NAME = "one.profiler:type=AsyncProfiler";
+
+        String getVersion();
+
+        String execute(String command)
+                throws IllegalArgumentException, IllegalStateException, java.io.IOException;
     }
 }
