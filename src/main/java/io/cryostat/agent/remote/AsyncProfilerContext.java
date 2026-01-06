@@ -21,13 +21,16 @@ import java.io.OutputStream;
 import java.lang.management.ManagementFactory;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -253,15 +256,37 @@ class AsyncProfilerContext extends MutatingRemoteContext {
 
     private void handleList(HttpExchange exchange) {
         try (OutputStream response = exchange.getResponseBody()) {
-            List<String> profiles =
+            List<AsyncProfile> profiles =
                     Files.list(repository)
-                            .map(Path::getFileName)
-                            .map(Path::toString)
-                            .filter(
-                                    s ->
-                                            this.currentProfile == null
-                                                    || !s.equals(this.currentProfile.id))
+                            .map(
+                                    p -> {
+                                        String name = p.getFileName().toString();
+                                        // exclude file being written to by the active session
+                                        // since that file content is not yet ready to be exported
+                                        if (this.currentProfile != null
+                                                && name.equals(this.currentProfile.id)) {
+                                            return null;
+                                        }
+                                        Instant created = Instant.EPOCH;
+                                        Instant lastModified = Instant.EPOCH;
+                                        try {
+                                            BasicFileAttributes bfa =
+                                                    Files.readAttributes(
+                                                            p, BasicFileAttributes.class);
+                                            created = bfa.creationTime().toInstant();
+                                            lastModified = bfa.lastModifiedTime().toInstant();
+                                        } catch (IOException ioe) {
+                                            log.error("failed to read file attributes", ioe);
+                                        }
+                                        AsyncProfile profile = new AsyncProfile();
+                                        profile.id = name;
+                                        profile.starttime = created.getEpochSecond();
+                                        profile.endtime = lastModified.getEpochSecond();
+                                        return profile;
+                                    })
+                            .filter(Objects::nonNull)
                             .collect(Collectors.toList());
+            profiles.sort(Comparator.<AsyncProfile>comparingLong(p -> p.starttime).reversed());
             exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
             mapper.writeValue(response, profiles);
         } catch (Exception e) {
@@ -308,12 +333,13 @@ class AsyncProfilerContext extends MutatingRemoteContext {
             String id = idGenerator.next();
             this.currentProfile = req;
             this.currentProfile.id = id;
-            this.currentProfile.startTime = System.currentTimeMillis();
+            this.currentProfile.startTime = Instant.now().getEpochSecond();
             this.scheduler.schedule(
                     () -> AsyncProfilerContext.this.currentProfile = null,
                     req.duration,
                     TimeUnit.SECONDS);
             Path profile = repository.resolve(this.currentProfile.id);
+            Files.deleteIfExists(profile);
             String events =
                     req.events.stream()
                             .map(s -> String.format("event=%s", s))
@@ -372,6 +398,13 @@ class AsyncProfilerContext extends MutatingRemoteContext {
         boolean isValid() {
             return !events.isEmpty();
         }
+    }
+
+    @SuppressFBWarnings("URF_UNREAD_PUBLIC_OR_PROTECTED_FIELD")
+    static class AsyncProfile {
+        public String id;
+        public long starttime;
+        public long endtime;
     }
 
     enum ProfilerStatus {
