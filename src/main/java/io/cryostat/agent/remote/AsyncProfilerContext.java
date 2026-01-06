@@ -352,8 +352,9 @@ class AsyncProfilerContext extends MutatingRemoteContext {
         } catch (IOException e) {
             log.error("I/O failure", e);
             sendHeader(exchange, HttpStatus.SC_INTERNAL_SERVER_ERROR);
-        } catch (IllegalStateException e) {
+        } catch (IllegalStateException | IllegalArgumentException e) {
             log.error("Failed to start profile", e);
+            this.currentProfile = null;
             sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
         }
     }
