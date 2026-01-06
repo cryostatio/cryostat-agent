@@ -267,22 +267,19 @@ class AsyncProfilerContext extends MutatingRemoteContext {
                                                 && name.equals(this.currentProfile.id)) {
                                             return null;
                                         }
-                                        Instant created = Instant.EPOCH;
-                                        Instant lastModified = Instant.EPOCH;
                                         try {
                                             BasicFileAttributes bfa =
                                                     Files.readAttributes(
                                                             p, BasicFileAttributes.class);
-                                            created = bfa.creationTime().toInstant();
-                                            lastModified = bfa.lastModifiedTime().toInstant();
+                                            return new AsyncProfile(name, bfa);
                                         } catch (IOException ioe) {
                                             log.error("failed to read file attributes", ioe);
+                                            return new AsyncProfile(
+                                                    name,
+                                                    Instant.EPOCH.getEpochSecond(),
+                                                    Instant.EPOCH.getEpochSecond(),
+                                                    0);
                                         }
-                                        AsyncProfile profile = new AsyncProfile();
-                                        profile.id = name;
-                                        profile.starttime = created.getEpochSecond();
-                                        profile.endtime = lastModified.getEpochSecond();
-                                        return profile;
                                     })
                             .filter(Objects::nonNull)
                             .collect(Collectors.toList());
@@ -405,6 +402,22 @@ class AsyncProfilerContext extends MutatingRemoteContext {
         public String id;
         public long starttime;
         public long endtime;
+        public long size;
+
+        AsyncProfile(String id, long starttime, long endtime, long size) {
+            this.id = id;
+            this.starttime = starttime;
+            this.endtime = endtime;
+            this.size = size;
+        }
+
+        AsyncProfile(String id, BasicFileAttributes bfa) {
+            this(
+                    id,
+                    bfa.creationTime().toInstant().getEpochSecond(),
+                    bfa.lastModifiedTime().toInstant().getEpochSecond(),
+                    bfa.size());
+        }
     }
 
     enum ProfilerStatus {
