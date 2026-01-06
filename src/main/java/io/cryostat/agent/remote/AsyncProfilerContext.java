@@ -223,6 +223,7 @@ class AsyncProfilerContext extends MutatingRemoteContext {
     }
 
     private String asyncProfilerExec(String cmd) throws IOException {
+        log.debug("async-profiler execute {} ...", cmd);
         String out = profilerInstance().orElseThrow().execute(cmd).strip();
         log.debug("async-profiler execute {}: \"{}\"", cmd, out);
         return out;
