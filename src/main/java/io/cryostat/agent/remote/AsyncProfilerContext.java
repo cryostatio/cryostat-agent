@@ -29,6 +29,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -63,15 +65,19 @@ class AsyncProfilerContext extends MutatingRemoteContext {
     private final Path repository;
     private final ProfileIdGenerator idGenerator = () -> UUID.randomUUID().toString();
     private final ObjectMapper mapper;
+    private final ScheduledExecutorService scheduler;
     private final Logger log = LoggerFactory.getLogger(getClass());
+    private volatile StartProfileRequest currentProfile = null;
 
     @Inject
     AsyncProfilerContext(
             Config config,
             ObjectMapper mapper,
+            ScheduledExecutorService scheduler,
             @Named(ConfigModule.CRYOSTAT_AGENT_ASYNC_PROFILER_REPOSITORY_PATH) Path repository) {
         super(config);
         this.mapper = mapper;
+        this.scheduler = scheduler;
         this.repository = repository;
     }
 
@@ -202,6 +208,7 @@ class AsyncProfilerContext extends MutatingRemoteContext {
             Map<String, Object> status = new HashMap<>();
             status.put("status", getProfilerStatus());
             status.put("availableEvents", getAvailableEvents());
+            status.put("currentProfile", this.currentProfile);
             exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
             mapper.writeValue(response, status);
         } catch (Exception e) {
@@ -209,16 +216,22 @@ class AsyncProfilerContext extends MutatingRemoteContext {
         }
     }
 
+    private String asyncProfilerExec(String cmd) throws IOException {
+        String out = profilerInstance().orElseThrow().execute(cmd).strip();
+        log.debug("async-profiler execute {}: \"{}\"", cmd, out);
+        return out;
+    }
+
     private ProfilerStatus getProfilerStatus() throws IOException {
-        String status = profilerInstance().orElseThrow().execute("status");
+        String status = asyncProfilerExec("status");
+        log.debug("async-profiler status: \"{}\"", status);
         return ProfilerStatus.fromExecOutput(status);
     }
 
     private Map<String, List<String>> getAvailableEvents() throws IOException {
         HashMap<String, List<String>> map = new HashMap<>();
         List<String> parts =
-                Arrays.asList(profilerInstance().orElseThrow().execute("list").split("\n")).stream()
-                        .map(String::strip)
+                Arrays.asList(asyncProfilerExec("list").split("\n")).stream()
                         .filter(StringUtils::isNotBlank)
                         .collect(Collectors.toList());
         String currentSection = null;
@@ -241,6 +254,10 @@ class AsyncProfilerContext extends MutatingRemoteContext {
                     Files.list(repository)
                             .map(Path::getFileName)
                             .map(Path::toString)
+                            .filter(
+                                    s ->
+                                            this.currentProfile == null
+                                                    || !s.equals(this.currentProfile.id))
                             .collect(Collectors.toList());
             exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
             mapper.writeValue(response, profiles);
@@ -279,17 +296,21 @@ class AsyncProfilerContext extends MutatingRemoteContext {
                 return;
             }
             String id = idGenerator.next();
-            Path profile = repository.resolve(id);
+            this.currentProfile = req;
+            this.currentProfile.id = id;
+            this.currentProfile.startTime = System.currentTimeMillis();
+            this.scheduler.schedule(
+                    () -> AsyncProfilerContext.this.currentProfile = null,
+                    req.duration,
+                    TimeUnit.SECONDS);
+            Path profile = repository.resolve(this.currentProfile.id);
             String events =
                     req.events.stream()
                             .map(s -> String.format("event=%s", s))
                             .collect(Collectors.joining(","));
-            profilerInstance()
-                    .orElseThrow()
-                    .execute(
-                            String.format(
-                                    "start,jfr,%s,timeout=%d,file=%s",
-                                    events, req.duration, profile));
+            asyncProfilerExec(
+                    String.format(
+                            "start,jfr,%s,timeout=%d,file=%s", events, req.duration, profile));
             exchange.sendResponseHeaders(HttpStatus.SC_CREATED, BODY_LENGTH_UNKNOWN);
             try (OutputStream response = exchange.getResponseBody()) {
                 mapper.writeValue(response, id);
@@ -333,6 +354,8 @@ class AsyncProfilerContext extends MutatingRemoteContext {
 
     @SuppressFBWarnings("NP_UNWRITTEN_PUBLIC_OR_PROTECTED_FIELD")
     static class StartProfileRequest {
+        public String id;
+        public long startTime;
         public List<String> events;
         public long duration;
 
