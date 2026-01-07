@@ -322,7 +322,6 @@ class AsyncProfilerContext extends MutatingRemoteContext {
             String id = idGenerator.next();
             this.currentProfile = req;
             this.currentProfile.id = id;
-            this.currentProfile.startTime = Instant.now().toEpochMilli();
             this.scheduler.schedule(
                     () -> AsyncProfilerContext.this.currentProfile = null,
                     req.duration,
@@ -333,6 +332,7 @@ class AsyncProfilerContext extends MutatingRemoteContext {
                     req.events.stream()
                             .map(s -> String.format("event=%s", s))
                             .collect(Collectors.joining(","));
+            this.currentProfile.startTime = Instant.now().toEpochMilli();
             asyncProfilerExec(
                     String.format(
                             "start,jfr,%s,timeout=%d,file=%s", events, req.duration, profile));
