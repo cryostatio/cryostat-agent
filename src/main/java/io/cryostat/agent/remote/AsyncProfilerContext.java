@@ -284,7 +284,7 @@ class AsyncProfilerContext extends MutatingRemoteContext {
                                     })
                             .filter(Objects::nonNull)
                             .collect(Collectors.toList());
-            profiles.sort(Comparator.<AsyncProfile>comparingLong(p -> p.starttime).reversed());
+            profiles.sort(Comparator.<AsyncProfile>comparingLong(p -> p.startTime).reversed());
             exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
             mapper.writeValue(response, profiles);
         } catch (Exception e) {
@@ -402,14 +402,14 @@ class AsyncProfilerContext extends MutatingRemoteContext {
     @SuppressFBWarnings("URF_UNREAD_PUBLIC_OR_PROTECTED_FIELD")
     static class AsyncProfile {
         public String id;
-        public long starttime;
-        public long endtime;
+        public long startTime;
+        public long duration;
         public long size;
 
-        AsyncProfile(String id, long starttime, long endtime, long size) {
+        AsyncProfile(String id, long startTime, long duration, long size) {
             this.id = id;
-            this.starttime = starttime;
-            this.endtime = endtime;
+            this.startTime = startTime;
+            this.duration = duration;
             this.size = size;
         }
 
@@ -417,7 +417,8 @@ class AsyncProfilerContext extends MutatingRemoteContext {
             this(
                     id,
                     bfa.creationTime().toInstant().getEpochSecond(),
-                    bfa.lastModifiedTime().toInstant().getEpochSecond(),
+                    bfa.lastModifiedTime().toInstant().getEpochSecond()
+                            - bfa.creationTime().toInstant().getEpochSecond(),
                     bfa.size());
         }
     }
