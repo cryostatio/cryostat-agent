@@ -320,12 +320,9 @@ class AsyncProfilerContext extends MutatingRemoteContext {
                 return;
             }
             String id = idGenerator.next();
+            long durationSeconds = req.duration;
             this.currentProfile = req;
             this.currentProfile.id = id;
-            this.scheduler.schedule(
-                    () -> AsyncProfilerContext.this.currentProfile = null,
-                    req.duration,
-                    TimeUnit.SECONDS);
             // incoming request expects duration specified in seconds, but we use epoch millis for
             // start timestamp and completed file content duration
             this.currentProfile.duration =
@@ -336,10 +333,14 @@ class AsyncProfilerContext extends MutatingRemoteContext {
                     req.events.stream()
                             .map(s -> String.format("event=%s", s))
                             .collect(Collectors.joining(","));
+            this.scheduler.schedule(
+                    () -> AsyncProfilerContext.this.currentProfile = null,
+                    durationSeconds,
+                    TimeUnit.SECONDS);
             this.currentProfile.startTime = Instant.now().toEpochMilli();
             asyncProfilerExec(
                     String.format(
-                            "start,jfr,%s,timeout=%d,file=%s", events, req.duration, profile));
+                            "start,jfr,%s,timeout=%d,file=%s", events, durationSeconds, profile));
             exchange.sendResponseHeaders(HttpStatus.SC_CREATED, BODY_LENGTH_UNKNOWN);
             try (OutputStream response = exchange.getResponseBody()) {
                 mapper.writeValue(response, id);
