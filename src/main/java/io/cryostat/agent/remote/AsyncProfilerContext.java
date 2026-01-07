@@ -241,6 +241,7 @@ class AsyncProfilerContext extends MutatingRemoteContext {
                         .collect(Collectors.toList());
         String currentSection = null;
         for (String part : parts) {
+            part = part.strip();
             if (part.endsWith(":")) {
                 String partName =
                         part.substring(0, part.length() - 1).replaceAll("\\s", "_").toLowerCase();
