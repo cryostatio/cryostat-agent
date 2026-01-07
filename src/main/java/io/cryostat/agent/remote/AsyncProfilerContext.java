@@ -275,8 +275,8 @@ class AsyncProfilerContext extends MutatingRemoteContext {
                                             log.error("failed to read file attributes", ioe);
                                             return new AsyncProfile(
                                                     name,
-                                                    Instant.EPOCH.getEpochSecond(),
-                                                    Instant.EPOCH.getEpochSecond(),
+                                                    Instant.EPOCH.toEpochMilli(),
+                                                    Instant.EPOCH.toEpochMilli(),
                                                     0);
                                         }
                                     })
@@ -322,7 +322,7 @@ class AsyncProfilerContext extends MutatingRemoteContext {
             String id = idGenerator.next();
             this.currentProfile = req;
             this.currentProfile.id = id;
-            this.currentProfile.startTime = Instant.now().getEpochSecond();
+            this.currentProfile.startTime = Instant.now().toEpochMilli();
             this.scheduler.schedule(
                     () -> AsyncProfilerContext.this.currentProfile = null,
                     req.duration,
@@ -407,9 +407,9 @@ class AsyncProfilerContext extends MutatingRemoteContext {
         AsyncProfile(String id, BasicFileAttributes bfa) {
             this(
                     id,
-                    bfa.creationTime().toInstant().getEpochSecond(),
-                    bfa.lastModifiedTime().toInstant().getEpochSecond()
-                            - bfa.creationTime().toInstant().getEpochSecond(),
+                    bfa.creationTime().toInstant().toEpochMilli(),
+                    bfa.lastModifiedTime().toInstant().toEpochMilli()
+                            - bfa.creationTime().toInstant().toEpochMilli(),
                     bfa.size());
         }
     }
