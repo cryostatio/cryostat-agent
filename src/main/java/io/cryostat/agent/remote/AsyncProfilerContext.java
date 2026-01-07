@@ -321,6 +321,10 @@ class AsyncProfilerContext extends MutatingRemoteContext {
             }
             String id = idGenerator.next();
             this.currentProfile = req;
+            // incoming request expects duration specified in seconds, but we use epoch millis for
+            // start timestamp and completed file content duration
+            this.currentProfile.duration =
+                    TimeUnit.SECONDS.convert(this.currentProfile.duration, TimeUnit.MILLISECONDS);
             this.currentProfile.id = id;
             this.scheduler.schedule(
                     () -> AsyncProfilerContext.this.currentProfile = null,
