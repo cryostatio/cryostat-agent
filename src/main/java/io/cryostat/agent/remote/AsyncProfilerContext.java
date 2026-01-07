@@ -23,7 +23,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Instant;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -52,7 +51,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.http.HttpHeaders;
 import org.apache.http.HttpStatus;
 import org.eclipse.microprofile.config.Config;
 import org.slf4j.Logger;
@@ -298,13 +296,6 @@ class AsyncProfilerContext extends MutatingRemoteContext {
                         profile -> {
                             try (InputStream stream = Files.newInputStream(profile);
                                     OutputStream response = exchange.getResponseBody()) {
-                                Instant lastModified =
-                                        Files.getLastModifiedTime(profile).toInstant();
-                                exchange.getResponseHeaders()
-                                        .add(
-                                                HttpHeaders.LAST_MODIFIED,
-                                                DateTimeFormatter.RFC_1123_DATE_TIME.format(
-                                                        lastModified));
                                 exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
                                 stream.transferTo(response);
                             } catch (IOException ioe) {
