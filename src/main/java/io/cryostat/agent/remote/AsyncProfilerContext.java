@@ -426,10 +426,10 @@ class AsyncProfilerContext extends MutatingRemoteContext {
         ;
 
         public static ProfilerStatus fromExecOutput(String s) {
-            if (s.contains("Profiler is not active")) {
+            if (s.toLowerCase().contains("is not active")) {
                 return STOPPED;
             }
-            if (s.contains("Profiling is running")) {
+            if (s.toLowerCase().contains("is running")) {
                 return RUNNING;
             }
             return UNKNOWN;
