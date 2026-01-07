@@ -327,7 +327,7 @@ class AsyncProfilerContext extends MutatingRemoteContext {
             // incoming request expects duration specified in seconds, but we use epoch millis for
             // start timestamp and completed file content duration
             this.currentProfile.duration =
-                    TimeUnit.SECONDS.convert(durationSeconds, TimeUnit.MILLISECONDS);
+                    TimeUnit.MILLISECONDS.convert(durationSeconds, TimeUnit.SECONDS);
             Path profile = repository.resolve(this.currentProfile.id);
             Files.deleteIfExists(profile);
             String events =
