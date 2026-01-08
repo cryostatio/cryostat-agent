@@ -75,6 +75,7 @@ public class CryostatClient {
     private static final String DISCOVERY_API_PATH = "/api/v4/discovery";
     private static final String CREDENTIALS_API_PATH = "/api/v4/credentials";
     private static final String CHECK_CREDENTIAL_API_PATH = "/api/beta/discovery/credential_exists";
+    private static final String DISCOVERY_TOKEN_HEADER = "Cryostat-Discovery-Authentication";
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
@@ -132,14 +133,8 @@ public class CryostatClient {
         if (!pluginInfo.isInitialized()) {
             return CompletableFuture.completedFuture(false);
         }
-        HttpGet req =
-                new HttpGet(
-                        baseUri.resolve(
-                                DISCOVERY_API_PATH
-                                        + "/"
-                                        + pluginInfo.getId()
-                                        + "?token="
-                                        + pluginInfo.getToken()));
+        HttpGet req = new HttpGet(baseUri.resolve(DISCOVERY_API_PATH + "/" + pluginInfo.getId()));
+        req.addHeader(DISCOVERY_TOKEN_HEADER, pluginInfo.getToken());
         log.trace("{}", req);
         return supply(req, (res) -> logResponse(req, res))
                 .thenApply(this::isOkStatus)
@@ -335,13 +330,8 @@ public class CryostatClient {
 
     public CompletableFuture<Void> deregister(PluginInfo pluginInfo) {
         HttpDelete req =
-                new HttpDelete(
-                        baseUri.resolve(
-                                DISCOVERY_API_PATH
-                                        + "/"
-                                        + pluginInfo.getId()
-                                        + "?token="
-                                        + pluginInfo.getToken()));
+                new HttpDelete(baseUri.resolve(DISCOVERY_API_PATH + "/" + pluginInfo.getId()));
+        req.addHeader(DISCOVERY_TOKEN_HEADER, pluginInfo.getToken());
         log.trace("{}", req);
         return supply(req, (res) -> logResponse(req, res))
                 .thenApply(res -> assertOkStatus(req, res))
@@ -353,13 +343,8 @@ public class CryostatClient {
             PluginInfo pluginInfo, Collection<DiscoveryNode> subtree) {
         try {
             HttpPost req =
-                    new HttpPost(
-                            baseUri.resolve(
-                                    DISCOVERY_API_PATH
-                                            + "/"
-                                            + pluginInfo.getId()
-                                            + "?token="
-                                            + pluginInfo.getToken()));
+                    new HttpPost(baseUri.resolve(DISCOVERY_API_PATH + "/" + pluginInfo.getId()));
+            req.addHeader(DISCOVERY_TOKEN_HEADER, pluginInfo.getToken());
             req.setEntity(
                     new StringEntity(
                             mapper.writeValueAsString(subtree), ContentType.APPLICATION_JSON));
