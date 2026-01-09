@@ -137,6 +137,10 @@ public abstract class ConfigModule {
             "cryostat.agent.webclient.tls.client-auth.key-manager.type";
     public static final String CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_RETRY_COUNT =
             "cryostat.agent.webclient.response.retry-count";
+    public static final String CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_RETRY_TIME =
+            "cryostat.agent.webclient.response.retry-time-seconds";
+    public static final String CRYOSTAT_AGENT_WEBCLIENT_HTTP_USE_PREEMPTIVE_AUTHENTICATION =
+            "cryostat.agent.webclient.http.use-preemptive-authentication";
 
     public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_REQUIRED =
             "cryostat.agent.webclient.tls.required";
@@ -648,6 +652,22 @@ public abstract class ConfigModule {
     @Named(CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_RETRY_COUNT)
     public static int provideCryostatAgentWebclientResponseRetryCount(Config config) {
         return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_RETRY_COUNT, int.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_RETRY_TIME)
+    public static int provideCryostatAgentWebclientResponseRetryTime(Config config) {
+        return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_RETRY_TIME, int.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBCLIENT_HTTP_USE_PREEMPTIVE_AUTHENTICATION)
+    public static boolean provideCryostatAgentWebclientHttpUsePreemptiveAuthentication(
+            Config config) {
+        return config.getValue(
+                CRYOSTAT_AGENT_WEBCLIENT_HTTP_USE_PREEMPTIVE_AUTHENTICATION, boolean.class);
     }
 
     @Provides
