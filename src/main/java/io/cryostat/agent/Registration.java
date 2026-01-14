@@ -22,7 +22,10 @@ import java.net.UnknownHostException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -35,6 +38,7 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import io.cryostat.agent.VersionInfo.Semver;
+import io.cryostat.agent.model.DiscoveryMetadata;
 import io.cryostat.agent.model.DiscoveryNode;
 import io.cryostat.agent.model.PluginInfo;
 import io.cryostat.agent.util.StringUtils;
@@ -53,6 +57,7 @@ public class Registration {
     private final CryostatClient cryostat;
     private final CallbackResolver callbackResolver;
     private final WebServer webServer;
+    private final DiscoveryFileReader discoveryFileReader;
     private final String instanceId;
     private final String jvmId;
     private final String appName;
@@ -75,6 +80,7 @@ public class Registration {
             CryostatClient cryostat,
             CallbackResolver callbackResolver,
             WebServer webServer,
+            DiscoveryFileReader discoveryFileReader,
             String instanceId,
             String jvmId,
             String appName,
@@ -89,6 +95,7 @@ public class Registration {
         this.cryostat = cryostat;
         this.callbackResolver = callbackResolver;
         this.webServer = webServer;
+        this.discoveryFileReader = discoveryFileReader;
         this.instanceId = instanceId;
         this.jvmId = jvmId;
         this.appName = appName;
@@ -278,10 +285,35 @@ public class Registration {
             log.error("Unable to define self", e);
             return;
         }
+
+        // Wrap self nodes with hierarchy if available
+        Optional<DiscoveryNode> hierarchy = discoveryFileReader.readHierarchy();
+        if (hierarchy.isPresent()) {
+            DiscoveryNode root = hierarchy.get();
+            DiscoveryNode innermostNode = discoveryFileReader.getInnermostNode(root);
+
+            // Attach each self node as a child of the innermost hierarchy node
+            for (DiscoveryNode selfNode : selfNodes) {
+                innermostNode.getChildren().add(selfNode);
+            }
+
+            // Replace selfNodes with the root of the hierarchy
+            selfNodes = Set.of(root);
+            log.debug("Wrapped self nodes with hierarchy from mounted file");
+        }
+
         log.trace(
                 "publishing self as {}",
                 selfNodes.stream()
-                        .map(n -> n.getTarget().getConnectUrl())
+                        .map(
+                                n -> {
+                                    if (n.getTarget() == null) {
+                                        throw new IllegalStateException(
+                                                "DiscoveryNode must have a non-null target with a"
+                                                        + " connectUrl");
+                                    }
+                                    return n.getTarget().getConnectUrl();
+                                })
                         .collect(Collectors.toList()));
         Future<Void> f =
                 cryostat.update(pluginInfo, selfNodes)
@@ -305,6 +337,21 @@ public class Registration {
 
     private Set<DiscoveryNode> defineSelf() throws UnknownHostException, URISyntaxException {
         Set<DiscoveryNode> discoveryNodes = new HashSet<>();
+
+        // Load metadata from mounted file if available
+        Optional<DiscoveryMetadata> mountedMetadata = discoveryFileReader.readMetadata();
+        Map<String, String> labels = new HashMap<>();
+        Map<String, String> annotations = new HashMap<>();
+
+        if (mountedMetadata.isPresent()) {
+            DiscoveryMetadata metadata = mountedMetadata.get();
+            labels.putAll(metadata.getLabels());
+            annotations.putAll(metadata.getAnnotations());
+            log.debug(
+                    "Loaded metadata from mounted file: {} labels, {} annotations",
+                    labels.size(),
+                    annotations.size());
+        }
 
         long pid = ProcessHandle.current().pid();
         String javaMain = System.getProperty("sun.java.command", System.getenv("JAVA_MAIN_CLASS"));
@@ -332,8 +379,31 @@ public class Registration {
                         port,
                         javaMain,
                         startTime);
-        discoveryNodes.add(
-                new DiscoveryNode(appName + "-agent-" + pluginInfo.getId(), NODE_TYPE, httpSelf));
+
+        // Apply labels to the target - need to use setLabels since getLabels returns a copy
+        if (!labels.isEmpty()) {
+            Map<String, String> targetLabels = new HashMap<>(httpSelf.getLabels());
+            targetLabels.putAll(labels);
+            httpSelf.setLabels(targetLabels);
+        }
+
+        // Apply annotations to the target's platform section
+        if (!annotations.isEmpty()) {
+            DiscoveryNode.Annotations targetAnnotations = httpSelf.getAnnotations();
+            Map<String, Object> platformAnnotations =
+                    new HashMap<>(targetAnnotations.getPlatform());
+            platformAnnotations.putAll(annotations);
+            targetAnnotations.setPlatform(platformAnnotations);
+            httpSelf.setAnnotations(targetAnnotations);
+        }
+
+        DiscoveryNode httpNode =
+                new DiscoveryNode(appName + "-agent-" + pluginInfo.getId(), NODE_TYPE, httpSelf);
+        // Apply labels to the node itself
+        if (!labels.isEmpty()) {
+            httpNode.setLabels(labels);
+        }
+        discoveryNodes.add(httpNode);
 
         if (!registrationJmxIgnore && jmxPort > 0) {
             uri =
@@ -355,8 +425,31 @@ public class Registration {
                             port,
                             javaMain,
                             startTime);
-            discoveryNodes.add(
-                    new DiscoveryNode(appName + "-jmx-" + pluginInfo.getId(), NODE_TYPE, jmxSelf));
+
+            // Apply labels to the JMX target
+            if (!labels.isEmpty()) {
+                Map<String, String> targetLabels = new HashMap<>(jmxSelf.getLabels());
+                targetLabels.putAll(labels);
+                jmxSelf.setLabels(targetLabels);
+            }
+
+            // Apply annotations to the JMX target's platform section
+            if (!annotations.isEmpty()) {
+                DiscoveryNode.Annotations targetAnnotations = jmxSelf.getAnnotations();
+                Map<String, Object> platformAnnotations =
+                        new HashMap<>(targetAnnotations.getPlatform());
+                platformAnnotations.putAll(annotations);
+                targetAnnotations.setPlatform(platformAnnotations);
+                jmxSelf.setAnnotations(targetAnnotations);
+            }
+
+            DiscoveryNode jmxNode =
+                    new DiscoveryNode(appName + "-jmx-" + pluginInfo.getId(), NODE_TYPE, jmxSelf);
+            // Apply labels to the node itself
+            if (!labels.isEmpty()) {
+                jmxNode.setLabels(labels);
+            }
+            discoveryNodes.add(jmxNode);
         }
 
         return discoveryNodes;

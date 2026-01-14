@@ -769,11 +769,23 @@ public abstract class MainModule {
 
     @Provides
     @Singleton
+    public static DiscoveryFileReader provideDiscoveryFileReader(
+            @Named(ConfigModule.CRYOSTAT_AGENT_DISCOVERY_MOUNT_PATH) String mountPath,
+            @Named(ConfigModule.CRYOSTAT_AGENT_DISCOVERY_METADATA_FILENAME) String metadataFilename,
+            @Named(ConfigModule.CRYOSTAT_AGENT_DISCOVERY_HIERARCHY_FILENAME)
+                    String hierarchyFilename,
+            ObjectMapper mapper) {
+        return new DiscoveryFileReader(mountPath, metadataFilename, hierarchyFilename, mapper);
+    }
+
+    @Provides
+    @Singleton
     public static Registration provideRegistration(
             ScheduledExecutorService executor,
             CryostatClient cryostat,
             CallbackResolver callbackResolver,
             WebServer webServer,
+            DiscoveryFileReader discoveryFileReader,
             @Named(ConfigModule.CRYOSTAT_AGENT_INSTANCE_ID) String instanceId,
             @Named(JVM_ID) String jvmId,
             @Named(ConfigModule.CRYOSTAT_AGENT_APP_NAME) String appName,
@@ -804,6 +816,7 @@ public abstract class MainModule {
                 cryostat,
                 callbackResolver,
                 webServer,
+                discoveryFileReader,
                 instanceId,
                 jvmId,
                 appName,

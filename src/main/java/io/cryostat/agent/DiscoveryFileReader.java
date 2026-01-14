@@ -43,11 +43,14 @@ public class DiscoveryFileReader {
     private final ObjectMapper mapper;
 
     public DiscoveryFileReader(
-            String mountPath, String metadataFilename, String hierarchyFilename) {
+            String mountPath,
+            String metadataFilename,
+            String hierarchyFilename,
+            ObjectMapper mapper) {
         this.mountPath = Paths.get(mountPath);
         this.metadataFilename = metadataFilename;
         this.hierarchyFilename = hierarchyFilename;
-        this.mapper = new ObjectMapper();
+        this.mapper = mapper;
     }
 
     /**

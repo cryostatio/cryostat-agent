@@ -70,7 +70,7 @@ public class DiscoveryNode {
         this.nodeType = nodeType;
     }
 
-    void setLabels(Map<String, String> labels) {
+    public void setLabels(Map<String, String> labels) {
         this.labels = labels != null ? new HashMap<>(labels) : new HashMap<>();
     }
 
@@ -167,11 +167,11 @@ public class DiscoveryNode {
             this.alias = alias;
         }
 
-        void setLabels(Map<String, String> labels) {
+        public void setLabels(Map<String, String> labels) {
             this.labels = labels != null ? new HashMap<>(labels) : new HashMap<>();
         }
 
-        void setAnnotations(Annotations annotations) {
+        public void setAnnotations(Annotations annotations) {
             this.annotations = annotations;
         }
     }
@@ -203,7 +203,7 @@ public class DiscoveryNode {
             this.cryostat = new HashMap<>(cryostat);
         }
 
-        void setPlatform(Map<String, Object> platform) {
+        public void setPlatform(Map<String, Object> platform) {
             this.platform = new HashMap<>(platform);
         }
     }

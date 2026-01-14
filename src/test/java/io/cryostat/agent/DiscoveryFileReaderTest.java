@@ -42,7 +42,9 @@ public class DiscoveryFileReaderTest {
     public void setup() {
         mapper = new ObjectMapper();
         mountPath = tempDir.resolve("discovery");
-        reader = new DiscoveryFileReader(mountPath.toString(), "metadata.json", "hierarchy.json");
+        reader =
+                new DiscoveryFileReader(
+                        mountPath.toString(), "metadata.json", "hierarchy.json", mapper);
     }
 
     @Test
