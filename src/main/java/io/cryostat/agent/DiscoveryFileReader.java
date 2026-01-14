@@ -26,6 +26,7 @@ import io.cryostat.agent.model.DiscoveryMetadata;
 import io.cryostat.agent.model.DiscoveryNode;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -42,6 +43,9 @@ public class DiscoveryFileReader {
     private final String hierarchyFilename;
     private final ObjectMapper mapper;
 
+    @SuppressFBWarnings(
+            value = "EI_EXPOSE_REP2",
+            justification = "ObjectMapper is a shared singleton injected by Dagger")
     public DiscoveryFileReader(
             String mountPath,
             String metadataFilename,
