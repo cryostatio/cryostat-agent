@@ -172,7 +172,8 @@ public class DiscoveryNode {
         }
 
         public void setAnnotations(Annotations annotations) {
-            this.annotations = annotations != null ? new Annotations(annotations) : new Annotations();
+            this.annotations =
+                    annotations != null ? new Annotations(annotations) : new Annotations();
         }
     }
 
