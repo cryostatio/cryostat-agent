@@ -16,20 +16,29 @@
 package io.cryostat.agent.model;
 
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class DiscoveryNode {
 
     private String name;
     private String nodeType;
+    private Map<String, String> labels;
+    private List<DiscoveryNode> children;
     private Target target;
 
-    DiscoveryNode() {}
+    DiscoveryNode() {
+        this.labels = new HashMap<>();
+        this.children = new ArrayList<>();
+    }
 
     public DiscoveryNode(String name, String nodeType, Target target) {
         this.name = name;
         this.nodeType = nodeType;
+        this.labels = new HashMap<>();
+        this.children = new ArrayList<>();
         this.target = new Target(target);
     }
 
@@ -41,8 +50,16 @@ public class DiscoveryNode {
         return nodeType;
     }
 
+    public Map<String, String> getLabels() {
+        return new HashMap<>(labels);
+    }
+
+    public List<DiscoveryNode> getChildren() {
+        return new ArrayList<>(children);
+    }
+
     public Target getTarget() {
-        return new Target(target);
+        return target != null ? new Target(target) : null;
     }
 
     void setName(String name) {
@@ -51,6 +68,14 @@ public class DiscoveryNode {
 
     void setNodeType(String nodeType) {
         this.nodeType = nodeType;
+    }
+
+    void setLabels(Map<String, String> labels) {
+        this.labels = labels != null ? new HashMap<>(labels) : new HashMap<>();
+    }
+
+    void setChildren(List<DiscoveryNode> children) {
+        this.children = children != null ? new ArrayList<>(children) : new ArrayList<>();
     }
 
     void setTarget(Target target) {
@@ -62,14 +87,18 @@ public class DiscoveryNode {
         private String jvmId;
         private URI connectUrl;
         private String alias;
+        private Map<String, String> labels;
         private Annotations annotations;
 
-        Target() {}
+        Target() {
+            this.labels = new HashMap<>();
+        }
 
         Target(Target o) {
             this.jvmId = o.jvmId;
             this.connectUrl = o.connectUrl;
             this.alias = o.alias;
+            this.labels = o.labels != null ? new HashMap<>(o.labels) : new HashMap<>();
             this.annotations = new Annotations(o.annotations);
         }
 
@@ -87,6 +116,7 @@ public class DiscoveryNode {
             this.jvmId = jvmId;
             this.connectUrl = connectUrl;
             this.alias = alias;
+            this.labels = new HashMap<>();
             this.annotations = new Annotations();
             annotations.setPlatform(Map.of("INSTANCE_ID", instanceId));
             annotations.setCryostat(
@@ -117,6 +147,10 @@ public class DiscoveryNode {
             return alias;
         }
 
+        public Map<String, String> getLabels() {
+            return new HashMap<>(labels);
+        }
+
         public Annotations getAnnotations() {
             return new Annotations(annotations);
         }
@@ -131,6 +165,10 @@ public class DiscoveryNode {
 
         void setAlias(String alias) {
             this.alias = alias;
+        }
+
+        void setLabels(Map<String, String> labels) {
+            this.labels = labels != null ? new HashMap<>(labels) : new HashMap<>();
         }
 
         void setAnnotations(Annotations annotations) {
