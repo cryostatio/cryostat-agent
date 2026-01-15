@@ -117,4 +117,15 @@ public class TriggerParser {
         }
         return triggers;
     }
+
+    public boolean isValid(String definition) {
+        String[] expressions = definition.split(",");
+        for (String s : expressions) {
+            Matcher m = EXPRESSION_PATTERN.matcher(s);
+            if (!m.matches()) {
+                return false;
+            }
+        }
+        return true;
+    }
 }
