@@ -21,6 +21,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+
+@SuppressFBWarnings("EI_EXPOSE_REP")
 public class DiscoveryNode {
 
     private String name;
@@ -51,15 +54,15 @@ public class DiscoveryNode {
     }
 
     public Map<String, String> getLabels() {
-        return new HashMap<>(labels);
+        return labels;
     }
 
     public List<DiscoveryNode> getChildren() {
-        return new ArrayList<>(children);
+        return children;
     }
 
     public Target getTarget() {
-        return target != null ? new Target(target) : null;
+        return target;
     }
 
     void setName(String name) {
@@ -71,17 +74,18 @@ public class DiscoveryNode {
     }
 
     public void setLabels(Map<String, String> labels) {
-        this.labels = labels != null ? new HashMap<>(labels) : new HashMap<>();
+        this.labels = labels;
     }
 
     public void setChildren(List<DiscoveryNode> children) {
-        this.children = children != null ? new ArrayList<>(children) : new ArrayList<>();
+        this.children = children;
     }
 
     void setTarget(Target target) {
         this.target = target;
     }
 
+    @SuppressFBWarnings("EI_EXPOSE_REP")
     public static class Target {
 
         private String jvmId;
@@ -148,11 +152,11 @@ public class DiscoveryNode {
         }
 
         public Map<String, String> getLabels() {
-            return new HashMap<>(labels);
+            return labels;
         }
 
         public Annotations getAnnotations() {
-            return new Annotations(annotations);
+            return annotations;
         }
 
         void setJvmId(String jvmId) {
@@ -168,15 +172,15 @@ public class DiscoveryNode {
         }
 
         public void setLabels(Map<String, String> labels) {
-            this.labels = labels != null ? new HashMap<>(labels) : new HashMap<>();
+            this.labels = labels;
         }
 
         public void setAnnotations(Annotations annotations) {
-            this.annotations =
-                    annotations != null ? new Annotations(annotations) : new Annotations();
+            this.annotations = annotations;
         }
     }
 
+    @SuppressFBWarnings("EI_EXPOSE_REP")
     public static class Annotations {
 
         private Map<String, Object> cryostat;
@@ -193,19 +197,19 @@ public class DiscoveryNode {
         }
 
         public Map<String, Object> getCryostat() {
-            return new HashMap<>(cryostat);
+            return cryostat;
         }
 
         public Map<String, Object> getPlatform() {
-            return new HashMap<>(platform);
+            return platform;
         }
 
         void setCryostat(Map<String, Object> cryostat) {
-            this.cryostat = new HashMap<>(cryostat);
+            this.cryostat = cryostat;
         }
 
         public void setPlatform(Map<String, Object> platform) {
-            this.platform = new HashMap<>(platform);
+            this.platform = platform;
         }
     }
 }

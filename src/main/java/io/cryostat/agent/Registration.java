@@ -21,11 +21,9 @@ import java.net.URISyntaxException;
 import java.net.UnknownHostException;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -293,12 +291,7 @@ public class Registration {
                                 root -> {
                                     DiscoveryNode innermostNode =
                                             discoveryFileReader.getInnermostNode(root);
-
-                                    List<DiscoveryNode> updatedChildren =
-                                            new ArrayList<>(innermostNode.getChildren());
-                                    updatedChildren.addAll(baseSelfNodes);
-                                    innermostNode.setChildren(updatedChildren);
-
+                                    innermostNode.getChildren().addAll(baseSelfNodes);
                                     log.debug(
                                             "Wrapped self nodes with hierarchy from mounted file");
                                     return (Collection<DiscoveryNode>) Set.of(root);
