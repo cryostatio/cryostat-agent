@@ -301,15 +301,7 @@ public class Registration {
         log.trace(
                 "publishing self as {}",
                 selfNodes.stream()
-                        .map(
-                                n -> {
-                                    if (n.getTarget() == null) {
-                                        throw new IllegalStateException(
-                                                "DiscoveryNode must have a non-null target with a"
-                                                        + " connectUrl");
-                                    }
-                                    return n.getTarget().getConnectUrl();
-                                })
+                        .map(n -> n.getTarget().getConnectUrl())
                         .collect(Collectors.toList()));
         Future<Void> f =
                 cryostat.update(pluginInfo, selfNodes)

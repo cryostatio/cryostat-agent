@@ -76,6 +76,7 @@ public class DiscoveryFileReader {
         try (InputStream is = Files.newInputStream(metadataPath)) {
             DiscoveryMetadata metadata = mapper.readValue(is, DiscoveryMetadata.class);
             logger.info("Successfully loaded discovery metadata from {}", metadataPath);
+            logger.trace(mapper.writeValueAsString(metadata));
             return Optional.of(metadata);
         } catch (IOException e) {
             logger.error(
@@ -116,6 +117,7 @@ public class DiscoveryFileReader {
             }
 
             logger.info("Successfully loaded discovery hierarchy from {}", hierarchyPath);
+            logger.trace(mapper.writeValueAsString(hierarchy));
             return Optional.of(hierarchy);
         } catch (IOException e) {
             logger.error(
