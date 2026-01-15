@@ -21,11 +21,12 @@ import java.net.URISyntaxException;
 import java.net.UnknownHostException;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -38,7 +39,6 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import io.cryostat.agent.VersionInfo.Semver;
-import io.cryostat.agent.model.DiscoveryMetadata;
 import io.cryostat.agent.model.DiscoveryNode;
 import io.cryostat.agent.model.PluginInfo;
 import io.cryostat.agent.util.StringUtils;
@@ -278,29 +278,32 @@ public class Registration {
             log.warn("update attempted before initialized");
             return;
         }
-        Collection<DiscoveryNode> selfNodes;
+        final Collection<DiscoveryNode> baseSelfNodes;
         try {
-            selfNodes = defineSelf();
+            baseSelfNodes = defineSelf();
         } catch (UnknownHostException | URISyntaxException e) {
             log.error("Unable to define self", e);
             return;
         }
 
-        // Wrap self nodes with hierarchy if available
-        Optional<DiscoveryNode> hierarchy = discoveryFileReader.readHierarchy();
-        if (hierarchy.isPresent()) {
-            DiscoveryNode root = hierarchy.get();
-            DiscoveryNode innermostNode = discoveryFileReader.getInnermostNode(root);
+        Collection<DiscoveryNode> selfNodes =
+                discoveryFileReader
+                        .readHierarchy()
+                        .map(
+                                root -> {
+                                    DiscoveryNode innermostNode =
+                                            discoveryFileReader.getInnermostNode(root);
 
-            // Attach each self node as a child of the innermost hierarchy node
-            for (DiscoveryNode selfNode : selfNodes) {
-                innermostNode.getChildren().add(selfNode);
-            }
+                                    List<DiscoveryNode> updatedChildren =
+                                            new ArrayList<>(innermostNode.getChildren());
+                                    updatedChildren.addAll(baseSelfNodes);
+                                    innermostNode.setChildren(updatedChildren);
 
-            // Replace selfNodes with the root of the hierarchy
-            selfNodes = Set.of(root);
-            log.debug("Wrapped self nodes with hierarchy from mounted file");
-        }
+                                    log.debug(
+                                            "Wrapped self nodes with hierarchy from mounted file");
+                                    return (Collection<DiscoveryNode>) Set.of(root);
+                                })
+                        .orElse(baseSelfNodes);
 
         log.trace(
                 "publishing self as {}",
@@ -338,20 +341,20 @@ public class Registration {
     private Set<DiscoveryNode> defineSelf() throws UnknownHostException, URISyntaxException {
         Set<DiscoveryNode> discoveryNodes = new HashSet<>();
 
-        // Load metadata from mounted file if available
-        Optional<DiscoveryMetadata> mountedMetadata = discoveryFileReader.readMetadata();
         Map<String, String> labels = new HashMap<>();
         Map<String, String> annotations = new HashMap<>();
 
-        if (mountedMetadata.isPresent()) {
-            DiscoveryMetadata metadata = mountedMetadata.get();
-            labels.putAll(metadata.getLabels());
-            annotations.putAll(metadata.getAnnotations());
-            log.debug(
-                    "Loaded metadata from mounted file: {} labels, {} annotations",
-                    labels.size(),
-                    annotations.size());
-        }
+        discoveryFileReader
+                .readMetadata()
+                .ifPresent(
+                        metadata -> {
+                            labels.putAll(metadata.getLabels());
+                            annotations.putAll(metadata.getAnnotations());
+                            log.debug(
+                                    "Loaded metadata from mounted file: {} labels, {} annotations",
+                                    labels.size(),
+                                    annotations.size());
+                        });
 
         long pid = ProcessHandle.current().pid();
         String javaMain = System.getProperty("sun.java.command", System.getenv("JAVA_MAIN_CLASS"));

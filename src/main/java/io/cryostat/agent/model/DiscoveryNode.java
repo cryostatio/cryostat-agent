@@ -74,7 +74,7 @@ public class DiscoveryNode {
         this.labels = labels != null ? new HashMap<>(labels) : new HashMap<>();
     }
 
-    void setChildren(List<DiscoveryNode> children) {
+    public void setChildren(List<DiscoveryNode> children) {
         this.children = children != null ? new ArrayList<>(children) : new ArrayList<>();
     }
 
