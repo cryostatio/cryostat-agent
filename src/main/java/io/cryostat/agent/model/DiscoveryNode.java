@@ -85,6 +85,24 @@ public class DiscoveryNode {
         this.target = target;
     }
 
+    @Override
+    public String toString() {
+        return "DiscoveryNode{"
+                + "name='"
+                + name
+                + '\''
+                + ", nodeType='"
+                + nodeType
+                + '\''
+                + ", labels="
+                + labels
+                + ", children="
+                + children
+                + ", target="
+                + target
+                + '}';
+    }
+
     @SuppressFBWarnings("EI_EXPOSE_REP")
     public static class Target {
 
@@ -178,6 +196,24 @@ public class DiscoveryNode {
         public void setAnnotations(Annotations annotations) {
             this.annotations = annotations;
         }
+
+        @Override
+        public String toString() {
+            return "Target{"
+                    + "jvmId='"
+                    + jvmId
+                    + '\''
+                    + ", connectUrl="
+                    + connectUrl
+                    + ", alias='"
+                    + alias
+                    + '\''
+                    + ", labels="
+                    + labels
+                    + ", annotations="
+                    + annotations
+                    + '}';
+        }
     }
 
     @SuppressFBWarnings("EI_EXPOSE_REP")
@@ -210,6 +246,11 @@ public class DiscoveryNode {
 
         public void setPlatform(Map<String, Object> platform) {
             this.platform = platform;
+        }
+
+        @Override
+        public String toString() {
+            return "Annotations{" + "cryostat=" + cryostat + ", platform=" + platform + '}';
         }
     }
 }
