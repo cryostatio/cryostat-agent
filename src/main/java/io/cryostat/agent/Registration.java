@@ -46,7 +46,8 @@ import org.slf4j.LoggerFactory;
 
 public class Registration {
 
-    private static final String NODE_TYPE = "JVM";
+    private static final String NODE_TYPE_JMX = "JVM";
+    private static final String NODE_TYPE_HTTP = "CryostatAgent";
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
@@ -381,7 +382,8 @@ public class Registration {
         }
 
         DiscoveryNode httpNode =
-                new DiscoveryNode(appName + "-agent-" + pluginInfo.getId(), NODE_TYPE, httpSelf);
+                new DiscoveryNode(
+                        appName + "-agent-" + pluginInfo.getId(), NODE_TYPE_HTTP, httpSelf);
         // Apply labels to the node itself
         if (!labels.isEmpty()) {
             httpNode.setLabels(labels);
@@ -427,7 +429,8 @@ public class Registration {
             }
 
             DiscoveryNode jmxNode =
-                    new DiscoveryNode(appName + "-jmx-" + pluginInfo.getId(), NODE_TYPE, jmxSelf);
+                    new DiscoveryNode(
+                            appName + "-jmx-" + pluginInfo.getId(), NODE_TYPE_JMX, jmxSelf);
             // Apply labels to the node itself
             if (!labels.isEmpty()) {
                 jmxNode.setLabels(labels);
