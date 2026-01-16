@@ -26,7 +26,8 @@ import java.util.Optional;
 import java.util.stream.Stream;
 
 import io.cryostat.agent.FlightRecorderHelper;
-import io.cryostat.agent.triggers.SmartTrigger.TriggerState;
+import io.cryostat.libcryostat.triggers.SmartTrigger;
+import io.cryostat.libcryostat.triggers.SmartTrigger.TriggerState;
 
 import org.hamcrest.MatcherAssert;
 import org.hamcrest.Matchers;

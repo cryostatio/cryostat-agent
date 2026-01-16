@@ -30,7 +30,8 @@ import java.util.concurrent.TimeUnit;
 import io.cryostat.agent.FlightRecorderHelper;
 import io.cryostat.agent.harvest.Harvester;
 import io.cryostat.agent.model.MBeanInfo;
-import io.cryostat.agent.triggers.SmartTrigger.TriggerState;
+import io.cryostat.libcryostat.triggers.SmartTrigger;
+import io.cryostat.libcryostat.triggers.SmartTrigger.TriggerState;
 
 import com.google.api.expr.v1alpha1.Decl;
 import com.google.api.expr.v1alpha1.Type;
