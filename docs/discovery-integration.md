@@ -62,7 +62,7 @@ This file contains labels and annotations that should be applied to the Agent's 
 
 ### hierarchy.json
 
-This file defines a tree structure of DiscoveryNodes that wrap around the Agent's self node. This represents the Kubernetes object hierarchy (Namespace → Deployment → Pod → Agent).
+This file defines a tree structure of DiscoveryNodes that wrap around the Agent's self node. This represents the Kubernetes object hierarchy (Namespace -> Deployment -> Pod -> Agent).
 
 **Schema:**
 ```json
@@ -127,7 +127,7 @@ This file defines a tree structure of DiscoveryNodes that wrap around the Agent'
 
 **Behavior:**
 - The Agent's self DiscoveryNode(s) are attached as children of the innermost hierarchy node
-- The complete tree (Namespace → Deployment → Pod → Agent) is published to Cryostat
+- The complete tree (Namespace -> Deployment -> Pod -> Agent) is published to Cryostat
 - Missing file results in debug log and default behavior (no hierarchy wrapping)
 - Invalid hierarchy (multiple children per node) results in error log and file is ignored
 
@@ -156,7 +156,7 @@ This file defines a tree structure of DiscoveryNodes that wrap around the Agent'
 
 **Operator mounts:**
 - `/tmp/cryostat-agent/discovery/metadata.json` with Pod labels and annotations
-- `/tmp/cryostat-agent/discovery/hierarchy.json` with Namespace → Deployment → Pod structure
+- `/tmp/cryostat-agent/discovery/hierarchy.json` with Namespace -> Deployment -> Pod structure
 
 **Result**: Cryostat receives a discovery tree showing:
 ```
@@ -165,5 +165,3 @@ production-namespace (Namespace)
     └── my-app-pod-abc123 (Pod)
         └── my-application:8080 (JVM Agent)
 ```
-
-This provides full Kubernetes context for the discovered JVM target, enabling better organization and filtering in the Cryostat UI.

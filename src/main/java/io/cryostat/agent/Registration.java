@@ -36,6 +36,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 import io.cryostat.agent.VersionInfo.Semver;
+import io.cryostat.agent.model.DiscoveryMetadata;
 import io.cryostat.agent.model.DiscoveryNode;
 import io.cryostat.agent.model.PluginInfo;
 import io.cryostat.agent.util.StringUtils;
@@ -322,20 +323,8 @@ public class Registration {
     private Set<DiscoveryNode> defineSelf() throws UnknownHostException, URISyntaxException {
         Set<DiscoveryNode> discoveryNodes = new HashSet<>();
 
-        Map<String, String> labels = new HashMap<>();
-        Map<String, String> annotations = new HashMap<>();
-
-        discoveryFileReader
-                .readMetadata()
-                .ifPresent(
-                        metadata -> {
-                            labels.putAll(metadata.getLabels());
-                            annotations.putAll(metadata.getAnnotations());
-                            log.debug(
-                                    "Loaded metadata from mounted file: {} labels, {} annotations",
-                                    labels.size(),
-                                    annotations.size());
-                        });
+        DiscoveryMetadata discoveryMetadata =
+                discoveryFileReader.readMetadata().orElseGet(DiscoveryMetadata::new);
 
         long pid = ProcessHandle.current().pid();
         String javaMain = System.getProperty("sun.java.command", System.getenv("JAVA_MAIN_CLASS"));
@@ -364,19 +353,17 @@ public class Registration {
                         javaMain,
                         startTime);
 
-        // Apply labels to the target - need to use setLabels since getLabels returns a copy
-        if (!labels.isEmpty()) {
+        if (!discoveryMetadata.getLabels().isEmpty()) {
             Map<String, String> targetLabels = new HashMap<>(httpSelf.getLabels());
-            targetLabels.putAll(labels);
+            targetLabels.putAll(discoveryMetadata.getLabels());
             httpSelf.setLabels(targetLabels);
         }
 
-        // Apply annotations to the target's platform section
-        if (!annotations.isEmpty()) {
+        if (!discoveryMetadata.getAnnotations().isEmpty()) {
             DiscoveryNode.Annotations targetAnnotations = httpSelf.getAnnotations();
             Map<String, Object> platformAnnotations =
                     new HashMap<>(targetAnnotations.getPlatform());
-            platformAnnotations.putAll(annotations);
+            platformAnnotations.putAll(discoveryMetadata.getAnnotations());
             targetAnnotations.setPlatform(platformAnnotations);
             httpSelf.setAnnotations(targetAnnotations);
         }
@@ -384,9 +371,8 @@ public class Registration {
         DiscoveryNode httpNode =
                 new DiscoveryNode(
                         appName + "-agent-" + pluginInfo.getId(), NODE_TYPE_HTTP, httpSelf);
-        // Apply labels to the node itself
-        if (!labels.isEmpty()) {
-            httpNode.setLabels(labels);
+        if (!discoveryMetadata.getLabels().isEmpty()) {
+            httpNode.setLabels(discoveryMetadata.getLabels());
         }
         discoveryNodes.add(httpNode);
 
@@ -411,19 +397,17 @@ public class Registration {
                             javaMain,
                             startTime);
 
-            // Apply labels to the JMX target
-            if (!labels.isEmpty()) {
+            if (!discoveryMetadata.getLabels().isEmpty()) {
                 Map<String, String> targetLabels = new HashMap<>(jmxSelf.getLabels());
-                targetLabels.putAll(labels);
+                targetLabels.putAll(discoveryMetadata.getLabels());
                 jmxSelf.setLabels(targetLabels);
             }
 
-            // Apply annotations to the JMX target's platform section
-            if (!annotations.isEmpty()) {
+            if (!discoveryMetadata.getAnnotations().isEmpty()) {
                 DiscoveryNode.Annotations targetAnnotations = jmxSelf.getAnnotations();
                 Map<String, Object> platformAnnotations =
                         new HashMap<>(targetAnnotations.getPlatform());
-                platformAnnotations.putAll(annotations);
+                platformAnnotations.putAll(discoveryMetadata.getAnnotations());
                 targetAnnotations.setPlatform(platformAnnotations);
                 jmxSelf.setAnnotations(targetAnnotations);
             }
@@ -431,9 +415,8 @@ public class Registration {
             DiscoveryNode jmxNode =
                     new DiscoveryNode(
                             appName + "-jmx-" + pluginInfo.getId(), NODE_TYPE_JMX, jmxSelf);
-            // Apply labels to the node itself
-            if (!labels.isEmpty()) {
-                jmxNode.setLabels(labels);
+            if (!discoveryMetadata.getLabels().isEmpty()) {
+                jmxNode.setLabels(discoveryMetadata.getLabels());
             }
             discoveryNodes.add(jmxNode);
         }
