@@ -196,6 +196,14 @@ public abstract class ConfigModule {
             "cryostat.agent.registration.jmx.ignore";
     public static final String CRYOSTAT_AGENT_REGISTRATION_JMX_USE_CALLBACK_HOST =
             "cryostat.agent.registration.jmx.use-callback-host";
+
+    public static final String CRYOSTAT_AGENT_DISCOVERY_MOUNT_PATH =
+            "cryostat.agent.discovery.mount-path";
+    public static final String CRYOSTAT_AGENT_DISCOVERY_METADATA_FILENAME =
+            "cryostat.agent.discovery.metadata-filename";
+    public static final String CRYOSTAT_AGENT_DISCOVERY_HIERARCHY_FILENAME =
+            "cryostat.agent.discovery.hierarchy-filename";
+
     public static final String CRYOSTAT_AGENT_EXIT_SIGNALS = "cryostat.agent.exit.signals";
     public static final String CRYOSTAT_AGENT_EXIT_DEREGISTRATION_TIMEOUT_MS =
             "cryostat.agent.exit.deregistration.timeout-ms";
@@ -963,6 +971,30 @@ public abstract class ConfigModule {
     @Named(CRYOSTAT_AGENT_EXIT_DEREGISTRATION_TIMEOUT_MS)
     public static long provideCryostatAgentExitDeregistrationTimeoutMs(Config config) {
         return config.getValue(CRYOSTAT_AGENT_EXIT_DEREGISTRATION_TIMEOUT_MS, long.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_DISCOVERY_MOUNT_PATH)
+    public static String provideCryostatAgentDiscoveryMountPath(Config config) {
+        return config.getOptionalValue(CRYOSTAT_AGENT_DISCOVERY_MOUNT_PATH, String.class)
+                .orElse("/tmp/cryostat-agent/discovery");
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_DISCOVERY_METADATA_FILENAME)
+    public static String provideCryostatAgentDiscoveryMetadataFilename(Config config) {
+        return config.getOptionalValue(CRYOSTAT_AGENT_DISCOVERY_METADATA_FILENAME, String.class)
+                .orElse("metadata.json");
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_DISCOVERY_HIERARCHY_FILENAME)
+    public static String provideCryostatAgentDiscoveryHierarchyFilename(Config config) {
+        return config.getOptionalValue(CRYOSTAT_AGENT_DISCOVERY_HIERARCHY_FILENAME, String.class)
+                .orElse("hierarchy.json");
     }
 
     @Provides

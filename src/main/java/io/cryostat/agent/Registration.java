@@ -22,7 +22,9 @@ import java.net.UnknownHostException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -32,9 +34,9 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
-import java.util.stream.Collectors;
 
 import io.cryostat.agent.VersionInfo.Semver;
+import io.cryostat.agent.model.DiscoveryMetadata;
 import io.cryostat.agent.model.DiscoveryNode;
 import io.cryostat.agent.model.PluginInfo;
 import io.cryostat.agent.util.StringUtils;
@@ -45,7 +47,8 @@ import org.slf4j.LoggerFactory;
 
 public class Registration {
 
-    private static final String NODE_TYPE = "JVM";
+    private static final String NODE_TYPE_JMX = "JVM";
+    private static final String NODE_TYPE_HTTP = "CryostatAgent";
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
@@ -53,6 +56,7 @@ public class Registration {
     private final CryostatClient cryostat;
     private final CallbackResolver callbackResolver;
     private final WebServer webServer;
+    private final DiscoveryFileReader discoveryFileReader;
     private final String instanceId;
     private final String jvmId;
     private final String appName;
@@ -75,6 +79,7 @@ public class Registration {
             CryostatClient cryostat,
             CallbackResolver callbackResolver,
             WebServer webServer,
+            DiscoveryFileReader discoveryFileReader,
             String instanceId,
             String jvmId,
             String appName,
@@ -89,6 +94,7 @@ public class Registration {
         this.cryostat = cryostat;
         this.callbackResolver = callbackResolver;
         this.webServer = webServer;
+        this.discoveryFileReader = discoveryFileReader;
         this.instanceId = instanceId;
         this.jvmId = jvmId;
         this.appName = appName;
@@ -271,18 +277,29 @@ public class Registration {
             log.warn("update attempted before initialized");
             return;
         }
-        Collection<DiscoveryNode> selfNodes;
+        final Collection<DiscoveryNode> baseSelfNodes;
         try {
-            selfNodes = defineSelf();
+            baseSelfNodes = defineSelf();
         } catch (UnknownHostException | URISyntaxException e) {
             log.error("Unable to define self", e);
             return;
         }
-        log.trace(
-                "publishing self as {}",
-                selfNodes.stream()
-                        .map(n -> n.getTarget().getConnectUrl())
-                        .collect(Collectors.toList()));
+
+        Collection<DiscoveryNode> selfNodes =
+                discoveryFileReader
+                        .readHierarchy()
+                        .map(
+                                root -> {
+                                    DiscoveryNode innermostNode =
+                                            discoveryFileReader.getInnermostNode(root);
+                                    innermostNode.getChildren().addAll(baseSelfNodes);
+                                    log.debug(
+                                            "Wrapped self nodes with hierarchy from mounted file");
+                                    return (Collection<DiscoveryNode>) Set.of(root);
+                                })
+                        .orElse(baseSelfNodes);
+
+        log.trace("publishing self as {}", selfNodes);
         Future<Void> f =
                 cryostat.update(pluginInfo, selfNodes)
                         .handle(
@@ -305,6 +322,9 @@ public class Registration {
 
     private Set<DiscoveryNode> defineSelf() throws UnknownHostException, URISyntaxException {
         Set<DiscoveryNode> discoveryNodes = new HashSet<>();
+
+        DiscoveryMetadata discoveryMetadata =
+                discoveryFileReader.readMetadata().orElseGet(DiscoveryMetadata::new);
 
         long pid = ProcessHandle.current().pid();
         String javaMain = System.getProperty("sun.java.command", System.getenv("JAVA_MAIN_CLASS"));
@@ -332,8 +352,29 @@ public class Registration {
                         port,
                         javaMain,
                         startTime);
-        discoveryNodes.add(
-                new DiscoveryNode(appName + "-agent-" + pluginInfo.getId(), NODE_TYPE, httpSelf));
+
+        if (!discoveryMetadata.getLabels().isEmpty()) {
+            Map<String, String> targetLabels = new HashMap<>(httpSelf.getLabels());
+            targetLabels.putAll(discoveryMetadata.getLabels());
+            httpSelf.setLabels(targetLabels);
+        }
+
+        if (!discoveryMetadata.getAnnotations().isEmpty()) {
+            DiscoveryNode.Annotations targetAnnotations = httpSelf.getAnnotations();
+            Map<String, Object> platformAnnotations =
+                    new HashMap<>(targetAnnotations.getPlatform());
+            platformAnnotations.putAll(discoveryMetadata.getAnnotations());
+            targetAnnotations.setPlatform(platformAnnotations);
+            httpSelf.setAnnotations(targetAnnotations);
+        }
+
+        DiscoveryNode httpNode =
+                new DiscoveryNode(
+                        appName + "-agent-" + pluginInfo.getId(), NODE_TYPE_HTTP, httpSelf);
+        if (!discoveryMetadata.getLabels().isEmpty()) {
+            httpNode.setLabels(discoveryMetadata.getLabels());
+        }
+        discoveryNodes.add(httpNode);
 
         if (!registrationJmxIgnore && jmxPort > 0) {
             uri =
@@ -355,8 +396,29 @@ public class Registration {
                             port,
                             javaMain,
                             startTime);
-            discoveryNodes.add(
-                    new DiscoveryNode(appName + "-jmx-" + pluginInfo.getId(), NODE_TYPE, jmxSelf));
+
+            if (!discoveryMetadata.getLabels().isEmpty()) {
+                Map<String, String> targetLabels = new HashMap<>(jmxSelf.getLabels());
+                targetLabels.putAll(discoveryMetadata.getLabels());
+                jmxSelf.setLabels(targetLabels);
+            }
+
+            if (!discoveryMetadata.getAnnotations().isEmpty()) {
+                DiscoveryNode.Annotations targetAnnotations = jmxSelf.getAnnotations();
+                Map<String, Object> platformAnnotations =
+                        new HashMap<>(targetAnnotations.getPlatform());
+                platformAnnotations.putAll(discoveryMetadata.getAnnotations());
+                targetAnnotations.setPlatform(platformAnnotations);
+                jmxSelf.setAnnotations(targetAnnotations);
+            }
+
+            DiscoveryNode jmxNode =
+                    new DiscoveryNode(
+                            appName + "-jmx-" + pluginInfo.getId(), NODE_TYPE_JMX, jmxSelf);
+            if (!discoveryMetadata.getLabels().isEmpty()) {
+                jmxNode.setLabels(discoveryMetadata.getLabels());
+            }
+            discoveryNodes.add(jmxNode);
         }
 
         return discoveryNodes;
