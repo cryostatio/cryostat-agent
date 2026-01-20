@@ -37,7 +37,7 @@ import com.redhat.insights.agent.ClassNoticer;
 import com.redhat.insights.agent.InsightsAgentHttpClient;
 import com.redhat.insights.agent.shaded.InsightsReportController;
 import com.redhat.insights.agent.shaded.http.InsightsHttpClient;
-import org.eclipse.microprofile.config.Config;
+import io.smallrye.config.SmallRyeConfig;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -55,7 +55,7 @@ public class InsightsAgentHelperTest {
 
     @Mock Instrumentation instrumentation;
     @Mock PluginInfo pluginInfo;
-    @Mock Config config;
+    @Mock SmallRyeConfig config;
     @Mock AgentBasicReport report;
     @Mock InsightsReportController controller;
     @Captor ArgumentCaptor<AgentConfiguration> configCaptor;
