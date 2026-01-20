@@ -17,13 +17,13 @@ package io.cryostat.agent.remote;
 
 import io.cryostat.agent.ConfigModule;
 
-import org.eclipse.microprofile.config.Config;
+import io.smallrye.config.SmallRyeConfig;
 
 public abstract class MutatingRemoteContext implements RemoteContext {
 
-    protected final Config config;
+    protected final SmallRyeConfig config;
 
-    protected MutatingRemoteContext(Config config) {
+    protected MutatingRemoteContext(SmallRyeConfig config) {
         this.config = config;
     }
 
@@ -32,7 +32,7 @@ public abstract class MutatingRemoteContext implements RemoteContext {
         return apiWritesEnabled(config);
     }
 
-    public static boolean apiWritesEnabled(Config config) {
+    public static boolean apiWritesEnabled(SmallRyeConfig config) {
         return config.getValue(ConfigModule.CRYOSTAT_AGENT_API_WRITES_ENABLED, boolean.class);
     }
 }

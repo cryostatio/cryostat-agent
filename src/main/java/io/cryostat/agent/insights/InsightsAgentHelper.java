@@ -39,7 +39,7 @@ import com.redhat.insights.agent.shaded.logging.InsightsLogger;
 import com.redhat.insights.agent.shaded.reports.InsightsReport;
 import com.redhat.insights.agent.shaded.tls.PEMSupport;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
-import org.eclipse.microprofile.config.Config;
+import io.smallrye.config.SmallRyeConfig;
 import org.slf4j.simple.SimpleLogger;
 
 public class InsightsAgentHelper {
@@ -53,9 +53,9 @@ public class InsightsAgentHelper {
     @SuppressFBWarnings("EI_EXPOSE_REP2")
     private final Instrumentation instrumentation;
 
-    private final Config config;
+    private final SmallRyeConfig config;
 
-    public InsightsAgentHelper(Config config, Instrumentation instrumentation) {
+    public InsightsAgentHelper(SmallRyeConfig config, Instrumentation instrumentation) {
         this.config = config;
         this.instrumentation = instrumentation;
     }
