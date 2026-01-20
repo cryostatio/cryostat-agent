@@ -53,6 +53,7 @@ public class InsightsAgentHelper {
     @SuppressFBWarnings("EI_EXPOSE_REP2")
     private final Instrumentation instrumentation;
 
+    @SuppressFBWarnings("EI_EXPOSE_REP2")
     private final SmallRyeConfig config;
 
     public InsightsAgentHelper(SmallRyeConfig config, Instrumentation instrumentation) {

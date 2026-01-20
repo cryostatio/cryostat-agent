@@ -46,6 +46,7 @@ import java.security.spec.PKCS8EncodedKeySpec;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Executors;
@@ -745,7 +746,10 @@ public abstract class MainModule {
             @Named(JVM_ID) String jvmId,
             @Named(ConfigModule.CRYOSTAT_AGENT_APP_NAME) String appName,
             @Named(ConfigModule.CRYOSTAT_AGENT_BASEURI) URI baseUri,
-            @Named(ConfigModule.CRYOSTAT_AGENT_REALM) String realm) {
+            @Named(ConfigModule.CRYOSTAT_AGENT_REALM) String realm,
+            @Named(ConfigModule.CRYOSTAT_AGENT_PUBLISH_FILL_STRATEGY) String fillAlgorithm,
+            @Named(ConfigModule.CRYOSTAT_AGENT_PUBLISH_CONTEXT)
+                    Map<String, String> publishContext) {
         return new CryostatClient(
                 executor,
                 objectMapper,
@@ -755,7 +759,8 @@ public abstract class MainModule {
                 jvmId,
                 appName,
                 baseUri,
-                realm);
+                realm,
+                new CryostatClient.DiscoveryPublication(fillAlgorithm, publishContext));
     }
 
     @Provides
