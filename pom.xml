@@ -365,6 +365,10 @@
                 <shadedPattern>${shade.prefix}.io.smallrye.config</shadedPattern>
               </relocation>
               <relocation>
+                <pattern>org.eclipse.microprofile</pattern>
+                <shadedPattern>${shade.prefix}.org.eclipse.microprofile</shadedPattern>
+              </relocation>
+              <relocation>
                 <pattern>org.jboss</pattern>
                 <shadedPattern>${shade.prefix}.org.jboss</shadedPattern>
               </relocation>
