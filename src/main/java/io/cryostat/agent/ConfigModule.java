@@ -1029,7 +1029,8 @@ public abstract class ConfigModule {
     @Singleton
     @Named(CRYOSTAT_AGENT_PUBLISH_CONTEXT)
     public static Map<String, String> provideCryostatAgentPublishContext(SmallRyeConfig config) {
-        return config.getValues(CRYOSTAT_AGENT_PUBLISH_CONTEXT, String.class, String.class);
+        return config.getOptionalValues(CRYOSTAT_AGENT_PUBLISH_CONTEXT, String.class, String.class)
+                .orElse(Map.of());
     }
 
     @Provides

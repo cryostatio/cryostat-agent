@@ -25,6 +25,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
@@ -74,6 +75,7 @@ import org.slf4j.LoggerFactory;
 public class CryostatClient {
 
     private static final String DISCOVERY_API_PATH = "/api/v4/discovery";
+    private static final String DISCOVERY_PUBLISH_API_PATH = "/api/v4.2/discovery";
     private static final String CREDENTIALS_API_PATH = "/api/v4/credentials";
     private static final String CHECK_CREDENTIAL_API_PATH = "/api/beta/discovery/credential_exists";
     private static final String DISCOVERY_TOKEN_HEADER = "Cryostat-Discovery-Authentication";
@@ -90,6 +92,7 @@ public class CryostatClient {
     private final String jvmId;
     private final URI baseUri;
     private final String realm;
+    private final DiscoveryPublication discoveryPublication;
 
     CryostatClient(
             Executor executor,
@@ -99,7 +102,8 @@ public class CryostatClient {
             String jvmId,
             String appName,
             URI baseUri,
-            String realm) {
+            String realm,
+            DiscoveryPublication discoveryPublication) {
         this.executor = executor;
         this.mapper = mapper;
         this.host = HttpHost.create(baseUri);
@@ -109,6 +113,7 @@ public class CryostatClient {
         this.appName = appName;
         this.baseUri = baseUri;
         this.realm = realm;
+        this.discoveryPublication = discoveryPublication;
 
         log.trace("Using Cryostat baseuri {}", baseUri);
     }
@@ -343,11 +348,14 @@ public class CryostatClient {
             PluginInfo pluginInfo, Collection<DiscoveryNode> subtree) {
         try {
             HttpPost req =
-                    new HttpPost(baseUri.resolve(DISCOVERY_API_PATH + "/" + pluginInfo.getId()));
+                    new HttpPost(
+                            baseUri.resolve(DISCOVERY_PUBLISH_API_PATH + "/" + pluginInfo.getId()));
             req.addHeader(DISCOVERY_TOKEN_HEADER, pluginInfo.getToken());
             req.setEntity(
                     new StringEntity(
-                            mapper.writeValueAsString(subtree), ContentType.APPLICATION_JSON));
+                            mapper.writeValueAsString(
+                                    new DiscoveryPublication(discoveryPublication, subtree)),
+                            ContentType.APPLICATION_JSON));
 
             log.trace("{}", req);
             return supply(req, (res) -> logResponse(req, res))
@@ -590,6 +598,68 @@ public class CryostatClient {
             }
             StoredCredential other = (StoredCredential) obj;
             return id == other.id && Objects.equals(matchExpression, other.matchExpression);
+        }
+    }
+
+    @SuppressFBWarnings("EI_EXPOSE_REP")
+    public static class DiscoveryPublication {
+
+        final String fillAlgorithm;
+        final Map<String, String> context = new HashMap<>();
+        final Collection<DiscoveryNode> nodes = new ArrayList<>();
+
+        public DiscoveryPublication(String fillAlgorithm, Map<String, String> context) {
+            this.fillAlgorithm = fillAlgorithm;
+            this.context.putAll(context);
+        }
+
+        DiscoveryPublication(DiscoveryPublication o, Collection<DiscoveryNode> nodes) {
+            this(o.fillAlgorithm, o.context);
+            this.nodes.addAll(nodes);
+        }
+
+        public Collection<DiscoveryNode> getNodes() {
+            return nodes;
+        }
+
+        public String getFillAlgorithm() {
+            return fillAlgorithm;
+        }
+
+        public Map<String, String> getContext() {
+            return context;
+        }
+
+        public void setNodes(Collection<DiscoveryNode> nodes) {
+            this.nodes.clear();
+            this.nodes.addAll(nodes);
+        }
+
+        public void setContext(Map<String, String> context) {
+            this.context.clear();
+            this.context.putAll(context);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(nodes, fillAlgorithm, context);
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) {
+                return true;
+            }
+            if (obj == null) {
+                return false;
+            }
+            if (getClass() != obj.getClass()) {
+                return false;
+            }
+            DiscoveryPublication other = (DiscoveryPublication) obj;
+            return Objects.equals(nodes, other.nodes)
+                    && Objects.equals(fillAlgorithm, other.fillAlgorithm)
+                    && Objects.equals(context, other.context);
         }
     }
 }
