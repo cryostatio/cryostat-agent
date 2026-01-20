@@ -216,15 +216,9 @@
     <artifactId>jackson-databind</artifactId>
   </dependency>
   <dependency>
-    <groupId>org.eclipse.microprofile.config</groupId>
-    <artifactId>microprofile-config-api</artifactId>
-    <scope>compile</scope>
-  </dependency>
-  <dependency>
     <groupId>io.smallrye.config</groupId>
     <artifactId>smallrye-config</artifactId>
     <version>${io.smallrye.config.version}</version>
-    <scope>runtime</scope>
   </dependency>
   <dependency>
     <groupId>com.redhat.insights</groupId>
@@ -369,10 +363,6 @@
               <relocation>
                 <pattern>io.smallrye.config</pattern>
                 <shadedPattern>${shade.prefix}.io.smallrye.config</shadedPattern>
-              </relocation>
-              <relocation>
-                <pattern>org.eclipse.microprofile</pattern>
-                <shadedPattern>${shade.prefix}.org.eclipse.microprofile</shadedPattern>
               </relocation>
               <relocation>
                 <pattern>org.jboss</pattern>

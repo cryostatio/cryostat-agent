@@ -40,11 +40,11 @@ import io.cryostat.libcryostat.templates.InvalidEventTemplateException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
+import io.smallrye.config.SmallRyeConfig;
 import jdk.jfr.Recording;
 import jdk.jfr.RecordingState;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hc.core5.http.HttpStatus;
-import org.eclipse.microprofile.config.Config;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -55,12 +55,13 @@ class RecordingsContext implements RemoteContext {
             Pattern.compile("^" + PATH + "(\\d+)$", Pattern.MULTILINE);
 
     private final Logger log = LoggerFactory.getLogger(getClass());
-    private final Config config;
+    private final SmallRyeConfig config;
     private final ObjectMapper mapper;
     private final FlightRecorderHelper flightRecorder;
 
     @Inject
-    RecordingsContext(Config config, ObjectMapper mapper, FlightRecorderHelper flightRecorder) {
+    RecordingsContext(
+            SmallRyeConfig config, ObjectMapper mapper, FlightRecorderHelper flightRecorder) {
         this.config = config;
         this.mapper = mapper;
         this.flightRecorder = flightRecorder;

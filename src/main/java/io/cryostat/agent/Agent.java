@@ -56,8 +56,8 @@ import com.sun.tools.attach.AttachNotSupportedException;
 import com.sun.tools.attach.VirtualMachine;
 import com.sun.tools.attach.VirtualMachineDescriptor;
 import dagger.Component;
+import io.smallrye.config.SmallRyeConfig;
 import org.apache.commons.lang3.tuple.Pair;
-import org.eclipse.microprofile.config.Config;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import picocli.CommandLine;
@@ -373,7 +373,7 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
     @Singleton
     @Component(modules = {MainModule.class})
     interface Client {
-        Config config();
+        SmallRyeConfig config();
 
         @Named(ConfigModule.CRYOSTAT_AGENT_FLEET_SAMPLING_RATIO)
         double fleetSamplingRatio();

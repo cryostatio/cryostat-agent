@@ -28,7 +28,7 @@ import java.util.stream.Collectors;
 
 import io.cryostat.agent.ConfigModule.CallbackCandidate;
 
-import org.eclipse.microprofile.config.Config;
+import io.smallrye.config.SmallRyeConfig;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -42,7 +42,7 @@ import org.projectnessie.cel.tools.ScriptHost;
 @ExtendWith(MockitoExtension.class)
 public class CallbackResolverTest {
 
-    @Mock Config config;
+    @Mock SmallRyeConfig config;
     @Mock InetAddress addr;
     MockedStatic<InetAddress> addrMock;
     CallbackResolver resolver;
