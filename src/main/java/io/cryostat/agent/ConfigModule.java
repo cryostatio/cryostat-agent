@@ -206,6 +206,10 @@ public abstract class ConfigModule {
     public static final String CRYOSTAT_AGENT_EXIT_DEREGISTRATION_TIMEOUT_MS =
             "cryostat.agent.exit.deregistration.timeout-ms";
 
+    public static final String CRYOSTAT_AGENT_PUBLISH_CONTEXT = "cryostat.agent.publish.context";
+    public static final String CRYOSTAT_AGENT_PUBLISH_FILL_STRATEGY =
+            "cryostat.agent.publish.fill-strategy";
+
     public static final String CRYOSTAT_AGENT_HARVESTER_PERIOD_MS =
             "cryostat.agent.harvester.period-ms";
     public static final String CRYOSTAT_AGENT_HARVESTER_TEMPLATE =
@@ -1019,6 +1023,21 @@ public abstract class ConfigModule {
     @Named(CRYOSTAT_AGENT_EXIT_DEREGISTRATION_TIMEOUT_MS)
     public static long provideCryostatAgentExitDeregistrationTimeoutMs(SmallRyeConfig config) {
         return config.getValue(CRYOSTAT_AGENT_EXIT_DEREGISTRATION_TIMEOUT_MS, long.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_PUBLISH_CONTEXT)
+    public static Map<String, String> provideCryostatAgentPublishContext(SmallRyeConfig config) {
+        return config.getValues(CRYOSTAT_AGENT_PUBLISH_CONTEXT, String.class, String.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_PUBLISH_FILL_STRATEGY)
+    public static String provideCryostatAgentPublishFillStrategy(SmallRyeConfig config) {
+        return config.getOptionalValue(CRYOSTAT_AGENT_PUBLISH_FILL_STRATEGY, String.class)
+                .orElse("");
     }
 
     @Provides
