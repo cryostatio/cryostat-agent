@@ -1037,8 +1037,7 @@ public abstract class ConfigModule {
     @Singleton
     @Named(CRYOSTAT_AGENT_PUBLISH_FILL_STRATEGY)
     public static String provideCryostatAgentPublishFillStrategy(SmallRyeConfig config) {
-        return config.getOptionalValue(CRYOSTAT_AGENT_PUBLISH_FILL_STRATEGY, String.class)
-                .orElse("NONE");
+        return config.getValue(CRYOSTAT_AGENT_PUBLISH_FILL_STRATEGY, String.class);
     }
 
     @Provides
