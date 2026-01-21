@@ -797,7 +797,7 @@ public abstract class MainModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_APP_NAME) String appName,
             @Named(ConfigModule.CRYOSTAT_AGENT_BASEURI) URI baseUri,
             @Named(ConfigModule.CRYOSTAT_AGENT_REALM) String realm,
-            @Named(ConfigModule.CRYOSTAT_AGENT_PUBLISH_FILL_STRATEGY) String fillAlgorithm,
+            @Named(ConfigModule.CRYOSTAT_AGENT_PUBLISH_FILL_STRATEGY) String fillStrategy,
             @Named(ConfigModule.CRYOSTAT_AGENT_PUBLISH_CONTEXT)
                     Map<String, String> publishContext) {
         return new CryostatClient(
@@ -809,7 +809,7 @@ public abstract class MainModule {
                 appName,
                 baseUri,
                 realm,
-                new CryostatClient.DiscoveryPublication(fillAlgorithm, publishContext));
+                new CryostatClient.DiscoveryPublication(fillStrategy, publishContext));
     }
 
     @Provides

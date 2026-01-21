@@ -604,17 +604,17 @@ public class CryostatClient {
     @SuppressFBWarnings("EI_EXPOSE_REP")
     public static class DiscoveryPublication {
 
-        final String fillAlgorithm;
+        final String fillStrategy;
         final Map<String, String> context = new HashMap<>();
         final Collection<DiscoveryNode> nodes = new ArrayList<>();
 
-        public DiscoveryPublication(String fillAlgorithm, Map<String, String> context) {
-            this.fillAlgorithm = fillAlgorithm;
+        public DiscoveryPublication(String fillStrategy, Map<String, String> context) {
+            this.fillStrategy = fillStrategy;
             this.context.putAll(context);
         }
 
         DiscoveryPublication(DiscoveryPublication o, Collection<DiscoveryNode> nodes) {
-            this(o.fillAlgorithm, o.context);
+            this(o.fillStrategy, o.context);
             this.nodes.addAll(nodes);
         }
 
@@ -622,8 +622,8 @@ public class CryostatClient {
             return nodes;
         }
 
-        public String getFillAlgorithm() {
-            return fillAlgorithm;
+        public String getFillStrategy() {
+            return fillStrategy;
         }
 
         public Map<String, String> getContext() {
@@ -642,7 +642,7 @@ public class CryostatClient {
 
         @Override
         public int hashCode() {
-            return Objects.hash(nodes, fillAlgorithm, context);
+            return Objects.hash(nodes, fillStrategy, context);
         }
 
         @Override
@@ -658,7 +658,7 @@ public class CryostatClient {
             }
             DiscoveryPublication other = (DiscoveryPublication) obj;
             return Objects.equals(nodes, other.nodes)
-                    && Objects.equals(fillAlgorithm, other.fillAlgorithm)
+                    && Objects.equals(fillStrategy, other.fillStrategy)
                     && Objects.equals(context, other.context);
         }
     }
