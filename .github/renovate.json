@@ -1,0 +1,51 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":dependencyDashboard"
+  ],
+  "reviewersFromCodeOwners": true,
+  "labels": [
+    "dependencies",
+    "chore",
+    "safe-to-test"
+  ],
+  "semanticCommits": "enabled",
+  "major": {
+    "dependencyDashboardApproval": true
+  },
+  "stopUpdatingLabel": "blocked",
+  "packageRules": [
+    {
+      "description": "Require approval for projectnessie updates",
+      "matchManagers": [
+        "maven"
+      ],
+      "dependencyDashboardApproval": true,
+      "matchPackageNames": [
+        "/^org\\.projectnessie\\.cel:/"
+      ]
+    },
+    {
+      "description": "Require approval for protobuf updates",
+      "matchManagers": [
+        "maven"
+      ],
+      "dependencyDashboardApproval": true,
+      "matchPackageNames": [
+        "/^com\\.google\\.protobuf:/"
+      ]
+    },
+    {
+      "description": "Require approval for dagger updates",
+      "matchManagers": [
+        "maven"
+      ],
+      "dependencyDashboardApproval": true,
+      "matchPackageNames": [
+        "/^com\\.google\\.dagger:/"
+      ]
+    }
+  ]
+}
+
