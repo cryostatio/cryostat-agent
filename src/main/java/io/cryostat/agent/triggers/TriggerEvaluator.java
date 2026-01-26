@@ -30,7 +30,8 @@ import java.util.concurrent.TimeUnit;
 import io.cryostat.agent.FlightRecorderHelper;
 import io.cryostat.agent.harvest.Harvester;
 import io.cryostat.agent.model.MBeanInfo;
-import io.cryostat.agent.triggers.SmartTrigger.TriggerState;
+import io.cryostat.libcryostat.triggers.SmartTrigger;
+import io.cryostat.libcryostat.triggers.SmartTrigger.TriggerState;
 
 import com.google.api.expr.v1alpha1.Decl;
 import com.google.api.expr.v1alpha1.Type;
@@ -84,6 +85,39 @@ public class TriggerEvaluator {
         parser.parse(args).forEach(this::registerTrigger);
         parser.parse(String.join(",", definitions)).forEach(this::registerTrigger);
         this.start();
+    }
+
+    // start(args) will re-parse the triggers directory, we don't need to do that
+    // for requests that come in later through the api since existing triggers
+    // are already stored.
+    public boolean append(String definitions) {
+        // Sanity check the trigger definitions before we stop/start the evaluation
+        if (!parser.isValid(definitions)) {
+            log.warn("Invalid Trigger definition {}", definitions);
+            return false;
+        }
+        this.stop();
+        parser.parse(definitions).forEach(this::registerTrigger);
+        this.start();
+        return true;
+    }
+
+    public boolean remove(String definitions) {
+        // Sanity check the trigger definitions before touching the thread
+        if (!parser.isValid(definitions)) {
+            log.warn("Invalid Trigger definition {}", definitions);
+            return false;
+        }
+        List<SmartTrigger> triggers = parser.parse(definitions);
+        // Sanity check the triggers actually exist
+        if (!this.triggers.containsAll(triggers)) {
+            return false;
+        }
+
+        this.stop();
+        this.triggers.removeAll(triggers);
+        this.start();
+        return true;
     }
 
     public void stop() {
@@ -260,5 +294,9 @@ public class TriggerEvaluator {
         else
             // Default to String so we can still do some comparison
             return Decls.String;
+    }
+
+    public List<String> getDefinitions() {
+        return definitions;
     }
 }
