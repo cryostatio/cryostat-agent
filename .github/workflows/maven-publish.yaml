@@ -16,7 +16,7 @@ jobs:
       packages: write
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v6
     - uses: skjolber/maven-cache-github-action@v1
       with:
         step: restore
