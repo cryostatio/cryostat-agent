@@ -33,7 +33,7 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y qemu-user-static
-    - uses: actions/setup-java@v4
+    - uses: actions/setup-java@v5
       with:
         java-version: '11'
         distribution: 'temurin'
