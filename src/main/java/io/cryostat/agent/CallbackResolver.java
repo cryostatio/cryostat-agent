@@ -31,7 +31,7 @@ import java.util.regex.Pattern;
 
 import io.cryostat.agent.ConfigModule.CallbackCandidate;
 
-import org.apache.http.client.utils.URIBuilder;
+import org.apache.hc.core5.net.URIBuilder;
 import org.projectnessie.cel.extension.StringsLib;
 import org.projectnessie.cel.tools.Script;
 import org.projectnessie.cel.tools.ScriptException;
