@@ -1,0 +1,16 @@
+{
+  "labels": {
+    "app": "my-application",
+    "version": "1.0.0",
+    "environment": "production",
+    "team": "platform",
+    "component": "backend"
+  },
+  "annotations": {
+    "prometheus.io/scrape": "true",
+    "prometheus.io/port": "8080",
+    "prometheus.io/path": "/metrics",
+    "description": "Main application service handling user requests",
+    "contact": "platform-team@example.com"
+  }
+}
