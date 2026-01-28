@@ -35,7 +35,6 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.function.Function;
-import java.util.function.Supplier;
 
 import io.cryostat.agent.FlightRecorderHelper.ConfigurationInfo;
 import io.cryostat.agent.FlightRecorderHelper.TemplatedRecording;
@@ -52,21 +51,22 @@ import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import jdk.jfr.Recording;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.input.CountingInputStream;
-import org.apache.http.HttpHeaders;
-import org.apache.http.HttpResponse;
-import org.apache.http.client.HttpClient;
-import org.apache.http.client.methods.HttpDelete;
-import org.apache.http.client.methods.HttpGet;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.client.methods.HttpRequestBase;
-import org.apache.http.client.methods.HttpUriRequest;
-import org.apache.http.entity.ContentType;
-import org.apache.http.entity.StringEntity;
-import org.apache.http.entity.mime.FormBodyPartBuilder;
-import org.apache.http.entity.mime.MultipartEntityBuilder;
-import org.apache.http.entity.mime.content.ByteArrayBody;
-import org.apache.http.entity.mime.content.InputStreamBody;
-import org.apache.http.entity.mime.content.StringBody;
+import org.apache.hc.client5.http.classic.HttpClient;
+import org.apache.hc.client5.http.classic.methods.HttpDelete;
+import org.apache.hc.client5.http.classic.methods.HttpGet;
+import org.apache.hc.client5.http.classic.methods.HttpPost;
+import org.apache.hc.client5.http.classic.methods.HttpUriRequest;
+import org.apache.hc.client5.http.classic.methods.HttpUriRequestBase;
+import org.apache.hc.client5.http.entity.mime.ByteArrayBody;
+import org.apache.hc.client5.http.entity.mime.FormBodyPartBuilder;
+import org.apache.hc.client5.http.entity.mime.InputStreamBody;
+import org.apache.hc.client5.http.entity.mime.MultipartEntityBuilder;
+import org.apache.hc.client5.http.entity.mime.StringBody;
+import org.apache.hc.core5.http.ClassicHttpResponse;
+import org.apache.hc.core5.http.ContentType;
+import org.apache.hc.core5.http.HttpHeaders;
+import org.apache.hc.core5.http.HttpHost;
+import org.apache.hc.core5.http.io.entity.StringEntity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -81,8 +81,8 @@ public class CryostatClient {
 
     private final Executor executor;
     private final ObjectMapper mapper;
+    private final HttpHost host;
     private final HttpClient http;
-    private final Supplier<Optional<String>> authorizationSupplier;
 
     private final String appName;
     private final String instanceId;
@@ -94,7 +94,6 @@ public class CryostatClient {
             Executor executor,
             ObjectMapper mapper,
             HttpClient http,
-            Supplier<Optional<String>> authorizationSupplier,
             String instanceId,
             String jvmId,
             String appName,
@@ -102,8 +101,8 @@ public class CryostatClient {
             String realm) {
         this.executor = executor;
         this.mapper = mapper;
+        this.host = HttpHost.create(baseUri);
         this.http = http;
-        this.authorizationSupplier = authorizationSupplier;
         this.instanceId = instanceId;
         this.jvmId = jvmId;
         this.appName = appName;
@@ -286,7 +285,7 @@ public class CryostatClient {
                         res -> {
                             if (!isOkStatus(res)) {
                                 try {
-                                    if (res.getStatusLine().getStatusCode() == 409) {
+                                    if (res.getCode() == 409) {
                                         int queried = queryExistingCredentials(callback).get();
                                         if (queried >= 0) {
                                             return queried;
@@ -393,9 +392,9 @@ public class CryostatClient {
                             log.trace(
                                     "{} {} ({} -> {}): {}/{}",
                                     req.getMethod(),
-                                    res.getStatusLine().getStatusCode(),
+                                    res.getCode(),
                                     heapDump.getFileName().toString(),
-                                    req.getURI(),
+                                    req.getRequestUri(),
                                     FileUtils.byteCountToDisplaySize(is.getByteCount()),
                                     Duration.between(start, finish));
                             assertOkStatus(req, res);
@@ -485,9 +484,9 @@ public class CryostatClient {
                             log.trace(
                                     "{} {} ({} -> {}): {}/{}",
                                     req.getMethod(),
-                                    res.getStatusLine().getStatusCode(),
+                                    res.getCode(),
                                     fileName,
-                                    req.getURI(),
+                                    req.getRequestUri(),
                                     FileUtils.byteCountToDisplaySize(is.getByteCount()),
                                     Duration.between(start, finish));
                             assertOkStatus(req, res);
@@ -496,24 +495,19 @@ public class CryostatClient {
                 .whenComplete((v, t) -> req.reset());
     }
 
-    private HttpResponse logResponse(HttpRequestBase req, HttpResponse res) {
-        log.trace("{} {} : {}", req.getMethod(), req.getURI(), res.getStatusLine().getStatusCode());
+    private ClassicHttpResponse logResponse(HttpUriRequestBase req, ClassicHttpResponse res) {
+        log.trace("{} {} : {}", req.getMethod(), req.getRequestUri(), res.getCode());
         return res;
     }
 
-    private <T> CompletableFuture<T> supply(HttpRequestBase req, Function<HttpResponse, T> fn) {
-        // FIXME Apache httpclient 4 does not support Bearer token auth easily, so we explicitly set
-        // the header here. This is a form of preemptive auth - the token is always sent with the
-        // request. It would be better to attempt to send the request to the server first and see if
-        // it responds with an auth challenge, and then send the auth information we have, and use
-        // the client auth cache. This flow is supported for Bearer tokens in httpclient 5.
-        authorizationSupplier.get().ifPresent(v -> req.addHeader(HttpHeaders.AUTHORIZATION, v));
+    private <T> CompletableFuture<T> supply(
+            HttpUriRequestBase req, Function<ClassicHttpResponse, T> fn) {
         return CompletableFuture.supplyAsync(() -> fn.apply(executeQuiet(req)), executor);
     }
 
-    private HttpResponse executeQuiet(HttpUriRequest req) {
+    private ClassicHttpResponse executeQuiet(HttpUriRequest req) {
         try {
-            return http.execute(req);
+            return http.execute(host, req);
         } catch (IOException ioe) {
             throw new CompletionException(ioe);
         }
@@ -530,18 +524,18 @@ public class CryostatClient {
                 callback, instanceId);
     }
 
-    private boolean isOkStatus(HttpResponse res) {
-        int sc = res.getStatusLine().getStatusCode();
+    private boolean isOkStatus(ClassicHttpResponse res) {
+        int sc = res.getCode();
         // 2xx is OK, 3xx is redirect range so allow those too
         return 200 <= sc && sc < 400;
     }
 
-    private HttpResponse assertOkStatus(HttpRequestBase req, HttpResponse res) {
-        int sc = res.getStatusLine().getStatusCode();
+    private ClassicHttpResponse assertOkStatus(HttpUriRequestBase req, ClassicHttpResponse res) {
+        int sc = res.getCode();
         if (!isOkStatus(res)) {
-            URI uri = req.getURI();
-            log.error("Non-OK response ({}) on HTTP API {}", sc, uri);
             try {
+                URI uri = req.getUri();
+                log.error("Non-OK response ({}) on HTTP API {}", sc, uri);
                 throw new HttpException(
                         sc,
                         new URI(uri.getScheme(), uri.getAuthority(), uri.getPath(), null, null));
