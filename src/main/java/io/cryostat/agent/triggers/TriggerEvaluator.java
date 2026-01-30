@@ -296,7 +296,7 @@ public class TriggerEvaluator {
             return Decls.String;
     }
 
-    public List<String> getDefinitions() {
-        return definitions;
+    public List<SmartTrigger> getDefinitions() {
+        return new ArrayList<SmartTrigger>(triggers);
     }
 }
