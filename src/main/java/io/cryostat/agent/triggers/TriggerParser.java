@@ -30,6 +30,7 @@ import java.util.stream.Collectors;
 
 import io.cryostat.agent.FlightRecorderHelper;
 import io.cryostat.agent.util.StringUtils;
+import io.cryostat.libcryostat.triggers.SmartTrigger;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -116,5 +117,16 @@ public class TriggerParser {
             }
         }
         return triggers;
+    }
+
+    public boolean isValid(String definition) {
+        String[] expressions = definition.split(",");
+        for (String s : expressions) {
+            Matcher m = EXPRESSION_PATTERN.matcher(s);
+            if (!m.matches()) {
+                return false;
+            }
+        }
+        return true;
     }
 }
