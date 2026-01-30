@@ -1,0 +1,31 @@
+{
+  "name": "production-namespace",
+  "nodeType": "Namespace",
+  "labels": {
+    "kubernetes.io/metadata.name": "production",
+    "environment": "production"
+  },
+  "children": [
+    {
+      "name": "my-app-deployment",
+      "nodeType": "Deployment",
+      "labels": {
+        "app": "my-application",
+        "app.kubernetes.io/name": "my-app",
+        "app.kubernetes.io/version": "1.0.0",
+        "app.kubernetes.io/component": "backend"
+      },
+      "children": [
+        {
+          "name": "my-app-pod-abc123",
+          "nodeType": "Pod",
+          "labels": {
+            "app": "my-application",
+            "pod-template-hash": "abc123",
+            "controller-revision-hash": "my-app-7d9f8c6b5"
+          }
+        }
+      ]
+    }
+  ]
+}
