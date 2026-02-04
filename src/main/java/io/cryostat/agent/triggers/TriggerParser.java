@@ -24,6 +24,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -106,7 +107,11 @@ public class TriggerParser {
                 String templateName = m.group(4);
                 if (flightRecorderHelper.isValidTemplate(templateName)) {
                     try {
-                        SmartTrigger trigger = new SmartTrigger(constraintString, templateName);
+                        SmartTrigger trigger =
+                                new SmartTrigger(
+                                        UUID.randomUUID().toString(),
+                                        constraintString,
+                                        templateName);
                         triggers.add(trigger);
                     } catch (DateTimeParseException dtpe) {
                         log.error("Failed to parse trigger duration constraint", dtpe);
