@@ -24,12 +24,14 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import io.cryostat.agent.FlightRecorderHelper;
 import io.cryostat.agent.util.StringUtils;
+import io.cryostat.libcryostat.triggers.SmartTrigger;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -105,7 +107,11 @@ public class TriggerParser {
                 String templateName = m.group(4);
                 if (flightRecorderHelper.isValidTemplate(templateName)) {
                     try {
-                        SmartTrigger trigger = new SmartTrigger(constraintString, templateName);
+                        SmartTrigger trigger =
+                                new SmartTrigger(
+                                        UUID.randomUUID().toString(),
+                                        constraintString,
+                                        templateName);
                         triggers.add(trigger);
                     } catch (DateTimeParseException dtpe) {
                         log.error("Failed to parse trigger duration constraint", dtpe);
@@ -116,5 +122,16 @@ public class TriggerParser {
             }
         }
         return triggers;
+    }
+
+    public boolean isValid(String definition) {
+        String[] expressions = definition.split(",");
+        for (String s : expressions) {
+            Matcher m = EXPRESSION_PATTERN.matcher(s);
+            if (!m.matches()) {
+                return false;
+            }
+        }
+        return true;
     }
 }
