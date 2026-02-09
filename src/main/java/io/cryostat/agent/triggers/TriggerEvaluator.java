@@ -94,7 +94,7 @@ public class TriggerEvaluator {
         // Sanity check the trigger definitions before we stop/start the evaluation
         if (!parser.isValid(definitions)) {
             log.warn("Invalid Trigger definition {}", definitions);
-            return Collections.emptyList();
+            throw new IllegalArgumentException();
         }
         ArrayList<String> uuids = new ArrayList<String>();
         this.stop();
