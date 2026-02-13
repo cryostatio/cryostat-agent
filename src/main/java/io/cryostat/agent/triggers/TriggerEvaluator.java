@@ -136,9 +136,9 @@ public class TriggerEvaluator {
     private String registerTrigger(SmartTrigger t) {
         log.trace("Registering Smart Trigger: {}", t);
         if (!triggers.values().contains(t)) {
-            triggers.put(t.getUUID(), t);
+            triggers.put(t.getID(), t);
         }
-        return t.getUUID();
+        return t.getID();
     }
 
     private void start() {
