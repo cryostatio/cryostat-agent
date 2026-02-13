@@ -224,7 +224,7 @@ public class TriggerEvaluator {
                                     String.format(
                                             "cryostat-smart-trigger-%d", tr.getRecording().getId());
                             tr.getRecording().setName(recordingName);
-                            harvester.handleNewRecording(tr);
+                            harvester.handleNewNamedRecording(tr, recordingName);
                             tr.getRecording().start();
                             t.setState(TriggerState.COMPLETE);
                             log.debug(
