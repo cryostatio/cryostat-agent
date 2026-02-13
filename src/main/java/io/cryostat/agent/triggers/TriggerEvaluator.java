@@ -157,7 +157,7 @@ public class TriggerEvaluator {
                 log.trace("Evaluating {}", t);
                 Date currentTime = new Date(System.currentTimeMillis());
                 long difference = 0;
-                if (t.getTimeConditionFirstMet() != null) {
+                if (t.getTimeConditionFirstMet().getTime() != 0L) {
                     difference = currentTime.getTime() - t.getTimeConditionFirstMet().getTime();
                 }
                 switch (t.getState()) {

@@ -76,7 +76,12 @@ public class SmartTriggersContext implements RemoteContext {
                     try (InputStream body = exchange.getRequestBody()) {
                         // UUID is passed as a path param
                         Matcher m = PATH_ID_PATTERN.matcher(exchange.getRequestURI().getPath());
+                        if (!m.matches()) {
+                            exchange.sendResponseHeaders(
+                                    HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
+                        }
                         String uuid = m.group(1);
+                        log.trace("Extracted uuid: " + uuid);
                         boolean resp = evaluator.remove(uuid);
                         if (!resp) {
                             exchange.sendResponseHeaders(

@@ -101,7 +101,8 @@ class TriggerParserTest {
         MatcherAssert.assertThat(trigger.getState(), Matchers.equalTo(TriggerState.NEW));
         MatcherAssert.assertThat(
                 trigger.getTargetDuration(), Matchers.equalTo(Duration.ofSeconds(0)));
-        MatcherAssert.assertThat(trigger.getTimeConditionFirstMet(), Matchers.nullValue());
+        MatcherAssert.assertThat(
+                trigger.getTimeConditionFirstMet().getTime(), Matchers.equalTo(0L));
     }
 
     @Test
@@ -121,7 +122,8 @@ class TriggerParserTest {
         MatcherAssert.assertThat(trigger.getState(), Matchers.equalTo(TriggerState.NEW));
         MatcherAssert.assertThat(
                 trigger.getTargetDuration(), Matchers.equalTo(Duration.ofSeconds(0)));
-        MatcherAssert.assertThat(trigger.getTimeConditionFirstMet(), Matchers.nullValue());
+        MatcherAssert.assertThat(
+                trigger.getTimeConditionFirstMet().getTime(), Matchers.equalTo(0L));
     }
 
     @Test
@@ -145,7 +147,8 @@ class TriggerParserTest {
         MatcherAssert.assertThat(trigger.getState(), Matchers.equalTo(TriggerState.NEW));
         MatcherAssert.assertThat(
                 trigger.getTargetDuration(), Matchers.equalTo(Duration.ofSeconds(30)));
-        MatcherAssert.assertThat(trigger.getTimeConditionFirstMet(), Matchers.nullValue());
+        MatcherAssert.assertThat(
+                trigger.getTimeConditionFirstMet().getTime(), Matchers.equalTo(0L));
     }
 
     @Test
@@ -169,7 +172,8 @@ class TriggerParserTest {
         MatcherAssert.assertThat(trigger.getState(), Matchers.equalTo(TriggerState.NEW));
         MatcherAssert.assertThat(
                 trigger.getTargetDuration(), Matchers.equalTo(Duration.ofSeconds(30)));
-        MatcherAssert.assertThat(trigger.getTimeConditionFirstMet(), Matchers.nullValue());
+        MatcherAssert.assertThat(
+                trigger.getTimeConditionFirstMet().getTime(), Matchers.equalTo(0L));
     }
 
     @Test
@@ -193,7 +197,8 @@ class TriggerParserTest {
         MatcherAssert.assertThat(trigger.getState(), Matchers.equalTo(TriggerState.NEW));
         MatcherAssert.assertThat(
                 trigger.getTargetDuration(), Matchers.equalTo(Duration.ofSeconds(30)));
-        MatcherAssert.assertThat(trigger.getTimeConditionFirstMet(), Matchers.nullValue());
+        MatcherAssert.assertThat(
+                trigger.getTimeConditionFirstMet().getTime(), Matchers.equalTo(0L));
     }
 
     @Test
@@ -220,7 +225,8 @@ class TriggerParserTest {
         MatcherAssert.assertThat(trigger1.getState(), Matchers.equalTo(TriggerState.NEW));
         MatcherAssert.assertThat(
                 trigger1.getTargetDuration(), Matchers.equalTo(Duration.ofSeconds(30)));
-        MatcherAssert.assertThat(trigger1.getTimeConditionFirstMet(), Matchers.nullValue());
+        MatcherAssert.assertThat(
+                trigger1.getTimeConditionFirstMet().getTime(), Matchers.equalTo(0L));
 
         SmartTrigger trigger2 = out.get(1);
         MatcherAssert.assertThat(
@@ -238,7 +244,8 @@ class TriggerParserTest {
         MatcherAssert.assertThat(trigger2.getState(), Matchers.equalTo(TriggerState.NEW));
         MatcherAssert.assertThat(
                 trigger2.getTargetDuration(), Matchers.equalTo(Duration.ofMinutes(2)));
-        MatcherAssert.assertThat(trigger2.getTimeConditionFirstMet(), Matchers.nullValue());
+        MatcherAssert.assertThat(
+                trigger2.getTimeConditionFirstMet().getTime(), Matchers.equalTo(0L));
     }
 
     @Test
@@ -267,7 +274,8 @@ class TriggerParserTest {
         MatcherAssert.assertThat(trigger1.getState(), Matchers.equalTo(TriggerState.NEW));
         MatcherAssert.assertThat(
                 trigger1.getTargetDuration(), Matchers.equalTo(Duration.ofSeconds(30)));
-        MatcherAssert.assertThat(trigger1.getTimeConditionFirstMet(), Matchers.nullValue());
+        MatcherAssert.assertThat(
+                trigger1.getTimeConditionFirstMet().getTime(), Matchers.equalTo(0L));
     }
 
     @Test
