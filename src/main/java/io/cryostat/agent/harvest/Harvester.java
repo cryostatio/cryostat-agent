@@ -291,9 +291,7 @@ public class Harvester implements FlightRecorderListener {
     }
 
     public void handleNewNamedRecording(TemplatedRecording tr, String filename) {
-        RecordingSettings settings = new RecordingSettings();
-        settings.maxAge = periodicSettings.maxAge;
-        settings.maxSize = periodicSettings.maxSize;
+        RecordingSettings settings = new RecordingSettings(periodicSettings);
         settings.name = filename;
         this.handleNewRecording(tr, settings);
     }
@@ -418,6 +416,14 @@ public class Harvester implements FlightRecorderListener {
         public String name;
         public long maxSize;
         public long maxAge;
+
+        public RecordingSettings() {}
+
+        public RecordingSettings(RecordingSettings r) {
+            this.name = r.name;
+            this.maxSize = r.maxSize;
+            this.maxAge = r.maxAge;
+        }
 
         @Override
         public Recording apply(Recording r) {
