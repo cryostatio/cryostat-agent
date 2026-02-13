@@ -674,7 +674,7 @@ public abstract class ConfigModule {
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_RETRY_TIME)
-    public static int provideCryostatAgentWebclientResponseRetryTime(Config config) {
+    public static int provideCryostatAgentWebclientResponseRetryTime(SmallRyeConfig config) {
         return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_RETRY_TIME, int.class);
     }
 
@@ -682,7 +682,7 @@ public abstract class ConfigModule {
     @Singleton
     @Named(CRYOSTAT_AGENT_WEBCLIENT_HTTP_USE_PREEMPTIVE_AUTHENTICATION)
     public static boolean provideCryostatAgentWebclientHttpUsePreemptiveAuthentication(
-            Config config) {
+            SmallRyeConfig config) {
         return config.getValue(
                 CRYOSTAT_AGENT_WEBCLIENT_HTTP_USE_PREEMPTIVE_AUTHENTICATION, boolean.class);
     }
