@@ -19,6 +19,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -28,6 +29,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
 import jakarta.inject.Inject;
 import org.apache.http.HttpStatus;
+import org.eclipse.microprofile.config.Config;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -36,21 +38,26 @@ public class SmartTriggersContext implements RemoteContext {
     private Logger log = LoggerFactory.getLogger(getClass());
     private TriggerEvaluator evaluator;
     private ObjectMapper mapper;
+    private final Config config;
 
     private static final String PATH = "/smart-triggers/";
     private static final Pattern PATH_ID_PATTERN =
             Pattern.compile("^" + PATH + "(.*)$", Pattern.MULTILINE);
 
     @Inject
-    SmartTriggersContext(ObjectMapper mapper, TriggerEvaluator evaluator) {
+    SmartTriggersContext(ObjectMapper mapper, TriggerEvaluator evaluator, Config config) {
         this.evaluator = evaluator;
         this.mapper = mapper;
+        this.config = config;
     }
 
     @Override
     public void handle(HttpExchange exchange) throws IOException {
         try {
             String mtd = exchange.getRequestMethod();
+            if (!ensureMethodAccepted(exchange)) {
+                return;
+            }
             switch (mtd) {
                 case "GET":
                     // Query the currently loaded smart triggers
@@ -103,6 +110,20 @@ public class SmartTriggersContext implements RemoteContext {
         } finally {
             exchange.close();
         }
+    }
+
+    private boolean ensureMethodAccepted(HttpExchange exchange) throws IOException {
+        Set<String> alwaysAllowed = Set.of("GET");
+        String mtd = exchange.getRequestMethod();
+        boolean restricted = !alwaysAllowed.contains(mtd);
+        if (!restricted) {
+            return true;
+        }
+        boolean passed = MutatingRemoteContext.apiWritesEnabled(config);
+        if (!passed) {
+            exchange.sendResponseHeaders(HttpStatus.SC_FORBIDDEN, BODY_LENGTH_NONE);
+        }
+        return passed;
     }
 
     @Override
