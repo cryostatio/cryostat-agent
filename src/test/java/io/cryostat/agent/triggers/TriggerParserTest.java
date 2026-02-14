@@ -15,6 +15,8 @@
  */
 package io.cryostat.agent.triggers;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -24,7 +26,8 @@ import java.util.Optional;
 import java.util.stream.Stream;
 
 import io.cryostat.agent.FlightRecorderHelper;
-import io.cryostat.agent.triggers.SmartTrigger.TriggerState;
+import io.cryostat.libcryostat.triggers.SmartTrigger;
+import io.cryostat.libcryostat.triggers.SmartTrigger.TriggerState;
 
 import org.hamcrest.MatcherAssert;
 import org.hamcrest.Matchers;
@@ -98,7 +101,8 @@ class TriggerParserTest {
         MatcherAssert.assertThat(trigger.getState(), Matchers.equalTo(TriggerState.NEW));
         MatcherAssert.assertThat(
                 trigger.getTargetDuration(), Matchers.equalTo(Duration.ofSeconds(0)));
-        MatcherAssert.assertThat(trigger.getTimeConditionFirstMet(), Matchers.nullValue());
+        MatcherAssert.assertThat(
+                trigger.getTimeConditionFirstMet().getTime(), Matchers.equalTo(0L));
     }
 
     @Test
@@ -118,7 +122,8 @@ class TriggerParserTest {
         MatcherAssert.assertThat(trigger.getState(), Matchers.equalTo(TriggerState.NEW));
         MatcherAssert.assertThat(
                 trigger.getTargetDuration(), Matchers.equalTo(Duration.ofSeconds(0)));
-        MatcherAssert.assertThat(trigger.getTimeConditionFirstMet(), Matchers.nullValue());
+        MatcherAssert.assertThat(
+                trigger.getTimeConditionFirstMet().getTime(), Matchers.equalTo(0L));
     }
 
     @Test
@@ -142,7 +147,8 @@ class TriggerParserTest {
         MatcherAssert.assertThat(trigger.getState(), Matchers.equalTo(TriggerState.NEW));
         MatcherAssert.assertThat(
                 trigger.getTargetDuration(), Matchers.equalTo(Duration.ofSeconds(30)));
-        MatcherAssert.assertThat(trigger.getTimeConditionFirstMet(), Matchers.nullValue());
+        MatcherAssert.assertThat(
+                trigger.getTimeConditionFirstMet().getTime(), Matchers.equalTo(0L));
     }
 
     @Test
@@ -166,7 +172,8 @@ class TriggerParserTest {
         MatcherAssert.assertThat(trigger.getState(), Matchers.equalTo(TriggerState.NEW));
         MatcherAssert.assertThat(
                 trigger.getTargetDuration(), Matchers.equalTo(Duration.ofSeconds(30)));
-        MatcherAssert.assertThat(trigger.getTimeConditionFirstMet(), Matchers.nullValue());
+        MatcherAssert.assertThat(
+                trigger.getTimeConditionFirstMet().getTime(), Matchers.equalTo(0L));
     }
 
     @Test
@@ -190,7 +197,8 @@ class TriggerParserTest {
         MatcherAssert.assertThat(trigger.getState(), Matchers.equalTo(TriggerState.NEW));
         MatcherAssert.assertThat(
                 trigger.getTargetDuration(), Matchers.equalTo(Duration.ofSeconds(30)));
-        MatcherAssert.assertThat(trigger.getTimeConditionFirstMet(), Matchers.nullValue());
+        MatcherAssert.assertThat(
+                trigger.getTimeConditionFirstMet().getTime(), Matchers.equalTo(0L));
     }
 
     @Test
@@ -217,7 +225,8 @@ class TriggerParserTest {
         MatcherAssert.assertThat(trigger1.getState(), Matchers.equalTo(TriggerState.NEW));
         MatcherAssert.assertThat(
                 trigger1.getTargetDuration(), Matchers.equalTo(Duration.ofSeconds(30)));
-        MatcherAssert.assertThat(trigger1.getTimeConditionFirstMet(), Matchers.nullValue());
+        MatcherAssert.assertThat(
+                trigger1.getTimeConditionFirstMet().getTime(), Matchers.equalTo(0L));
 
         SmartTrigger trigger2 = out.get(1);
         MatcherAssert.assertThat(
@@ -235,7 +244,8 @@ class TriggerParserTest {
         MatcherAssert.assertThat(trigger2.getState(), Matchers.equalTo(TriggerState.NEW));
         MatcherAssert.assertThat(
                 trigger2.getTargetDuration(), Matchers.equalTo(Duration.ofMinutes(2)));
-        MatcherAssert.assertThat(trigger2.getTimeConditionFirstMet(), Matchers.nullValue());
+        MatcherAssert.assertThat(
+                trigger2.getTimeConditionFirstMet().getTime(), Matchers.equalTo(0L));
     }
 
     @Test
@@ -264,7 +274,15 @@ class TriggerParserTest {
         MatcherAssert.assertThat(trigger1.getState(), Matchers.equalTo(TriggerState.NEW));
         MatcherAssert.assertThat(
                 trigger1.getTargetDuration(), Matchers.equalTo(Duration.ofSeconds(30)));
-        MatcherAssert.assertThat(trigger1.getTimeConditionFirstMet(), Matchers.nullValue());
+        MatcherAssert.assertThat(
+                trigger1.getTimeConditionFirstMet().getTime(), Matchers.equalTo(0L));
+    }
+
+    @Test
+    void testTriggerValidation() {
+        assertEquals(false, parser.isValid("foo"));
+        assertEquals(false, parser.isValid("foo~bar"));
+        assertEquals(true, parser.isValid("[ProcessCpuLoad>0.2]~profile"));
     }
 
     static List<List<String>> emptyCases() {

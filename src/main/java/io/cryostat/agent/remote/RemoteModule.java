@@ -41,4 +41,8 @@ public abstract class RemoteModule {
     @Binds
     @IntoSet
     abstract RemoteContext bindRecordingsContext(RecordingsContext ctx);
+
+    @Binds
+    @IntoSet
+    abstract RemoteContext bindSmartTriggersContext(SmartTriggersContext ctx);
 }

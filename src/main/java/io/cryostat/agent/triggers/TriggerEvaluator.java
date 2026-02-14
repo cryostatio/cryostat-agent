@@ -21,8 +21,8 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -30,7 +30,8 @@ import java.util.concurrent.TimeUnit;
 import io.cryostat.agent.FlightRecorderHelper;
 import io.cryostat.agent.harvest.Harvester;
 import io.cryostat.agent.model.MBeanInfo;
-import io.cryostat.agent.triggers.SmartTrigger.TriggerState;
+import io.cryostat.libcryostat.triggers.SmartTrigger;
+import io.cryostat.libcryostat.triggers.SmartTrigger.TriggerState;
 
 import com.google.api.expr.v1alpha1.Decl;
 import com.google.api.expr.v1alpha1.Type;
@@ -56,7 +57,7 @@ public class TriggerEvaluator {
             new ConcurrentHashMap<>();
     private final ConcurrentHashMap<SmartTrigger, Script> durationScriptCache =
             new ConcurrentHashMap<>();
-    private final ConcurrentLinkedQueue<SmartTrigger> triggers = new ConcurrentLinkedQueue<>();
+    private final ConcurrentHashMap<String, SmartTrigger> triggers = new ConcurrentHashMap<>();
     private Future<?> task;
     private final Logger log = LoggerFactory.getLogger(getClass());
 
@@ -86,17 +87,58 @@ public class TriggerEvaluator {
         this.start();
     }
 
+    // start(args) will re-parse the triggers directory, we don't need to do that
+    // for requests that come in later through the api since existing triggers
+    // are already stored.
+    public List<String> append(String definitions) {
+        // Sanity check the trigger definitions before we stop/start the evaluation
+        if (!parser.isValid(definitions)) {
+            log.warn("Invalid Trigger definition {}", definitions);
+            throw new IllegalArgumentException();
+        }
+        ArrayList<String> uuids = new ArrayList<String>();
+        this.stop();
+        parser.parse(definitions)
+                .forEach(
+                        (SmartTrigger t) -> {
+                            String uuid = registerTrigger(t);
+                            if (Objects.isNull(uuid)) {
+                                log.warn(
+                                        "Duplicate smart trigger definition: {0}",
+                                        t.getExpression());
+                            } else {
+                                uuids.add(uuid);
+                            }
+                        });
+        this.start();
+        return uuids;
+    }
+
+    public boolean remove(String uuid) {
+        // Check if the trigger is registered
+        if (!this.triggers.containsKey(uuid)) {
+            log.warn("Trigger with UUID {0} not found", uuid);
+            return false;
+        }
+
+        this.stop();
+        this.triggers.remove(uuid);
+        this.start();
+        return true;
+    }
+
     public void stop() {
         if (this.task != null) {
             this.task.cancel(false);
         }
     }
 
-    private void registerTrigger(SmartTrigger t) {
+    private String registerTrigger(SmartTrigger t) {
         log.trace("Registering Smart Trigger: {}", t);
-        if (!triggers.contains(t)) {
-            triggers.add(t);
+        if (!triggers.values().contains(t)) {
+            triggers.put(t.getID(), t);
         }
+        return t.getID();
     }
 
     private void start() {
@@ -111,18 +153,18 @@ public class TriggerEvaluator {
 
     private void evaluate() {
         try {
-            for (SmartTrigger t : triggers) {
+            for (SmartTrigger t : triggers.values()) {
                 log.trace("Evaluating {}", t);
                 Date currentTime = new Date(System.currentTimeMillis());
                 long difference = 0;
-                if (t.getTimeConditionFirstMet() != null) {
+                if (t.getTimeConditionFirstMet().getTime() != 0L) {
                     difference = currentTime.getTime() - t.getTimeConditionFirstMet().getTime();
                 }
                 switch (t.getState()) {
                     case COMPLETE:
                         /* Trigger condition has been met, can remove it */
                         log.trace("Completed {} , removing", t);
-                        triggers.remove(t);
+                        triggers.values().remove(t);
                         conditionScriptCache.remove(t);
                         durationScriptCache.remove(t);
                         break;
@@ -182,7 +224,7 @@ public class TriggerEvaluator {
                                     String.format(
                                             "cryostat-smart-trigger-%d", tr.getRecording().getId());
                             tr.getRecording().setName(recordingName);
-                            harvester.handleNewRecording(tr);
+                            harvester.handleNewNamedRecording(tr, recordingName);
                             tr.getRecording().start();
                             t.setState(TriggerState.COMPLETE);
                             log.debug(
@@ -260,5 +302,9 @@ public class TriggerEvaluator {
         else
             // Default to String so we can still do some comparison
             return Decls.String;
+    }
+
+    public List<SmartTrigger> getDefinitions() {
+        return new ArrayList<SmartTrigger>(triggers.values());
     }
 }
