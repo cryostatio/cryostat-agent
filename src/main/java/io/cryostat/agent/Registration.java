@@ -45,7 +45,8 @@ import org.slf4j.LoggerFactory;
 
 public class Registration {
 
-    private static final String NODE_TYPE = "JVM";
+    private static final String AGENT_NODE_TYPE = "CryostatAgent";
+    private static final String JMX_NODE_TYPE = "JVM";
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
@@ -333,7 +334,8 @@ public class Registration {
                         javaMain,
                         startTime);
         discoveryNodes.add(
-                new DiscoveryNode(appName + "-agent-" + pluginInfo.getId(), NODE_TYPE, httpSelf));
+                new DiscoveryNode(
+                        appName + "-agent-" + pluginInfo.getId(), AGENT_NODE_TYPE, httpSelf));
 
         if (!registrationJmxIgnore && jmxPort > 0) {
             uri =
@@ -356,7 +358,8 @@ public class Registration {
                             javaMain,
                             startTime);
             discoveryNodes.add(
-                    new DiscoveryNode(appName + "-jmx-" + pluginInfo.getId(), NODE_TYPE, jmxSelf));
+                    new DiscoveryNode(
+                            appName + "-jmx-" + pluginInfo.getId(), JMX_NODE_TYPE, jmxSelf));
         }
 
         return discoveryNodes;

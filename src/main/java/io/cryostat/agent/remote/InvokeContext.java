@@ -37,8 +37,8 @@ import io.cryostat.agent.CryostatClient;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
+import io.smallrye.config.SmallRyeConfig;
 import org.apache.hc.core5.http.HttpStatus;
-import org.eclipse.microprofile.config.Config;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -52,7 +52,7 @@ class InvokeContext extends MutatingRemoteContext {
     private CryostatClient client;
 
     @Inject
-    InvokeContext(ObjectMapper mapper, Config config, CryostatClient client) {
+    InvokeContext(ObjectMapper mapper, SmallRyeConfig config, CryostatClient client) {
         super(config);
         this.mapper = mapper;
         this.client = client;
