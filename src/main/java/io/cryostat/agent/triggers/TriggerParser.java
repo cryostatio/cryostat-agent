@@ -30,9 +30,9 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import io.cryostat.agent.FlightRecorderHelper;
-import io.cryostat.agent.util.StringUtils;
 import io.cryostat.libcryostat.triggers.SmartTrigger;
 
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
