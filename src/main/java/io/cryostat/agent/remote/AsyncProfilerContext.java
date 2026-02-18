@@ -173,7 +173,7 @@ class AsyncProfilerContext extends MutatingRemoteContext {
             }
             return true;
         } catch (IOException e1) {
-            log.error("Failed to check or create async-profiler repsitory", e1);
+            log.error("Failed to check or create async-profiler repository", e1);
             sendHeader(exchange, HttpStatus.SC_INTERNAL_SERVER_ERROR);
             return false;
         }
