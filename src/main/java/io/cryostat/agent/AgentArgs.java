@@ -25,6 +25,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Queue;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import io.cryostat.agent.util.StringUtils;
@@ -33,6 +35,9 @@ import org.apache.commons.lang3.tuple.Pair;
 
 class AgentArgs {
     private static final String DELIMITER = "!";
+    private static final String SMART_TRIGGER_EXPRESSION =
+            "\\[(.*(&&)*|(\\|\\|)*)\\]~([\\w\\-]+)(?:\\.jfc)?";
+    private static final Pattern SMART_TRIGGER_PATTERN = Pattern.compile(SMART_TRIGGER_EXPRESSION);
     private final Instrumentation instrumentation;
     private final Map<String, String> properties;
     private final String smartTriggers;
@@ -67,11 +72,11 @@ class AgentArgs {
             Queue<String> parts = new ArrayDeque<>(Arrays.asList(agentmainArg.split(DELIMITER)));
             String props = parts.poll();
             // Single arg case, just passing a smart trigger
-            if (props.startsWith("[")) {
+            if (isSmartTrigger(props)) {
                 smartTriggers = props;
             }
             // Check that the properties are well-formed before attempting to parse
-            if (StringUtils.isNotBlank(props) && props.contains("=") && !props.startsWith("[")) {
+            if (StringUtils.isNotBlank(props) && props.contains("=") && !isSmartTrigger(props)) {
                 properties =
                         Arrays.asList(props.split(",")).stream()
                                 .map(
@@ -107,5 +112,10 @@ class AgentArgs {
             parts.add(smartTriggers);
         }
         return String.join(DELIMITER, parts);
+    }
+
+    private static boolean isSmartTrigger(String arg) {
+        Matcher m = SMART_TRIGGER_PATTERN.matcher(arg);
+        return m.matches();
     }
 }
