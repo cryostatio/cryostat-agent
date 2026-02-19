@@ -42,7 +42,7 @@ public class ProcessTestHelper {
     public static Process startDummyApp(String... args) throws IOException {
         List<String> command = new ArrayList<>();
         command.add("java");
-        command.add(String.format("-D%s=%s", LOG_LEVEL_PROPERTY, "WARNING"));
+        command.add(String.format("-D%s=%s", LOG_LEVEL_PROPERTY, "DEBUG"));
         command.add("-cp");
         command.add(
                 System.getProperty(PROJECT_BUILD_TEST_OUTPUT_DIRECTORY, DEFAULT_OUTPUT_DIRECTORY));
