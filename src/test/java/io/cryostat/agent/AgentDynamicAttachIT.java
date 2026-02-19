@@ -86,9 +86,9 @@ class AgentDynamicAttachIT {
         MatcherAssert.assertThat(agentExitCode, Matchers.is(0));
 
         // On JDK 17+, the JVM prints a warning message to stderr about dynamic agent loading
-        // On JDK 11, this message may not be present, so we make this assertion optional
-        String stderr = dummyStderrBuilder.toString();
-        if (!stderr.isEmpty()) {
+        // On JDK 11, this message may not be present
+        if (Runtime.version().compareTo(Runtime.Version.parse("17")) < 0) {
+            String stderr = dummyStderrBuilder.toString();
             MatcherAssert.assertThat(
                     stderr,
                     Matchers.anyOf(
