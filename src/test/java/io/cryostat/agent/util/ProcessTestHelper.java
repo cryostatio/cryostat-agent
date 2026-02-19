@@ -32,12 +32,19 @@ import org.junit.jupiter.api.Assertions;
 
 public class ProcessTestHelper {
 
+    private static final String PROJECT_BUILD_TEST_OUTPUT_DIRECTORY =
+            "project.build.testOutputDirectory";
+    private static final String DEFAULT_OUTPUT_DIRECTORY = "target/test-classes";
+    private static final String LOG_LEVEL_PROPERTY =
+            "io.cryostat.agent.shaded.org.slf4j.simpleLogger.defaultLogLevel";
+
     public static Process startDummyApp(String... args) throws IOException {
         List<String> command = new ArrayList<>();
         command.add("java");
         command.add("-Dio.cryostat.agent.shaded.org.slf4j.simpleLogger.defaultLogLevel=WARNING");
         command.add("-cp");
-        command.add(System.getProperty("project.build.testOutputDirectory", "target/test-classes"));
+        command.add(
+                System.getProperty(PROJECT_BUILD_TEST_OUTPUT_DIRECTORY, DEFAULT_OUTPUT_DIRECTORY));
         command.add(DummyApp.class.getName());
         command.addAll(Arrays.asList(args));
 
@@ -50,7 +57,7 @@ public class ProcessTestHelper {
             String jarPath, Map<String, String> properties) throws IOException {
         List<String> command = new ArrayList<>();
         command.add("java");
-        command.add("-Dio.cryostat.agent.shaded.org.slf4j.simpleLogger.defaultLogLevel=DEBUG");
+        command.add(String.format("-D%s=%s", LOG_LEVEL_PROPERTY, "DEBUG"));
 
         if (properties != null) {
             for (Map.Entry<String, String> entry : properties.entrySet()) {
@@ -60,7 +67,8 @@ public class ProcessTestHelper {
 
         command.add("-javaagent:" + jarPath);
         command.add("-cp");
-        command.add(System.getProperty("project.build.testOutputDirectory", "target/test-classes"));
+        command.add(
+                System.getProperty(PROJECT_BUILD_TEST_OUTPUT_DIRECTORY, DEFAULT_OUTPUT_DIRECTORY));
         command.add(DummyApp.class.getName());
 
         ProcessBuilder pb = new ProcessBuilder(command);
@@ -72,7 +80,7 @@ public class ProcessTestHelper {
             String jarPath, Map<String, String> properties) throws IOException {
         List<String> command = new ArrayList<>();
         command.add("java");
-        command.add("-Dio.cryostat.agent.shaded.org.slf4j.simpleLogger.defaultLogLevel=DEBUG");
+        command.add(String.format("-D%s=%s", LOG_LEVEL_PROPERTY, "DEBUG"));
 
         StringBuilder agentArgs = new StringBuilder("-javaagent:" + jarPath);
         if (properties != null && !properties.isEmpty()) {
@@ -87,7 +95,8 @@ public class ProcessTestHelper {
         command.add(agentArgs.toString());
 
         command.add("-cp");
-        command.add(System.getProperty("project.build.testOutputDirectory", "target/test-classes"));
+        command.add(
+                System.getProperty(PROJECT_BUILD_TEST_OUTPUT_DIRECTORY, DEFAULT_OUTPUT_DIRECTORY));
         command.add(DummyApp.class.getName());
 
         ProcessBuilder pb = new ProcessBuilder(command);
