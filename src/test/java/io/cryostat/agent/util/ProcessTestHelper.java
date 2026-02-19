@@ -45,6 +45,57 @@ public class ProcessTestHelper {
         return pb.start();
     }
 
+    public static Process startDummyAppWithAgentSystemProperties(
+            String jarPath, Map<String, String> properties) throws IOException {
+        List<String> command = new ArrayList<>();
+        command.add("java");
+        command.add("-Dio.cryostat.agent.shaded.org.slf4j.simpleLogger.defaultLogLevel=DEBUG");
+
+        if (properties != null) {
+            for (Map.Entry<String, String> entry : properties.entrySet()) {
+                command.add(String.format("-D%s=%s", entry.getKey(), entry.getValue()));
+            }
+        }
+
+        command.add("-javaagent:" + jarPath);
+        command.add("-cp");
+        command.add(System.getProperty("project.build.testOutputDirectory", "target/test-classes"));
+        command.add(DummyApp.class.getName());
+
+        ProcessBuilder pb = new ProcessBuilder(command);
+        pb.redirectErrorStream(false);
+        return pb.start();
+    }
+
+    public static Process startDummyAppWithAgentArguments(
+            String jarPath, Map<String, String> properties) throws IOException {
+        List<String> command = new ArrayList<>();
+        command.add("java");
+        command.add("-Dio.cryostat.agent.shaded.org.slf4j.simpleLogger.defaultLogLevel=DEBUG");
+
+        StringBuilder agentArgs = new StringBuilder("-javaagent:" + jarPath);
+        if (properties != null && !properties.isEmpty()) {
+            agentArgs.append("=");
+            boolean first = true;
+            for (Map.Entry<String, String> entry : properties.entrySet()) {
+                if (!first) {
+                    agentArgs.append(",");
+                }
+                agentArgs.append(String.format("%s=%s", entry.getKey(), entry.getValue()));
+                first = false;
+            }
+        }
+        command.add(agentArgs.toString());
+
+        command.add("-cp");
+        command.add(System.getProperty("project.build.testOutputDirectory", "target/test-classes"));
+        command.add(DummyApp.class.getName());
+
+        ProcessBuilder pb = new ProcessBuilder(command);
+        pb.redirectErrorStream(false);
+        return pb.start();
+    }
+
     public static String getAgentShadedJarPath() {
         String jarPath = System.getProperty("cryostat.agent.shaded.jar");
         Assertions.assertNotNull(jarPath, "Shaded JAR path must be provided");

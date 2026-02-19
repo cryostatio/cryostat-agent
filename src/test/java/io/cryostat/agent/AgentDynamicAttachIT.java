@@ -78,14 +78,9 @@ class AgentDynamicAttachIT {
         stderrThread.join(1000);
         stdoutThread.join(1000);
 
-        String dummyStderr;
-        synchronized (dummyStderrBuilder) {
-            dummyStderr = dummyStderrBuilder.toString();
-        }
-
         // The agent should successfully inject - the JVM prints a warning message to stderr
         MatcherAssert.assertThat(
-                dummyStderr,
+                dummyStderrBuilder.toString(),
                 Matchers.allOf(
                         Matchers.containsString("A Java agent has been loaded dynamically"),
                         Matchers.containsString(jarPath)));
