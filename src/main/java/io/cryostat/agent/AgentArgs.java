@@ -66,7 +66,12 @@ class AgentArgs {
         if (StringUtils.isNotBlank(agentmainArg)) {
             Queue<String> parts = new ArrayDeque<>(Arrays.asList(agentmainArg.split(DELIMITER)));
             String props = parts.poll();
-            if (StringUtils.isNotBlank(props)) {
+            // Single arg case, just passing a smart trigger
+            if (props.startsWith("[")) {
+                smartTriggers = props;
+            }
+            // Check that the properties are well-formed before attempting to parse
+            if (StringUtils.isNotBlank(props) && props.contains("=") && !props.startsWith("[")) {
                 properties =
                         Arrays.asList(props.split(",")).stream()
                                 .map(
@@ -80,7 +85,10 @@ class AgentArgs {
                                                 Pair<String, String>::getKey,
                                                 Pair<String, String>::getValue));
             }
-            smartTriggers = parts.poll();
+            // Parse smart triggers after properties
+            if (smartTriggers.isBlank()) {
+                smartTriggers = parts.poll();
+            }
         }
         return new AgentArgs(instrumentation, properties, smartTriggers);
     }
