@@ -24,6 +24,7 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -41,7 +42,7 @@ public class ProcessTestHelper {
     public static Process startDummyApp(String... args) throws IOException {
         List<String> command = new ArrayList<>();
         command.add("java");
-        command.add("-Dio.cryostat.agent.shaded.org.slf4j.simpleLogger.defaultLogLevel=WARNING");
+        command.add(String.format("-D%s=%s", LOG_LEVEL_PROPERTY, "WARNING"));
         command.add("-cp");
         command.add(
                 System.getProperty(PROJECT_BUILD_TEST_OUTPUT_DIRECTORY, DEFAULT_OUTPUT_DIRECTORY));
@@ -57,7 +58,11 @@ public class ProcessTestHelper {
             String jarPath, Map<String, String> properties) throws IOException {
         List<String> command = new ArrayList<>();
         command.add("java");
-        command.add(String.format("-D%s=%s", LOG_LEVEL_PROPERTY, "DEBUG"));
+
+        if (properties == null) {
+            properties = new HashMap<>();
+        }
+        properties.put(LOG_LEVEL_PROPERTY, "DEBUG");
 
         if (properties != null) {
             for (Map.Entry<String, String> entry : properties.entrySet()) {
