@@ -78,22 +78,16 @@ class AgentDynamicAttachIT {
         stderrThread.join(1000);
         stdoutThread.join(1000);
 
-        // The agent should fail to start (verified by waitForPattern above)
+        // The agent should fail to fully start due to missing Cryostat config
         MatcherAssert.assertThat(
                 dummyOutput.toString(), Matchers.containsString("Agent startup failure"));
 
+        // but it should have logged its startup messages
+        MatcherAssert.assertThat(
+                dummyOutput.toString(),
+                Matchers.containsString("DEBUG io.cryostat.agent.Agent - Cryostat Agent version"));
+
         // The agent launcher should exit successfully after injection
         MatcherAssert.assertThat(agentExitCode, Matchers.is(0));
-
-        // On JDK 17+, the JVM prints a warning message to stderr about dynamic agent loading
-        // On JDK 11, this message may not be present, so we make this assertion optional
-        String stderr = dummyStderrBuilder.toString();
-        if (!stderr.isEmpty()) {
-            MatcherAssert.assertThat(
-                    stderr,
-                    Matchers.anyOf(
-                            Matchers.containsString("A Java agent has been loaded dynamically"),
-                            Matchers.containsString("WARNING")));
-        }
     }
 }
