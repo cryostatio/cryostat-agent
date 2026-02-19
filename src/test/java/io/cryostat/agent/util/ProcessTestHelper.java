@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.Assertions;
 
@@ -76,14 +77,12 @@ public class ProcessTestHelper {
         StringBuilder agentArgs = new StringBuilder("-javaagent:" + jarPath);
         if (properties != null && !properties.isEmpty()) {
             agentArgs.append("=");
-            boolean first = true;
-            for (Map.Entry<String, String> entry : properties.entrySet()) {
-                if (!first) {
-                    agentArgs.append(",");
-                }
-                agentArgs.append(String.format("%s=%s", entry.getKey(), entry.getValue()));
-                first = false;
-            }
+            agentArgs.append(
+                    String.join(
+                            ",",
+                            properties.entrySet().stream()
+                                    .map(e -> String.format("%s=%s", e.getKey(), e.getValue()))
+                                    .collect(Collectors.toList())));
         }
         command.add(agentArgs.toString());
 
@@ -113,9 +112,9 @@ public class ProcessTestHelper {
         command.add(Long.toString(pid));
 
         if (properties != null) {
-            for (Map.Entry<String, String> entry : properties.entrySet()) {
-                command.add(String.format("-D%s=%s", entry.getKey(), entry.getValue()));
-            }
+            properties.entrySet().stream()
+                    .map(e -> String.format("-D%s=%s", e.getKey(), e.getValue()))
+                    .forEach(command::add);
         }
 
         ProcessBuilder pb = new ProcessBuilder(command);
