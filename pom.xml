@@ -484,6 +484,30 @@
     </plugin>
     <plugin>
       <groupId>org.apache.maven.plugins</groupId>
+      <artifactId>maven-failsafe-plugin</artifactId>
+      <version>${org.apache.maven.plugins.failsafe.version}</version>
+      <configuration>
+        <systemPropertyVariables>
+          <cryostat.agent.shaded.jar>${project.build.directory}/${project.build.finalName}-shaded.jar</cryostat.agent.shaded.jar>
+        </systemPropertyVariables>
+      </configuration>
+      <executions>
+        <execution>
+          <id>integration-test</id>
+          <goals>
+            <goal>integration-test</goal>
+          </goals>
+        </execution>
+        <execution>
+          <id>verify</id>
+          <goals>
+            <goal>verify</goal>
+          </goals>
+        </execution>
+      </executions>
+    </plugin>
+    <plugin>
+      <groupId>org.apache.maven.plugins</groupId>
       <artifactId>maven-site-plugin</artifactId>
       <version>${org.apache.maven.plugins.site.version}</version>
     </plugin>
