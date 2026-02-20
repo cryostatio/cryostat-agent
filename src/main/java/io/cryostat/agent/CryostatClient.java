@@ -358,6 +358,18 @@ public class CryostatClient {
         }
     }
 
+    public CompletableFuture<Void> syncSmartTrigger(String id) {
+        HttpPost req =
+                new HttpPost(
+                        baseUri.resolve(
+                                "/api/beta/targets/" + jvmId + "/smart_triggers/sync/" + id));
+        log.trace("{}", req);
+        return supply(req, (res) -> logResponse(req, res))
+                .thenApply(res -> assertOkStatus(req, res))
+                .whenComplete((v, t) -> req.reset())
+                .thenApply(res -> null);
+    }
+
     public CompletableFuture<Void> pushHeapDump(Path heapDump, String requestId)
             throws IOException, IllegalArgumentException {
         Instant start = Instant.now();
