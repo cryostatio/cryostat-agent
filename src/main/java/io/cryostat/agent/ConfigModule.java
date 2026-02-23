@@ -996,7 +996,7 @@ public abstract class ConfigModule {
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_ASYNC_PROFILER_REPOSITORY_PATH)
-    public static Path provideCryostatAgentAsyncProfilerRepositoryPath(Config config) {
+    public static Path provideCryostatAgentAsyncProfilerRepositoryPath(SmallRyeConfig config) {
         try {
             Path repository =
                     config.getOptionalValue(
