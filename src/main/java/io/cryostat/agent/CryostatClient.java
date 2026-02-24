@@ -44,6 +44,7 @@ import io.cryostat.agent.model.DiscoveryNode;
 import io.cryostat.agent.model.PluginInfo;
 import io.cryostat.agent.model.RegistrationInfo;
 import io.cryostat.agent.model.ServerHealth;
+import io.cryostat.agent.triggers.TriggerEvaluator.SmartTriggerUpdate;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -358,16 +359,23 @@ public class CryostatClient {
         }
     }
 
-    public CompletableFuture<Void> syncSmartTrigger(String id) {
-        HttpPost req =
-                new HttpPost(
-                        baseUri.resolve(
-                                "/api/beta/targets/" + jvmId + "/smart_triggers/sync/" + id));
-        log.trace("{}", req);
-        return supply(req, (res) -> logResponse(req, res))
-                .thenApply(res -> assertOkStatus(req, res))
-                .whenComplete((v, t) -> req.reset())
-                .thenApply(res -> null);
+    public CompletableFuture<Void> syncSmartTrigger(SmartTriggerUpdate update) {
+        try {
+            HttpPost req =
+                    new HttpPost(
+                            baseUri.resolve(
+                                    "/api/beta/targets/" + jvmId + "/smart_triggers/sync/"));
+            req.setEntity(
+                    new StringEntity(
+                            mapper.writeValueAsString(update), ContentType.APPLICATION_JSON));
+            log.trace("Sending Smart Trigger Sync Request: {}", req);
+            return supply(req, (res) -> logResponse(req, res))
+                    .thenApply(res -> assertOkStatus(req, res))
+                    .whenComplete((v, t) -> req.reset())
+                    .thenApply(res -> null);
+        } catch (JsonProcessingException e) {
+            return CompletableFuture.failedFuture(e);
+        }
     }
 
     public CompletableFuture<Void> pushHeapDump(Path heapDump, String requestId)
