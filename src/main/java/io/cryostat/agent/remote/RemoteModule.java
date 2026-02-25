@@ -45,4 +45,8 @@ public abstract class RemoteModule {
     @Binds
     @IntoSet
     abstract RemoteContext bindSmartTriggersContext(SmartTriggersContext ctx);
+
+    @Binds
+    @IntoSet
+    abstract RemoteContext bindAsyncProfilerContext(AsyncProfilerContext ctx);
 }

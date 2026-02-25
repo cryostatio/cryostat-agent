@@ -15,18 +15,10 @@
  */
 package io.cryostat.agent.util;
 
-public class StringUtils {
-    private StringUtils() {}
-
-    public static boolean isBlank(String s) {
-        return s == null || s.isBlank();
-    }
-
-    public static boolean isNotBlank(String s) {
-        return !isBlank(s);
-    }
-
-    public static String defaultValue(String in, String def) {
-        return isNotBlank(in) ? in : def;
+public class DummyApp {
+    public static void main(String[] args) throws InterruptedException {
+        System.out.println("Dummy app started, PID: " + ProcessHandle.current().pid());
+        System.out.flush();
+        Thread.sleep(60000);
     }
 }

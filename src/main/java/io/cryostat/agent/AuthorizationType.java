@@ -22,7 +22,7 @@ import java.nio.file.Files;
 import java.util.Base64;
 import java.util.function.Function;
 
-import io.cryostat.agent.util.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 
 public enum AuthorizationType implements Function<String, String> {
     NONE(false, v -> null),
