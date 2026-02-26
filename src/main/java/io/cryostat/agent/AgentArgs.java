@@ -29,8 +29,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-import io.cryostat.agent.util.StringUtils;
-
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 
 class AgentArgs {
@@ -46,7 +45,7 @@ class AgentArgs {
             Instrumentation instrumentation, Map<String, String> properties, String smartTriggers) {
         this.instrumentation = instrumentation;
         this.properties = Optional.ofNullable(properties).orElse(Collections.emptyMap());
-        this.smartTriggers = StringUtils.defaultValue(smartTriggers, "");
+        this.smartTriggers = StringUtils.defaultIfBlank(smartTriggers, "");
     }
 
     public AgentArgs(Map<String, String> properties, String smartTriggers) {
