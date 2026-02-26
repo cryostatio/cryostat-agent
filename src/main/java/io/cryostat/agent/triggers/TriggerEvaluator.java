@@ -27,6 +27,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
+import io.cryostat.agent.CryostatClient;
 import io.cryostat.agent.FlightRecorderHelper;
 import io.cryostat.agent.harvest.Harvester;
 import io.cryostat.agent.model.MBeanInfo;
@@ -60,6 +61,7 @@ public class TriggerEvaluator {
     private final ConcurrentHashMap<String, SmartTrigger> triggers = new ConcurrentHashMap<>();
     private Future<?> task;
     private final Logger log = LoggerFactory.getLogger(getClass());
+    private final CryostatClient client;
 
     @SuppressFBWarnings("EI_EXPOSE_REP2")
     public TriggerEvaluator(
@@ -69,7 +71,8 @@ public class TriggerEvaluator {
             TriggerParser parser,
             FlightRecorderHelper flightRecorderHelper,
             Harvester harvester,
-            long evaluationPeriodMs) {
+            long evaluationPeriodMs,
+            CryostatClient client) {
         this.scheduler = scheduler;
         this.definitions = Collections.unmodifiableList(definitions);
         this.parser = parser;
@@ -77,6 +80,7 @@ public class TriggerEvaluator {
         this.flightRecorderHelper = flightRecorderHelper;
         this.harvester = harvester;
         this.evaluationPeriodMs = evaluationPeriodMs;
+        this.client = client;
     }
 
     public void start(String args) {
@@ -174,6 +178,11 @@ public class TriggerEvaluator {
                         if (t.isSimple() && evaluateTriggerConstraint(t, t.getTargetDuration())) {
                             log.trace("Trigger {} satisfied, starting recording...", t);
                             startRecording(t);
+                            client.syncSmartTrigger(
+                                    new SmartTriggerUpdate(
+                                            Collections.emptyList(),
+                                            List.of(t.getID()),
+                                            Collections.emptyList()));
                         } else if (!t.isSimple()) {
                             if (evaluateTriggerConstraint(t, Duration.ZERO)) {
                                 // Condition was met, set the state accordingly
@@ -192,6 +201,11 @@ public class TriggerEvaluator {
                         if (evaluateTriggerConstraint(t, Duration.ofMillis(difference))) {
                             log.trace("Trigger {} satisfied, completing...", t);
                             startRecording(t);
+                            client.syncSmartTrigger(
+                                    new SmartTriggerUpdate(
+                                            Collections.emptyList(),
+                                            List.of(t.getID()),
+                                            Collections.emptyList()));
                         } else if (evaluateTriggerConstraint(t, Duration.ZERO)) {
                             log.trace("Trigger {} satisfied, waiting for duration...", t);
                         } else {
@@ -306,5 +320,29 @@ public class TriggerEvaluator {
 
     public List<SmartTrigger> getDefinitions() {
         return new ArrayList<SmartTrigger>(triggers.values());
+    }
+
+    public static class SmartTriggerUpdate {
+        List<String> addedTriggers;
+        List<String> removedTriggers;
+        List<String> updatedTriggers;
+
+        public SmartTriggerUpdate(List<String> added, List<String> removed, List<String> updated) {
+            this.addedTriggers = new ArrayList<String>(added);
+            this.removedTriggers = new ArrayList<String>(removed);
+            this.updatedTriggers = new ArrayList<String>(updated);
+        }
+
+        public List<String> getAddedTriggers() {
+            return Collections.unmodifiableList(this.addedTriggers);
+        }
+
+        public List<String> getRemovedTriggers() {
+            return Collections.unmodifiableList(this.removedTriggers);
+        }
+
+        public List<String> getUpdatedTriggers() {
+            return Collections.unmodifiableList(this.updatedTriggers);
+        }
     }
 }
