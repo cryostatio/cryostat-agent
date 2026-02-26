@@ -13,7 +13,7 @@
 <groupId>io.cryostat</groupId>
 <artifactId>cryostat-agent</artifactId>
 
-<version>0.6.1-SNAPSHOT</version>
+<version>0.6.1</version>
 
 <licenses>
   <license>
@@ -77,7 +77,7 @@
   <com.google.dagger.version>2.55</com.google.dagger.version>
   <com.google.dagger.compiler.version>${com.google.dagger.version}</com.google.dagger.compiler.version>
 
-  <io.cryostat.libcryostat.version>4.1.1-SNAPSHOT</io.cryostat.libcryostat.version>
+  <io.cryostat.libcryostat.version>4.1.1</io.cryostat.libcryostat.version>
 
   <org.apache.commons.lang3.version>3.18.0</org.apache.commons.lang3.version>
   <org.apache.commons.io.version>2.20.0</org.apache.commons.io.version>
