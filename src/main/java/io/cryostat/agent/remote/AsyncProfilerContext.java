@@ -50,9 +50,9 @@ import io.cryostat.agent.ConfigModule;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+import io.smallrye.config.SmallRyeConfig;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.http.HttpStatus;
-import org.eclipse.microprofile.config.Config;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -75,7 +75,7 @@ class AsyncProfilerContext extends MutatingRemoteContext {
 
     @Inject
     AsyncProfilerContext(
-            Config config,
+            SmallRyeConfig config,
             ObjectMapper mapper,
             ScheduledExecutorService scheduler,
             @Named(ConfigModule.CRYOSTAT_AGENT_ASYNC_PROFILER_REPOSITORY_PATH) Path repository) {

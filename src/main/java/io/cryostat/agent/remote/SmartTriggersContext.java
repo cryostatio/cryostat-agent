@@ -27,9 +27,9 @@ import io.cryostat.agent.triggers.TriggerEvaluator;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
+import io.smallrye.config.SmallRyeConfig;
 import jakarta.inject.Inject;
 import org.apache.http.HttpStatus;
-import org.eclipse.microprofile.config.Config;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,14 +38,14 @@ public class SmartTriggersContext implements RemoteContext {
     private Logger log = LoggerFactory.getLogger(getClass());
     private TriggerEvaluator evaluator;
     private ObjectMapper mapper;
-    private final Config config;
+    private final SmallRyeConfig config;
 
     private static final String PATH = "/smart-triggers/";
     private static final Pattern PATH_ID_PATTERN =
             Pattern.compile("^" + PATH + "(.*)$", Pattern.MULTILINE);
 
     @Inject
-    SmartTriggersContext(ObjectMapper mapper, TriggerEvaluator evaluator, Config config) {
+    SmartTriggersContext(ObjectMapper mapper, TriggerEvaluator evaluator, SmallRyeConfig config) {
         this.evaluator = evaluator;
         this.mapper = mapper;
         this.config = config;
