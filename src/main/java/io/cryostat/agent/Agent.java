@@ -92,7 +92,7 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
                         + " to that, failing if none or more than one are found. Otherwise, this"
                         + " should be a process ID, or the '*' wildcard to request the Agent"
                         + " attempt to attach to all discovered JVMs.")
-    private String pid;
+    private String pidSpec;
 
     @Option(
             names = {"-D", "--property"},
@@ -124,26 +124,28 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
                     AgentInitializationException,
                     AgentLoadException,
                     URISyntaxException {
-        List<String> pids = getAttachPid(pid);
-        if (pids.isEmpty()) {
-            throw new IllegalStateException("No candidate JVM PIDs");
-        }
         String agentmainArg =
                 new AgentArgs(
                                 properties,
                                 String.join(",", smartTriggers != null ? smartTriggers : List.of()))
                         .toAgentMain();
-        for (String pid : pids) {
+        List<VirtualMachineDescriptor> vmds = getAttachDescriptors(pidSpec);
+        if (vmds.isEmpty()) {
+            throw new IllegalStateException("No candidate JVM PIDs");
+        }
+        for (VirtualMachineDescriptor vmd : vmds) {
             VirtualMachine vm = null;
             try {
-                vm = VirtualMachine.attach(pid);
                 ShadeLogger.getAnonymousLogger()
-                        .fine(String.format("Injecting agent into PID %s", pid));
+                        .fine(String.format("Attaching to VM: %s %s", vmd.displayName(), vmd.id()));
+                vm = VirtualMachine.attach(vmd.id());
+                ShadeLogger.getAnonymousLogger()
+                        .fine(String.format("Injecting agent into PID %s", vmd.id()));
                 vm.loadAgent(Path.of(selfJarLocation()).toAbsolutePath().toString(), agentmainArg);
             } catch (IOException ioe) {
-                if (pids.size() > 1) {
+                if (vmds.size() > 1) {
                     ShadeLogger.getAnonymousLogger()
-                            .severe(String.format("Failed to inject agent into PID %s", pid));
+                            .severe(String.format("Failed to inject agent into PID %s", vmd.id()));
                     ioe.printStackTrace(); // TODO print to the logger
                     continue;
                 } else {
@@ -182,7 +184,7 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
         t.start();
     }
 
-    private static List<String> getAttachPid(String pidSpec) {
+    private static List<VirtualMachineDescriptor> getAttachDescriptors(String pidSpec) {
         List<VirtualMachineDescriptor> vms = VirtualMachine.list();
         Predicate<VirtualMachineDescriptor> vmFilter;
         if (ALL_PIDS.equals(pidSpec)) {
@@ -206,17 +208,7 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
         } else {
             vmFilter = vmd -> pidSpec.equals(vmd.id());
         }
-        return vms.stream()
-                .filter(vmFilter)
-                .peek(
-                        vmd ->
-                                ShadeLogger.getAnonymousLogger()
-                                        .fine(
-                                                String.format(
-                                                        "Attaching to VM: %s %s",
-                                                        vmd.displayName(), vmd.id())))
-                .map(VirtualMachineDescriptor::id)
-                .collect(Collectors.toList());
+        return vms.stream().filter(vmFilter).collect(Collectors.toList());
     }
 
     static URI selfJarLocation() throws URISyntaxException {
