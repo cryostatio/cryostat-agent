@@ -352,7 +352,14 @@ public abstract class ConfigModule {
     @Named(CRYOSTAT_AGENT_REALM)
     public static String provideCryostatAgentRealm(
             SmallRyeConfig config, @Named(CRYOSTAT_AGENT_APP_NAME) String appName) {
-        return config.getOptionalValue(CRYOSTAT_AGENT_REALM, String.class).orElse(appName);
+        return config.getOptionalValue(CRYOSTAT_AGENT_REALM, String.class)
+                .orElseGet(
+                        () -> {
+                            SecureRandom random = new SecureRandom();
+                            int num = random.nextInt(0x1000000);
+                            String formatted = String.format("%06x", num);
+                            return String.format("%s-%s", appName, formatted);
+                        });
     }
 
     @Provides
