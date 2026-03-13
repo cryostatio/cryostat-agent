@@ -50,9 +50,6 @@ import io.cryostat.agent.shaded.ShadeLogger;
 import io.cryostat.agent.triggers.TriggerEvaluator;
 import io.cryostat.libcryostat.net.CryostatAgentMXBean;
 
-import com.sun.tools.attach.AgentInitializationException;
-import com.sun.tools.attach.AgentLoadException;
-import com.sun.tools.attach.AttachNotSupportedException;
 import com.sun.tools.attach.VirtualMachine;
 import com.sun.tools.attach.VirtualMachineDescriptor;
 import dagger.Component;
@@ -118,12 +115,7 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
     }
 
     @Override
-    public Integer call()
-            throws IOException,
-                    AttachNotSupportedException,
-                    AgentInitializationException,
-                    AgentLoadException,
-                    URISyntaxException {
+    public Integer call() throws Exception {
         String agentmainArg =
                 new AgentArgs(
                                 properties,
@@ -136,12 +128,7 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
         for (VirtualMachineDescriptor vmd : vmds) {
             VirtualMachine vm = null;
             try {
-                ShadeLogger.getAnonymousLogger()
-                        .fine(String.format("Attaching to VM: %s %s", vmd.displayName(), vmd.id()));
-                vm = VirtualMachine.attach(vmd.id());
-                ShadeLogger.getAnonymousLogger()
-                        .fine(String.format("Injecting agent into PID %s", vmd.id()));
-                vm.loadAgent(Path.of(selfJarLocation()).toAbsolutePath().toString(), agentmainArg);
+                vm = tryAttachToDescriptor(agentmainArg, vmd);
             } catch (IOException ioe) {
                 if (vmds.size() > 1) {
                     ShadeLogger.getAnonymousLogger()
@@ -158,6 +145,18 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
             }
         }
         return 0;
+    }
+
+    private VirtualMachine tryAttachToDescriptor(String agentmainArg, VirtualMachineDescriptor vmd)
+            throws Exception {
+        VirtualMachine vm;
+        ShadeLogger.getAnonymousLogger()
+                .fine(String.format("Attaching to VM: %s %s", vmd.displayName(), vmd.id()));
+        vm = VirtualMachine.attach(vmd.id());
+        ShadeLogger.getAnonymousLogger()
+                .fine(String.format("Injecting agent into PID %s", vmd.id()));
+        vm.loadAgent(Path.of(selfJarLocation()).toAbsolutePath().toString(), agentmainArg);
+        return vm;
     }
 
     // -javaagent entry point, Agent is starting before the host JVM application
