@@ -134,13 +134,25 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
                                 String.join(",", smartTriggers != null ? smartTriggers : List.of()))
                         .toAgentMain();
         for (String pid : pids) {
-            VirtualMachine vm = VirtualMachine.attach(pid);
-            ShadeLogger.getAnonymousLogger()
-                    .fine(String.format("Injecting agent into PID %s", pid));
+            VirtualMachine vm = null;
             try {
+                vm = VirtualMachine.attach(pid);
+                ShadeLogger.getAnonymousLogger()
+                        .fine(String.format("Injecting agent into PID %s", pid));
                 vm.loadAgent(Path.of(selfJarLocation()).toAbsolutePath().toString(), agentmainArg);
+            } catch (IOException ioe) {
+                if (pids.size() > 1) {
+                    ShadeLogger.getAnonymousLogger()
+                            .severe(String.format("Failed to inject agent into PID %s", pid));
+                    ioe.printStackTrace(); // TODO print to the logger
+                    continue;
+                } else {
+                    throw ioe;
+                }
             } finally {
-                vm.detach();
+                if (vm != null) {
+                    vm.detach();
+                }
             }
         }
         return 0;
