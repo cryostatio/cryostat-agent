@@ -223,7 +223,8 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
         List<VirtualMachineDescriptor> vms = VirtualMachine.list();
         Predicate<VirtualMachineDescriptor> vmFilter;
         if (ALL_PIDS.equals(pidSpec)) {
-            vmFilter = vmd -> true;
+            long ownId = ProcessHandle.current().pid();
+            vmFilter = vmd -> !Objects.equals(String.valueOf(ownId), vmd.id());
         } else if (pidSpec == null || AUTO_ATTACH_PID.equals(pidSpec)) {
             if (vms.size() > 2) { // one of them is ourself
                 throw new IllegalStateException(
