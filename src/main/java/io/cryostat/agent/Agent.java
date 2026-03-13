@@ -22,9 +22,11 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.file.Path;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -106,6 +108,16 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
             description = "Smart Triggers definition. May be specified more than once.")
     private List<String> smartTriggers;
 
+    @Option(
+            names = {"-w", "--watch"},
+            description =
+                    "Watch mode. If this is set then the initial Agent process will stay alive and"
+                        + " watch for more JVM PIDs to appear and attempt self-injection on each"
+                        + " one. This implies the attach PID '*'.")
+    private boolean watch;
+
+    private final Set<VirtualMachineDescriptor> watchedDescriptors = new HashSet<>();
+
     // standalone entry point, Agent is started separately and should self-inject and dynamic attach
     // to the host JVM application. After the agent is dynamically attached we should begin
     // execution again in agentmain
@@ -121,6 +133,11 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
                                 properties,
                                 String.join(",", smartTriggers != null ? smartTriggers : List.of()))
                         .toAgentMain();
+        if (watch) {
+            startWatch(agentmainArg);
+            return 0;
+        }
+
         List<VirtualMachineDescriptor> vmds = getAttachDescriptors(pidSpec);
         if (vmds.isEmpty()) {
             throw new IllegalStateException("No candidate JVM PIDs");
@@ -129,14 +146,14 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
             VirtualMachine vm = null;
             try {
                 vm = tryAttachToDescriptor(agentmainArg, vmd);
-            } catch (IOException ioe) {
+            } catch (Exception e) {
                 if (vmds.size() > 1) {
                     ShadeLogger.getAnonymousLogger()
                             .severe(String.format("Failed to inject agent into PID %s", vmd.id()));
-                    ioe.printStackTrace(); // TODO print to the logger
+                    e.printStackTrace(); // TODO print to the logger
                     continue;
                 } else {
-                    throw ioe;
+                    throw e;
                 }
             } finally {
                 if (vm != null) {
@@ -145,6 +162,25 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
             }
         }
         return 0;
+    }
+
+    private void startWatch(String agentMainArg) throws Exception {
+        while (!Thread.currentThread().isInterrupted()) {
+            Set<VirtualMachineDescriptor> observedDescriptors =
+                    getAttachDescriptors(ALL_PIDS).stream().collect(Collectors.toSet());
+            observedDescriptors.removeAll(watchedDescriptors);
+            for (VirtualMachineDescriptor vmd : observedDescriptors) {
+                try {
+                    tryAttachToDescriptor(agentMainArg, vmd);
+                } catch (Exception e) {
+                    ShadeLogger.getAnonymousLogger()
+                            .severe(String.format("Failed to inject agent into PID %s", vmd.id()));
+                    e.printStackTrace(); // TODO print to the logger
+                }
+            }
+            watchedDescriptors.addAll(observedDescriptors);
+            Thread.sleep(5000); // TODO make configurable
+        }
     }
 
     private VirtualMachine tryAttachToDescriptor(String agentmainArg, VirtualMachineDescriptor vmd)
