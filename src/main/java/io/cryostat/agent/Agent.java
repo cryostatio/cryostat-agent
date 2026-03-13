@@ -179,7 +179,7 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
                 }
             }
             watchedDescriptors.addAll(observedDescriptors);
-            Thread.sleep(5000); // TODO make configurable
+            Thread.sleep(500); // TODO make configurable
         }
     }
 
