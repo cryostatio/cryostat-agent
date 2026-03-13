@@ -18,6 +18,7 @@ package io.cryostat.agent;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.net.InetAddress;
+import java.net.ServerSocket;
 import java.net.URI;
 import java.net.URL;
 import java.net.URLClassLoader;
@@ -29,6 +30,7 @@ import java.security.AccessController;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivilegedExceptionAction;
+import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -339,8 +341,9 @@ public abstract class ConfigModule {
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_CALLBACK_CANDIDATES)
-    public static List<CallbackCandidate> provideCryostatAgentCallback(SmallRyeConfig config) {
-        List<CallbackCandidate> callbacks = buildCallbacksFromComponents(config);
+    public static List<CallbackCandidate> provideCryostatAgentCallback(
+            SmallRyeConfig config, @Named(CRYOSTAT_AGENT_WEBSERVER_PORT) int port) {
+        List<CallbackCandidate> callbacks = buildCallbacksFromComponents(config, port);
         if (!callbacks.isEmpty()) {
             return callbacks;
         }
@@ -705,7 +708,15 @@ public abstract class ConfigModule {
     @Singleton
     @Named(CRYOSTAT_AGENT_WEBSERVER_PORT)
     public static int provideCryostatAgentWebserverPort(SmallRyeConfig config) {
-        return config.getValue(CRYOSTAT_AGENT_WEBSERVER_PORT, int.class);
+        return config.getOptionalValue(CRYOSTAT_AGENT_WEBSERVER_PORT, int.class)
+                .orElseGet(
+                        () -> {
+                            try (ServerSocket s = new ServerSocket(0)) {
+                                return s.getLocalPort();
+                            } catch (IOException ioe) {
+                                return 36720;
+                            }
+                        });
     }
 
     @Provides
@@ -1166,24 +1177,23 @@ public abstract class ConfigModule {
         }
     }
 
-    private static List<CallbackCandidate> buildCallbacksFromComponents(SmallRyeConfig config) {
+    private static List<CallbackCandidate> buildCallbacksFromComponents(
+            SmallRyeConfig config, int defaultPort) {
         Optional<String> scheme =
                 config.getOptionalValue(CRYOSTAT_AGENT_CALLBACK_SCHEME, String.class);
         Optional<String[]> hostNames =
                 config.getOptionalValue(CRYOSTAT_AGENT_CALLBACK_HOST_NAME, String[].class);
         Optional<String> domainName =
                 config.getOptionalValue(CRYOSTAT_AGENT_CALLBACK_DOMAIN_NAME, String.class);
-        Optional<Integer> port =
-                config.getOptionalValue(CRYOSTAT_AGENT_CALLBACK_PORT, Integer.class);
-        if (scheme.isPresent()
-                && hostNames.isPresent()
-                && domainName.isPresent()
-                && port.isPresent()) {
+        int port =
+                config.getOptionalValue(CRYOSTAT_AGENT_CALLBACK_PORT, int.class)
+                        .orElse(defaultPort);
+        if (scheme.isPresent() && hostNames.isPresent()) {
             return Arrays.asList(hostNames.get()).stream()
                     .map(
                             hostname ->
                                     new CallbackCandidate(
-                                            scheme.get(), hostname, domainName.get(), port.get()))
+                                            scheme.get(), hostname, domainName.orElse(null), port))
                     .collect(Collectors.toList());
         }
         return List.of();

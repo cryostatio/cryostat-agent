@@ -217,7 +217,7 @@ and how it advertises itself to a Cryostat server instance. Properties that requ
 - [ ] `cryostat.agent.webclient.connect.timeout-ms` [`long`]: the duration in milliseconds to wait for HTTP requests to the Cryostat server to connect. Default `1000`.
 - [ ] `cryostat.agent.webclient.response.timeout-ms` [`long`]: the duration in milliseconds to wait for HTTP requests to the Cryostat server to respond. Default `1000`.
 - [ ] `cryostat.agent.webserver.host` [`String`]: the internal hostname or IP address for the embedded webserver to bind to. Default `0.0.0.0`.
-- [ ] `cryostat.agent.webserver.port` [`int`]: the internal port number for the embedded webserver to bind to. Default `9977`.
+- [ ] `cryostat.agent.webserver.port` [`int`]: the internal port number for the embedded webserver to bind to. Defaults to a random available port number.
 - [ ] `cryostat.agent.webserver.tls.version` [`String`]: the version of TLS used for the Agent's server SSL context. Default `TLSv1.2`.
 - [ ] `cryostat.agent.webserver.tls.keystore.pass` [`String`]: the filepath to the HTTPS server keystore's password
 - [ ] `cryostat.agent.webserver.tls.keystore.pass.charset` [`String`]: the character set used by the HTTPS server keystore's password. Default `utf-8`.

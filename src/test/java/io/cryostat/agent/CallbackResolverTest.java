@@ -63,7 +63,7 @@ public class CallbackResolverTest {
         when(config.getValue(ConfigModule.CRYOSTAT_AGENT_CALLBACK, URI.class))
                 .thenReturn(new URI("https://callback.example.com:9977"));
 
-        List<CallbackCandidate> result = ConfigModule.provideCryostatAgentCallback(config);
+        List<CallbackCandidate> result = ConfigModule.provideCryostatAgentCallback(config, 9977);
         assertEquals(
                 List.of(new CallbackCandidate("https", "callback", "example.com", 9977)), result);
     }
@@ -103,7 +103,8 @@ public class CallbackResolverTest {
                 .thenThrow(new UnknownHostException("TEST"));
 
         assertThrows(
-                RuntimeException.class, () -> ConfigModule.provideCryostatAgentCallback(config));
+                RuntimeException.class,
+                () -> ConfigModule.provideCryostatAgentCallback(config, 9977));
     }
 
     @Test
