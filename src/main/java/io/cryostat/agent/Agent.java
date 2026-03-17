@@ -80,7 +80,7 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
                         + " to that, failing if none or more than one are found. Otherwise, this"
                         + " should be a process ID, or the '*' wildcard to request the Agent"
                         + " attempt to attach to all discovered JVMs.")
-    private String pidSpec;
+    String pid;
 
     @Option(
             names = {"-D", "--property"},
@@ -90,12 +90,12 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
                         + " JVM. These should be specified as key=value pairs, ex."
                         + " -Dcryostat.agent.baseuri=http://cryostat.service.local . May be"
                         + " specified more than once.")
-    private Map<String, String> properties;
+    Map<String, String> properties;
 
     @Option(
             names = "--smartTrigger",
             description = "Smart Triggers definition. May be specified more than once.")
-    private List<String> smartTriggers;
+    List<String> smartTriggers;
 
     @Option(
             names = {"-w", "--watch"},
@@ -104,7 +104,7 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
                     "Watch mode. If this is set then the initial Agent process will stay alive and"
                         + " watch for more JVM PIDs to appear and attempt self-injection on each"
                         + " one. This implies the attach PID '*'.")
-    private boolean watch;
+    boolean watch;
 
     @Option(
             names = {"-i", "--watch-include"},
@@ -118,7 +118,7 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
                         + " allows self-injection to any JVM. Pass this option more than once to"
                         + " specify additional keywords, or pass more than one value to this"
                         + " option. This is case insensitive.")
-    private List<String> watchIncludeKeywords;
+    List<String> watchIncludeKeywords;
 
     // standalone entry point, Agent is started separately and should self-inject and dynamic attach
     // to the host JVM application. After the agent is dynamically attached we should begin
@@ -130,7 +130,7 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
 
     @Override
     public Integer call() throws Exception {
-        new Attacher(watch, watchIncludeKeywords).attach(properties, smartTriggers, pidSpec);
+        new Attacher().attach(this);
         return 0;
     }
 
