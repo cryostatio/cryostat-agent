@@ -110,11 +110,26 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
 
     @Option(
             names = {"-w", "--watch"},
+            defaultValue = "false",
             description =
                     "Watch mode. If this is set then the initial Agent process will stay alive and"
                         + " watch for more JVM PIDs to appear and attempt self-injection on each"
                         + " one. This implies the attach PID '*'.")
     private boolean watch;
+
+    @Option(
+            names = {"-i", "--watch-include"},
+            defaultValue = "",
+            arity = "1..*",
+            description =
+                    "Watch mode inclusion filter. If this is set then the Agent will only attempt"
+                        + " to self-inject to JVMs whose descriptors (ex. Main-Class name or JAR"
+                        + " path) include any of the given keyword string values. This is only used"
+                        + " when watch mode is enabled. The default is a single empty string, which"
+                        + " allows self-injection to any JVM. Pass this option more than once to"
+                        + " specify additional keywords, or pass more than one value to this"
+                        + " option.")
+    private List<String> watchIncludeKeywords;
 
     private final Set<VirtualMachineDescriptor> watchedDescriptors = new HashSet<>();
 
@@ -165,9 +180,15 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
     }
 
     private void startWatch(String agentMainArg) throws Exception {
+        Predicate<VirtualMachineDescriptor> p =
+                (watchIncludeKeywords == null || watchIncludeKeywords.isEmpty())
+                        ? v -> true
+                        : v ->
+                                watchIncludeKeywords.stream()
+                                        .anyMatch(k -> v.displayName().contains(k));
         while (!Thread.currentThread().isInterrupted()) {
             Set<VirtualMachineDescriptor> observedDescriptors =
-                    getAttachDescriptors(ALL_PIDS).stream().collect(Collectors.toSet());
+                    getAttachDescriptors(ALL_PIDS).stream().filter(p).collect(Collectors.toSet());
             observedDescriptors.removeAll(watchedDescriptors);
             for (VirtualMachineDescriptor vmd : observedDescriptors) {
                 try {
