@@ -26,6 +26,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
@@ -128,7 +129,7 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
                         + " when watch mode is enabled. The default is a single empty string, which"
                         + " allows self-injection to any JVM. Pass this option more than once to"
                         + " specify additional keywords, or pass more than one value to this"
-                        + " option.")
+                        + " option. This is case insensitive.")
     private List<String> watchIncludeKeywords;
 
     private final Set<VirtualMachineDescriptor> watchedDescriptors = new HashSet<>();
@@ -185,7 +186,13 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
                         ? v -> true
                         : v ->
                                 watchIncludeKeywords.stream()
-                                        .anyMatch(k -> v.displayName().contains(k));
+                                        .anyMatch(
+                                                k ->
+                                                        Optional.ofNullable(v.displayName())
+                                                                .orElse("")
+                                                                .toLowerCase()
+                                                                .strip()
+                                                                .contains(k.toLowerCase().strip()));
         while (!Thread.currentThread().isInterrupted()) {
             Set<VirtualMachineDescriptor> observedDescriptors =
                     getAttachDescriptors(ALL_PIDS).stream().filter(p).collect(Collectors.toSet());
