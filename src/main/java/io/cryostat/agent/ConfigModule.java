@@ -291,7 +291,7 @@ public abstract class ConfigModule {
                         clConfigLoader.apply(
                                 () ->
                                         new URLClassLoader(
-                                                new URL[] {Agent.selfJarLocation().toURL()}))));
+                                                new URL[] {Attacher.selfJarLocation().toURL()}))));
 
         SmallRyeConfig config = null;
         for (Pair<String, Callable<SmallRyeConfig>> fn : fns) {

@@ -19,16 +19,10 @@ import java.io.IOException;
 import java.lang.instrument.Instrumentation;
 import java.lang.management.ManagementFactory;
 import java.net.URI;
-import java.net.URISyntaxException;
-import java.nio.file.Path;
-import java.util.Collection;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -36,8 +30,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
-import java.util.function.Predicate;
-import java.util.stream.Collectors;
 
 import javax.inject.Named;
 import javax.inject.Singleton;
@@ -50,12 +42,9 @@ import io.cryostat.agent.harvest.Harvester;
 import io.cryostat.agent.insights.InsightsAgentHelper;
 import io.cryostat.agent.model.PluginInfo;
 import io.cryostat.agent.mxbean.CryostatAgentMXBeanImpl;
-import io.cryostat.agent.shaded.ShadeLogger;
 import io.cryostat.agent.triggers.TriggerEvaluator;
 import io.cryostat.libcryostat.net.CryostatAgentMXBean;
 
-import com.sun.tools.attach.VirtualMachine;
-import com.sun.tools.attach.VirtualMachineDescriptor;
 import dagger.Component;
 import io.smallrye.config.SmallRyeConfig;
 import org.apache.commons.lang3.tuple.Pair;
@@ -80,8 +69,6 @@ import sun.misc.SignalHandler;
 public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
 
     private static final AtomicBoolean needsCleanup = new AtomicBoolean(true);
-    private static final String ALL_PIDS = "*";
-    static final String AUTO_ATTACH_PID = "0";
 
     @Parameters(
             index = "0",
@@ -133,8 +120,6 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
                         + " option. This is case insensitive.")
     private List<String> watchIncludeKeywords;
 
-    private final Set<VirtualMachineDescriptor> watchedDescriptors = new HashSet<>();
-
     // standalone entry point, Agent is started separately and should self-inject and dynamic attach
     // to the host JVM application. After the agent is dynamically attached we should begin
     // execution again in agentmain
@@ -145,87 +130,8 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
 
     @Override
     public Integer call() throws Exception {
-        String agentmainArg =
-                new AgentArgs(
-                                properties,
-                                String.join(",", smartTriggers != null ? smartTriggers : List.of()))
-                        .toAgentMain();
-        if (watch) {
-            startWatch(agentmainArg);
-            return 0;
-        }
-
-        List<VirtualMachineDescriptor> vmds = getAttachDescriptors(pidSpec);
-        if (vmds.isEmpty()) {
-            throw new IllegalStateException("No candidate JVM PIDs");
-        }
-        tryAttachToDescriptors(agentmainArg, vmds, vmds.size() > 1);
+        new Attacher(watch, watchIncludeKeywords).attach(properties, smartTriggers, pidSpec);
         return 0;
-    }
-
-    private void startWatch(String agentMainArg) throws Exception {
-        Predicate<VirtualMachineDescriptor> p =
-                (watchIncludeKeywords == null || watchIncludeKeywords.isEmpty())
-                        ? v -> true
-                        : v ->
-                                watchIncludeKeywords.stream()
-                                        .anyMatch(
-                                                k ->
-                                                        Optional.ofNullable(v.displayName())
-                                                                .orElse("")
-                                                                .toLowerCase()
-                                                                .strip()
-                                                                .contains(k.toLowerCase().strip()));
-        while (!Thread.currentThread().isInterrupted()) {
-            Set<VirtualMachineDescriptor> observedDescriptors =
-                    getAttachDescriptors(ALL_PIDS).stream().filter(p).collect(Collectors.toSet());
-            observedDescriptors.removeAll(watchedDescriptors);
-            tryAttachToDescriptors(agentMainArg, observedDescriptors, true);
-            watchedDescriptors.addAll(observedDescriptors);
-            Thread.sleep(500); // TODO make configurable
-        }
-    }
-
-    private void tryAttachToDescriptors(
-            String agentMainArg,
-            Collection<VirtualMachineDescriptor> vmds,
-            boolean suppressFailures)
-            throws Exception {
-        for (VirtualMachineDescriptor vmd : vmds) {
-            VirtualMachine vm = null;
-            try {
-                vm = tryAttachToDescriptor(agentMainArg, vmd);
-            } catch (Exception e) {
-                if (suppressFailures) {
-                    ShadeLogger.getAnonymousLogger()
-                            .severe(String.format("Failed to inject agent into PID %s", vmd.id()));
-                    e.printStackTrace(); // TODO print to the logger
-                    continue;
-                } else {
-                    throw e;
-                }
-            } finally {
-                if (vm != null) {
-                    try {
-                        vm.detach();
-                    } catch (IOException ioe) {
-                        ioe.printStackTrace();
-                    }
-                }
-            }
-        }
-    }
-
-    private VirtualMachine tryAttachToDescriptor(String agentmainArg, VirtualMachineDescriptor vmd)
-            throws Exception {
-        VirtualMachine vm;
-        ShadeLogger.getAnonymousLogger()
-                .fine(String.format("Attaching to VM: %s %s", vmd.displayName(), vmd.id()));
-        vm = VirtualMachine.attach(vmd.id());
-        ShadeLogger.getAnonymousLogger()
-                .fine(String.format("Injecting agent into PID %s", vmd.id()));
-        vm.loadAgent(Path.of(selfJarLocation()).toAbsolutePath().toString(), agentmainArg);
-        return vm;
     }
 
     // -javaagent entry point, Agent is starting before the host JVM application
@@ -250,38 +156,6 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
         t.setDaemon(true);
         t.setName("cryostat-agent-main");
         t.start();
-    }
-
-    private static List<VirtualMachineDescriptor> getAttachDescriptors(String pidSpec) {
-        List<VirtualMachineDescriptor> vms = VirtualMachine.list();
-        Predicate<VirtualMachineDescriptor> vmFilter;
-        if (ALL_PIDS.equals(pidSpec)) {
-            long ownId = ProcessHandle.current().pid();
-            vmFilter = vmd -> !Objects.equals(String.valueOf(ownId), vmd.id());
-        } else if (pidSpec == null || AUTO_ATTACH_PID.equals(pidSpec)) {
-            if (vms.size() > 2) { // one of them is ourself
-                throw new IllegalStateException(
-                        String.format(
-                                "Too many available virtual machines. Auto-attach only progresses"
-                                        + " if there is one candidate. VMs: %s",
-                                vms));
-            } else if (vms.size() < 2) {
-                throw new IllegalStateException(
-                        String.format(
-                                "Too few available virtual machines. Auto-attach only progresses if"
-                                        + " there is one candidate. VMs: %s",
-                                vms));
-            }
-            long ownId = ProcessHandle.current().pid();
-            vmFilter = vmd -> !Objects.equals(String.valueOf(ownId), vmd.id());
-        } else {
-            vmFilter = vmd -> pidSpec.equals(vmd.id());
-        }
-        return vms.stream().filter(vmFilter).collect(Collectors.toList());
-    }
-
-    static URI selfJarLocation() throws URISyntaxException {
-        return Agent.class.getProtectionDomain().getCodeSource().getLocation().toURI();
     }
 
     @Override
