@@ -21,6 +21,7 @@ import java.lang.management.ManagementFactory;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.file.Path;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -158,25 +159,7 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
         if (vmds.isEmpty()) {
             throw new IllegalStateException("No candidate JVM PIDs");
         }
-        for (VirtualMachineDescriptor vmd : vmds) {
-            VirtualMachine vm = null;
-            try {
-                vm = tryAttachToDescriptor(agentmainArg, vmd);
-            } catch (Exception e) {
-                if (vmds.size() > 1) {
-                    ShadeLogger.getAnonymousLogger()
-                            .severe(String.format("Failed to inject agent into PID %s", vmd.id()));
-                    e.printStackTrace(); // TODO print to the logger
-                    continue;
-                } else {
-                    throw e;
-                }
-            } finally {
-                if (vm != null) {
-                    vm.detach();
-                }
-            }
-        }
+        tryAttachToDescriptors(agentmainArg, vmds, false);
         return 0;
     }
 
@@ -197,22 +180,39 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
             Set<VirtualMachineDescriptor> observedDescriptors =
                     getAttachDescriptors(ALL_PIDS).stream().filter(p).collect(Collectors.toSet());
             observedDescriptors.removeAll(watchedDescriptors);
-            for (VirtualMachineDescriptor vmd : observedDescriptors) {
-                VirtualMachine vm = null;
-                try {
-                    vm = tryAttachToDescriptor(agentMainArg, vmd);
-                } catch (Exception e) {
+            tryAttachToDescriptors(agentMainArg, observedDescriptors, true);
+            watchedDescriptors.addAll(observedDescriptors);
+            Thread.sleep(500); // TODO make configurable
+        }
+    }
+
+    private void tryAttachToDescriptors(
+            String agentMainArg,
+            Collection<VirtualMachineDescriptor> vmds,
+            boolean suppressFailures)
+            throws Exception {
+        for (VirtualMachineDescriptor vmd : vmds) {
+            VirtualMachine vm = null;
+            try {
+                vm = tryAttachToDescriptor(agentMainArg, vmd);
+            } catch (Exception e) {
+                if (suppressFailures || vmds.size() > 1) {
                     ShadeLogger.getAnonymousLogger()
                             .severe(String.format("Failed to inject agent into PID %s", vmd.id()));
                     e.printStackTrace(); // TODO print to the logger
-                } finally {
-                    if (vm != null) {
+                    continue;
+                } else {
+                    throw e;
+                }
+            } finally {
+                if (vm != null) {
+                    try {
                         vm.detach();
+                    } catch (IOException ioe) {
+
                     }
                 }
             }
-            watchedDescriptors.addAll(observedDescriptors);
-            Thread.sleep(500); // TODO make configurable
         }
     }
 
