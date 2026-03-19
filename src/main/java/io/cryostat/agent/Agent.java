@@ -198,12 +198,17 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
                     getAttachDescriptors(ALL_PIDS).stream().filter(p).collect(Collectors.toSet());
             observedDescriptors.removeAll(watchedDescriptors);
             for (VirtualMachineDescriptor vmd : observedDescriptors) {
+                VirtualMachine vm = null;
                 try {
-                    tryAttachToDescriptor(agentMainArg, vmd);
+                    vm = tryAttachToDescriptor(agentMainArg, vmd);
                 } catch (Exception e) {
                     ShadeLogger.getAnonymousLogger()
                             .severe(String.format("Failed to inject agent into PID %s", vmd.id()));
                     e.printStackTrace(); // TODO print to the logger
+                } finally {
+                    if (vm != null) {
+                        vm.detach();
+                    }
                 }
             }
             watchedDescriptors.addAll(observedDescriptors);
