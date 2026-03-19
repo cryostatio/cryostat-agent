@@ -159,7 +159,7 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
         if (vmds.isEmpty()) {
             throw new IllegalStateException("No candidate JVM PIDs");
         }
-        tryAttachToDescriptors(agentmainArg, vmds, false);
+        tryAttachToDescriptors(agentmainArg, vmds, vmds.size() > 1);
         return 0;
     }
 
@@ -196,7 +196,7 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
             try {
                 vm = tryAttachToDescriptor(agentMainArg, vmd);
             } catch (Exception e) {
-                if (suppressFailures || vmds.size() > 1) {
+                if (suppressFailures) {
                     ShadeLogger.getAnonymousLogger()
                             .severe(String.format("Failed to inject agent into PID %s", vmd.id()));
                     e.printStackTrace(); // TODO print to the logger
@@ -209,7 +209,7 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
                     try {
                         vm.detach();
                     } catch (IOException ioe) {
-
+                        ioe.printStackTrace();
                     }
                 }
             }
