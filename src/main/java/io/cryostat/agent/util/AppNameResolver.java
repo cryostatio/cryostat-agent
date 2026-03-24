@@ -45,22 +45,52 @@ public class AppNameResolver {
     private static final String DEFAULT_APP_NAME = "cryostat-agent";
     private static final String SUN_JAVA_COMMAND_PROPERTY = "sun.java.command";
     private static final String JAVA_MAIN_CLASS_ENV = "JAVA_MAIN_CLASS";
+    private static final String APP_NAME_ENV = "APP_NAME";
+    private static final String SERVICE_NAME_ENV = "SERVICE_NAME";
+    private static final String APPLICATION_NAME_ENV = "APPLICATION_NAME";
     private static final String JAR_FLAG = "-jar";
+
+    private volatile String cachedAppName;
 
     @Inject
     public AppNameResolver() {}
 
     /**
-     * Resolves the application name using the configured priority order.
+     * Resolves the application name.
      *
      * @param config the SmallRye configuration instance
      * @return the resolved application name, never null or blank
      */
     public String resolveAppName(SmallRyeConfig config) {
+        String cached = cachedAppName;
+        if (cached != null) {
+            return cached;
+        }
+        String resolved = performResolution(config);
+        cachedAppName = resolved;
+        return resolved;
+    }
+
+    private String performResolution(SmallRyeConfig config) {
         Optional<String> configured =
                 config.getOptionalValue(ConfigModule.CRYOSTAT_AGENT_APP_NAME, String.class);
         if (configured.isPresent() && !StringUtils.isBlank(configured.get())) {
             return configured.get().trim();
+        }
+
+        String appName = System.getenv(APP_NAME_ENV);
+        if (!StringUtils.isBlank(appName)) {
+            return appName.trim();
+        }
+
+        String serviceName = System.getenv(SERVICE_NAME_ENV);
+        if (!StringUtils.isBlank(serviceName)) {
+            return serviceName.trim();
+        }
+
+        String applicationName = System.getenv(APPLICATION_NAME_ENV);
+        if (!StringUtils.isBlank(applicationName)) {
+            return applicationName.trim();
         }
 
         String fromCommand = extractFromJavaCommand();
