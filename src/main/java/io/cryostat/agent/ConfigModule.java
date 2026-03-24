@@ -52,6 +52,7 @@ import javax.inject.Named;
 import javax.inject.Singleton;
 
 import io.cryostat.agent.mxbean.CryostatAgentMXBeanImpl;
+import io.cryostat.agent.util.AppNameResolver;
 import io.cryostat.agent.util.ResourcesUtil;
 import io.cryostat.libcryostat.net.CryostatAgentMXBean;
 
@@ -890,8 +891,9 @@ public abstract class ConfigModule {
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_APP_NAME)
-    public static String provideCryostatAgentAppName(SmallRyeConfig config) {
-        return config.getValue(CRYOSTAT_AGENT_APP_NAME, String.class);
+    public static String provideCryostatAgentAppName(
+            SmallRyeConfig config, AppNameResolver resolver) {
+        return resolver.resolveAppName(config);
     }
 
     @Provides

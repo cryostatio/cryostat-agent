@@ -179,6 +179,13 @@ prefer. This can also be passed as a dynamic attachment argument when starting t
 Below is a list of configuration properties that can be used to influence how `cryostat-agent` runs
 and how it advertises itself to a Cryostat server instance. Properties that require configuration are indicated with a checked box.
 
+- [ ] `cryostat.agent.app.name` [`String`]: a human-friendly name for this application. If not explicitly set, the agent will automatically determine the application name from available runtime sources in the following priority order:
+  1. Explicit configuration via this property (highest priority)
+  2. `sun.java.command` system property (extracts main class or JAR name)
+  3. `JAVA_MAIN_CLASS` environment variable
+  4. Falls back to `cryostat-agent` if none are available
+
+  Users can override automatic detection by explicitly setting this property (e.g., via Kubernetes Downward API to use Pod/Deployment name).
 - [x] `cryostat.agent.baseuri` [`java.net.URI`]: the URL location of the Cryostat server backend that this agent advertises itself to.
 - [ ] `cryostat.agent.baseuri-range` [`String`]: a `String` representing the `io.cryostat.agent.ConfigModule.UriRange` enum level that restricts the acceptable hosts specified in the `cryostat.agent.baseuri` property. This is used to control the server locations that this Cryostat Agent instance is willing to register itself with. Default `dns_local`, which means any IP or hostname that is or resolves to `localhost`, a link-local IP address, an IP address from a private range block, or a hostname ending in `.local` will be accepted. If a `cryostat.agent.baseuri` is specified with a host outside of this range then the Agent will refuse to start. Acceptable values are: `loopback`, `link_local`, `site_local`, `dns_local`, and `public`. Each higher/more relaxed level implies that each lower level is also acceptable.
 - [x] `cryostat.agent.callback` [`java.net.URI`]: a URL pointing back to this agent, ex. `"https://12.34.56.78:1234/"`. Cryostat will use this URL to perform health checks and request updates from the agent. This reflects the externally-visible IP address/hostname and port where this application and agent can be found.
@@ -237,7 +244,6 @@ and how it advertises itself to a Cryostat server instance. Properties that requ
 - [ ] `cryostat.agent.webserver.credentials.user` [`String`]: the username used for `Basic` authorization on the embedded webserver. Default `user`.
 - [ ] `cryostat.agent.webserver.credentials.pass.length` [`int`]: the length of the generated password used for `Basic` authorization on the embedded webserver. Default `24`.
 - [ ] `cryostat.agent.webserver.credentials.pass.hash-function` [`String`]: the name of the hash function to use when generating passwords. Default `SHA-256`.
-- [ ] `cryostat.agent.app.name` [`String`]: a human-friendly name for this application. Default `cryostat-agent`.
 - [ ] `cryostat.agent.app.jmx.port` [`int`]: the JMX RMI port that the application is listening on. The default is to attempt to determine this from the `com.sun.management.jmxremote.port` system property.
 - [ ] `cryostat.agent.registration.retry-ms` [`long`]: the duration in milliseconds between attempts to register with the Cryostat server. Default `5000`.
 - [ ] `cryostat.agent.registration.jmx.ignore` [`boolean`]: if the Agent detects that the host JVM has its JMX server enabled, then setting this property to `true` will cause the Agent to ignore the JMX server and not publish a JMX Service URL after registering with the Cryostat server. Default `false`.
