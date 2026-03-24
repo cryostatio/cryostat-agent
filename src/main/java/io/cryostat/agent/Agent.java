@@ -21,10 +21,14 @@ import java.lang.management.ManagementFactory;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.file.Path;
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -50,9 +54,6 @@ import io.cryostat.agent.shaded.ShadeLogger;
 import io.cryostat.agent.triggers.TriggerEvaluator;
 import io.cryostat.libcryostat.net.CryostatAgentMXBean;
 
-import com.sun.tools.attach.AgentInitializationException;
-import com.sun.tools.attach.AgentLoadException;
-import com.sun.tools.attach.AttachNotSupportedException;
 import com.sun.tools.attach.VirtualMachine;
 import com.sun.tools.attach.VirtualMachineDescriptor;
 import dagger.Component;
@@ -92,7 +93,7 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
                         + " to that, failing if none or more than one are found. Otherwise, this"
                         + " should be a process ID, or the '*' wildcard to request the Agent"
                         + " attempt to attach to all discovered JVMs.")
-    private String pid;
+    private String pidSpec;
 
     @Option(
             names = {"-D", "--property"},
@@ -109,6 +110,31 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
             description = "Smart Triggers definition. May be specified more than once.")
     private List<String> smartTriggers;
 
+    @Option(
+            names = {"-w", "--watch"},
+            defaultValue = "false",
+            description =
+                    "Watch mode. If this is set then the initial Agent process will stay alive and"
+                        + " watch for more JVM PIDs to appear and attempt self-injection on each"
+                        + " one. This implies the attach PID '*'.")
+    private boolean watch;
+
+    @Option(
+            names = {"-i", "--watch-include"},
+            defaultValue = "",
+            arity = "1..*",
+            description =
+                    "Watch mode inclusion filter. If this is set then the Agent will only attempt"
+                        + " to self-inject to JVMs whose descriptors (ex. Main-Class name or JAR"
+                        + " path) include any of the given keyword string values. This is only used"
+                        + " when watch mode is enabled. The default is a single empty string, which"
+                        + " allows self-injection to any JVM. Pass this option more than once to"
+                        + " specify additional keywords, or pass more than one value to this"
+                        + " option. This is case insensitive.")
+    private List<String> watchIncludeKeywords;
+
+    private final Set<VirtualMachineDescriptor> watchedDescriptors = new HashSet<>();
+
     // standalone entry point, Agent is started separately and should self-inject and dynamic attach
     // to the host JVM application. After the agent is dynamically attached we should begin
     // execution again in agentmain
@@ -118,32 +144,88 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
     }
 
     @Override
-    public Integer call()
-            throws IOException,
-                    AttachNotSupportedException,
-                    AgentInitializationException,
-                    AgentLoadException,
-                    URISyntaxException {
-        List<String> pids = getAttachPid(pid);
-        if (pids.isEmpty()) {
-            throw new IllegalStateException("No candidate JVM PIDs");
-        }
+    public Integer call() throws Exception {
         String agentmainArg =
                 new AgentArgs(
                                 properties,
                                 String.join(",", smartTriggers != null ? smartTriggers : List.of()))
                         .toAgentMain();
-        for (String pid : pids) {
-            VirtualMachine vm = VirtualMachine.attach(pid);
-            ShadeLogger.getAnonymousLogger()
-                    .fine(String.format("Injecting agent into PID %s", pid));
+        if (watch) {
+            startWatch(agentmainArg);
+            return 0;
+        }
+
+        List<VirtualMachineDescriptor> vmds = getAttachDescriptors(pidSpec);
+        if (vmds.isEmpty()) {
+            throw new IllegalStateException("No candidate JVM PIDs");
+        }
+        tryAttachToDescriptors(agentmainArg, vmds, vmds.size() > 1);
+        return 0;
+    }
+
+    private void startWatch(String agentMainArg) throws Exception {
+        Predicate<VirtualMachineDescriptor> p =
+                (watchIncludeKeywords == null || watchIncludeKeywords.isEmpty())
+                        ? v -> true
+                        : v ->
+                                watchIncludeKeywords.stream()
+                                        .anyMatch(
+                                                k ->
+                                                        Optional.ofNullable(v.displayName())
+                                                                .orElse("")
+                                                                .toLowerCase()
+                                                                .strip()
+                                                                .contains(k.toLowerCase().strip()));
+        while (!Thread.currentThread().isInterrupted()) {
+            Set<VirtualMachineDescriptor> observedDescriptors =
+                    getAttachDescriptors(ALL_PIDS).stream().filter(p).collect(Collectors.toSet());
+            observedDescriptors.removeAll(watchedDescriptors);
+            tryAttachToDescriptors(agentMainArg, observedDescriptors, true);
+            watchedDescriptors.addAll(observedDescriptors);
+            Thread.sleep(500); // TODO make configurable
+        }
+    }
+
+    private void tryAttachToDescriptors(
+            String agentMainArg,
+            Collection<VirtualMachineDescriptor> vmds,
+            boolean suppressFailures)
+            throws Exception {
+        for (VirtualMachineDescriptor vmd : vmds) {
+            VirtualMachine vm = null;
             try {
-                vm.loadAgent(Path.of(selfJarLocation()).toAbsolutePath().toString(), agentmainArg);
+                vm = tryAttachToDescriptor(agentMainArg, vmd);
+            } catch (Exception e) {
+                if (suppressFailures) {
+                    ShadeLogger.getAnonymousLogger()
+                            .severe(String.format("Failed to inject agent into PID %s", vmd.id()));
+                    e.printStackTrace(); // TODO print to the logger
+                    continue;
+                } else {
+                    throw e;
+                }
             } finally {
-                vm.detach();
+                if (vm != null) {
+                    try {
+                        vm.detach();
+                    } catch (IOException ioe) {
+                        ioe.printStackTrace();
+                    }
+                }
             }
         }
-        return 0;
+    }
+
+    private VirtualMachine tryAttachToDescriptor(String agentmainArg, VirtualMachineDescriptor vmd)
+            throws Exception {
+        VirtualMachine vm;
+        ShadeLogger.getAnonymousLogger()
+                .fine(String.format("Attaching to VM: %s %s", vmd.displayName(), vmd.id()));
+        vm = VirtualMachine.attach(vmd.id());
+        ShadeLogger.getAnonymousLogger()
+                .fine(String.format("Injecting agent into PID %s", vmd.id()));
+        vm.loadAgent(Path.of(selfJarLocation()).toAbsolutePath().toString(), agentmainArg);
+        return vm;
     }
 
     // -javaagent entry point, Agent is starting before the host JVM application
@@ -170,11 +252,12 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
         t.start();
     }
 
-    private static List<String> getAttachPid(String pidSpec) {
+    private static List<VirtualMachineDescriptor> getAttachDescriptors(String pidSpec) {
         List<VirtualMachineDescriptor> vms = VirtualMachine.list();
         Predicate<VirtualMachineDescriptor> vmFilter;
         if (ALL_PIDS.equals(pidSpec)) {
-            vmFilter = vmd -> true;
+            long ownId = ProcessHandle.current().pid();
+            vmFilter = vmd -> !Objects.equals(String.valueOf(ownId), vmd.id());
         } else if (pidSpec == null || AUTO_ATTACH_PID.equals(pidSpec)) {
             if (vms.size() > 2) { // one of them is ourself
                 throw new IllegalStateException(
@@ -194,17 +277,7 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
         } else {
             vmFilter = vmd -> pidSpec.equals(vmd.id());
         }
-        return vms.stream()
-                .filter(vmFilter)
-                .peek(
-                        vmd ->
-                                ShadeLogger.getAnonymousLogger()
-                                        .fine(
-                                                String.format(
-                                                        "Attaching to VM: %s %s",
-                                                        vmd.displayName(), vmd.id())))
-                .map(VirtualMachineDescriptor::id)
-                .collect(Collectors.toList());
+        return vms.stream().filter(vmFilter).collect(Collectors.toList());
     }
 
     static URI selfJarLocation() throws URISyntaxException {

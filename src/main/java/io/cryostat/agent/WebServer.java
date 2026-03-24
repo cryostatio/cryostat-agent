@@ -60,6 +60,7 @@ class WebServer {
     private final CompressionFilter compressionFilter;
 
     WebServer(
+            SecureRandom random,
             Lazy<Set<RemoteContext>> remoteContexts,
             Lazy<CryostatClient> cryostat,
             HttpServer http,
@@ -70,7 +71,7 @@ class WebServer {
         this.remoteContexts = remoteContexts;
         this.cryostat = cryostat;
         this.http = http;
-        this.credentials = new Credentials(digest, user, passLength);
+        this.credentials = new Credentials(random, digest, user, passLength);
         this.registration = registration;
 
         this.agentAuthenticator = new AgentAuthenticator();
@@ -272,13 +273,14 @@ class WebServer {
 
     static class Credentials {
 
-        private final SecureRandom random = new SecureRandom();
+        private final SecureRandom random;
         private final MessageDigest digest;
         private final String user;
         private final byte[] pass;
         private byte[] passHash = new byte[0];
 
-        Credentials(MessageDigest digest, String user, int passLength) {
+        Credentials(SecureRandom random, MessageDigest digest, String user, int passLength) {
+            this.random = random;
             this.digest = digest;
             this.user = user;
             this.pass = new byte[passLength];

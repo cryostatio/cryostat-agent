@@ -39,6 +39,7 @@ import java.security.KeyStoreException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
+import java.security.SecureRandom;
 import java.security.UnrecoverableKeyException;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
@@ -162,7 +163,14 @@ public abstract class MainModule {
 
     @Provides
     @Singleton
+    public static SecureRandom provideSecureRandom() {
+        return new SecureRandom();
+    }
+
+    @Provides
+    @Singleton
     public static WebServer provideWebServer(
+            SecureRandom random,
             Lazy<Set<RemoteContext>> remoteContexts,
             Lazy<CryostatClient> cryostat,
             HttpServer http,
@@ -172,7 +180,7 @@ public abstract class MainModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_CREDENTIALS_PASS_LENGTH) int passLength,
             Lazy<Registration> registration) {
         return new WebServer(
-                remoteContexts, cryostat, http, digest, user, passLength, registration);
+                random, remoteContexts, cryostat, http, digest, user, passLength, registration);
     }
 
     private static Optional<CharBuffer> readPass(
