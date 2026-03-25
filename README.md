@@ -181,9 +181,10 @@ and how it advertises itself to a Cryostat server instance. Properties that requ
 
 - [ ] `cryostat.agent.app.name` [`String`]: a human-friendly name for this application. If not explicitly set, the agent will automatically determine the application name from available runtime sources in the following priority order:
   1. Explicit configuration via this property (highest priority)
-  2. `sun.java.command` system property (extracts main class or JAR name)
-  3. `JAVA_MAIN_CLASS` environment variable
-  4. Falls back to `cryostat-agent` if none are available
+  2. `APP_NAME`, `SERVICE_NAME`, or `APPLICATION_NAME` environment variables
+  3. `sun.java.command` system property
+  4. `JAVA_MAIN_CLASS` environment variable
+  5. Falls back to `cryostat-agent` if none are available
 
   Users can override automatic detection by explicitly setting this property (e.g., via Kubernetes Downward API to use Pod/Deployment name).
 - [x] `cryostat.agent.baseuri` [`java.net.URI`]: the URL location of the Cryostat server backend that this agent advertises itself to.
