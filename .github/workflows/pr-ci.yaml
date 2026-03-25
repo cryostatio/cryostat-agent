@@ -35,10 +35,10 @@ jobs:
       with:
         java-version: ${{ matrix.JVM_version }}
         distribution: 'temurin'
-    - uses: skjolber/maven-cache-github-action@2a02d9e7296e9c0176e9b5f0f7f45e4e2c4d9e7e # v1
+    - uses: skjolber/maven-cache-github-action@c4a30022e05fa8a86dde82cd8c1e49420d4a45dd # v3.1.2
       with:
         step: restore
     - run: mvn -Psnapshots -B -U clean verify
-    - uses: skjolber/maven-cache-github-action@2a02d9e7296e9c0176e9b5f0f7f45e4e2c4d9e7e # v1
+    - uses: skjolber/maven-cache-github-action@c4a30022e05fa8a86dde82cd8c1e49420d4a45dd # v3.1.2
       with:
         step: save
