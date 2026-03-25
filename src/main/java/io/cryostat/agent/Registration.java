@@ -37,6 +37,7 @@ import java.util.stream.Collectors;
 import io.cryostat.agent.VersionInfo.Semver;
 import io.cryostat.agent.model.DiscoveryNode;
 import io.cryostat.agent.model.PluginInfo;
+import io.cryostat.agent.util.AppNameResolver;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hc.core5.net.URIBuilder;
@@ -54,6 +55,7 @@ public class Registration {
     private final CryostatClient cryostat;
     private final CallbackResolver callbackResolver;
     private final WebServer webServer;
+    private final AppNameResolver appNameResolver;
     private final String instanceId;
     private final String jvmId;
     private final String appName;
@@ -76,6 +78,7 @@ public class Registration {
             CryostatClient cryostat,
             CallbackResolver callbackResolver,
             WebServer webServer,
+            io.cryostat.agent.util.AppNameResolver appNameResolver,
             String instanceId,
             String jvmId,
             String appName,
@@ -90,6 +93,7 @@ public class Registration {
         this.cryostat = cryostat;
         this.callbackResolver = callbackResolver;
         this.webServer = webServer;
+        this.appNameResolver = appNameResolver;
         this.instanceId = instanceId;
         this.jvmId = jvmId;
         this.appName = appName;
@@ -308,7 +312,10 @@ public class Registration {
         Set<DiscoveryNode> discoveryNodes = new HashSet<>();
 
         long pid = ProcessHandle.current().pid();
-        String javaMain = System.getProperty("sun.java.command", System.getenv("JAVA_MAIN_CLASS"));
+        String javaMain = appNameResolver.extractFromJavaCommand();
+        if (StringUtils.isBlank(javaMain)) {
+            javaMain = System.getenv("JAVA_MAIN_CLASS");
+        }
         if (StringUtils.isBlank(javaMain)) {
             log.warn("Unable to determine application mainclass");
             javaMain = null;
