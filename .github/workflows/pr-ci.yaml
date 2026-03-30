@@ -5,7 +5,7 @@ concurrency:
   cancel-in-progress: true
 
 on:
-  pull_request_target:
+  pull_request:
     types:
       - opened
       - reopened
@@ -26,22 +26,19 @@ jobs:
         JVM_version: ['11', '17', '21']
     if: ${{ github.repository_owner == 'cryostatio' }}
     steps:
-    - name: Fail if PR and safe-to-test label NOT applied
-      if: ${{ github.event_name == 'pull_request_target' && !contains(github.event.pull_request.labels.*.name, 'safe-to-test') }}
-      run: exit 1
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       with:
         repository: ${{ github.event.pull_request.head.repo.full_name }}
         ref: ${{ github.event.pull_request.head.ref }}
         submodules: true
-    - uses: actions/setup-java@v5
+    - uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
       with:
         java-version: ${{ matrix.JVM_version }}
         distribution: 'temurin'
-    - uses: skjolber/maven-cache-github-action@v1
+    - uses: skjolber/maven-cache-github-action@c4a30022e05fa8a86dde82cd8c1e49420d4a45dd # v3.1.2
       with:
         step: restore
     - run: mvn -Psnapshots -B -U clean verify
-    - uses: skjolber/maven-cache-github-action@v1
+    - uses: skjolber/maven-cache-github-action@c4a30022e05fa8a86dde82cd8c1e49420d4a45dd # v3.1.2
       with:
         step: save
