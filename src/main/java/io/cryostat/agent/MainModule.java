@@ -78,6 +78,7 @@ import io.cryostat.agent.harvest.HarvestModule;
 import io.cryostat.agent.remote.RemoteContext;
 import io.cryostat.agent.remote.RemoteModule;
 import io.cryostat.agent.triggers.TriggerModule;
+import io.cryostat.agent.util.AppNameResolver;
 import io.cryostat.libcryostat.JvmIdentifier;
 import io.cryostat.libcryostat.net.IDException;
 
@@ -836,6 +837,7 @@ public abstract class MainModule {
             CryostatClient cryostat,
             CallbackResolver callbackResolver,
             WebServer webServer,
+            AppNameResolver appNameResolver,
             @Named(ConfigModule.CRYOSTAT_AGENT_INSTANCE_ID) String instanceId,
             @Named(JVM_ID) String jvmId,
             @Named(ConfigModule.CRYOSTAT_AGENT_APP_NAME) String appName,
@@ -866,6 +868,7 @@ public abstract class MainModule {
                 cryostat,
                 callbackResolver,
                 webServer,
+                appNameResolver,
                 instanceId,
                 jvmId,
                 appName,
