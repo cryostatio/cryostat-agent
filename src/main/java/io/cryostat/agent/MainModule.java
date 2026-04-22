@@ -48,6 +48,7 @@ import java.security.cert.X509Certificate;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.KeySpec;
 import java.security.spec.PKCS8EncodedKeySpec;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.HashSet;
@@ -849,7 +850,15 @@ public abstract class MainModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_REGISTRATION_JMX_IGNORE)
                     boolean registrationJmxIgnore,
             @Named(ConfigModule.CRYOSTAT_AGENT_REGISTRATION_JMX_USE_CALLBACK_HOST)
-                    boolean registrationJmxUseCallbackHost) {
+                    boolean registrationJmxUseCallbackHost,
+            @Named(ConfigModule.CRYOSTAT_AGENT_REGISTRATION_MAX_BACKOFF_MS) int maxBackoffMs,
+            @Named(ConfigModule.CRYOSTAT_AGENT_REGISTRATION_BACKOFF_MULTIPLIER)
+                    double backoffMultiplier,
+            @Named(ConfigModule.CRYOSTAT_AGENT_REGISTRATION_CIRCUIT_BREAKER_THRESHOLD)
+                    int circuitBreakerThreshold,
+            @Named(ConfigModule.CRYOSTAT_AGENT_REGISTRATION_CIRCUIT_BREAKER_DURATION)
+                    Duration circuitBreakerOpenDuration,
+            SecureRandom random) {
         Logger log = LoggerFactory.getLogger(Registration.class);
         return new Registration(
                 Executors.newSingleThreadScheduledExecutor(
@@ -878,7 +887,12 @@ public abstract class MainModule {
                 registrationRetryMs,
                 registrationCheckMs,
                 registrationJmxIgnore,
-                registrationJmxUseCallbackHost);
+                registrationJmxUseCallbackHost,
+                maxBackoffMs,
+                backoffMultiplier,
+                circuitBreakerThreshold,
+                circuitBreakerOpenDuration,
+                random);
     }
 
     @Provides

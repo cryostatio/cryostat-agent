@@ -23,6 +23,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -66,12 +67,28 @@ public class Registration {
     private final int registrationCheckMs;
     private final boolean registrationJmxIgnore;
     private final boolean registrationJmxUseCallbackHost;
+    private final int maxBackoffMs;
+    private final double backoffMultiplier;
+    private final int circuitBreakerThreshold;
+    private final Duration circuitBreakerOpenDuration;
+    private final Random random;
 
     private final PluginInfo pluginInfo = new PluginInfo();
     private final Set<Consumer<RegistrationEvent>> listeners = new HashSet<>();
 
     private volatile URI callback;
     private ScheduledFuture<?> registrationCheckTask;
+
+    private volatile int consecutiveFailures = 0;
+    private static final double JITTER_FACTOR = 0.1;
+    private volatile CircuitState circuitState = CircuitState.CLOSED;
+    private volatile Instant circuitOpenedAt = null;
+
+    private enum CircuitState {
+        CLOSED,
+        OPEN,
+        HALF_OPEN
+    }
 
     Registration(
             ScheduledExecutorService executor,
@@ -88,7 +105,12 @@ public class Registration {
             int registrationRetryMs,
             int registrationCheckMs,
             boolean registrationJmxIgnore,
-            boolean registrationJmxUseCallbackHost) {
+            boolean registrationJmxUseCallbackHost,
+            int maxBackoffMs,
+            double backoffMultiplier,
+            int circuitBreakerThreshold,
+            Duration circuitBreakerOpenDuration,
+            Random random) {
         this.executor = executor;
         this.cryostat = cryostat;
         this.callbackResolver = callbackResolver;
@@ -104,6 +126,11 @@ public class Registration {
         this.registrationCheckMs = registrationCheckMs;
         this.registrationJmxIgnore = registrationJmxIgnore;
         this.registrationJmxUseCallbackHost = registrationJmxUseCallbackHost;
+        this.maxBackoffMs = maxBackoffMs;
+        this.backoffMultiplier = backoffMultiplier;
+        this.circuitBreakerThreshold = circuitBreakerThreshold;
+        this.circuitBreakerOpenDuration = circuitBreakerOpenDuration;
+        this.random = random;
     }
 
     void start() {
@@ -207,6 +234,22 @@ public class Registration {
     }
 
     void tryRegister() {
+        if (circuitState == CircuitState.OPEN) {
+            if (Duration.between(circuitOpenedAt, Instant.now())
+                            .compareTo(circuitBreakerOpenDuration)
+                    > 0) {
+                log.info("Circuit breaker transitioning to HALF_OPEN");
+                circuitState = CircuitState.HALF_OPEN;
+            } else {
+                log.debug("Circuit breaker OPEN, skipping registration attempt");
+                executor.schedule(
+                        this::tryRegister,
+                        circuitBreakerOpenDuration.toMillis() / 10,
+                        TimeUnit.MILLISECONDS);
+                return;
+            }
+        }
+
         int credentialId = webServer.getCredentialId();
         if (credentialId < 0) {
             notify(RegistrationEvent.State.UNREGISTERED);
@@ -264,11 +307,61 @@ public class Registration {
                                         return (Void) null;
                                     });
             f.get();
+
+            if (circuitState == CircuitState.HALF_OPEN) {
+                log.info("Circuit breaker transitioning to CLOSED");
+            }
+            circuitState = CircuitState.CLOSED;
+            consecutiveFailures = 0;
+
         } catch (URISyntaxException | ExecutionException | InterruptedException e) {
-            log.error("Registration failure", e);
-            log.trace("Registration retry period: {}", Duration.ofMillis(registrationRetryMs));
-            executor.schedule(this::tryRegister, registrationRetryMs, TimeUnit.MILLISECONDS);
+            long backoffMs = calculateBackoffMs();
+            consecutiveFailures++;
+
+            if (circuitState == CircuitState.CLOSED
+                    && consecutiveFailures >= circuitBreakerThreshold) {
+                log.warn(
+                        "Circuit breaker transitioning to OPEN after {} failures",
+                        consecutiveFailures);
+                circuitState = CircuitState.OPEN;
+                circuitOpenedAt = Instant.now();
+            } else if (circuitState == CircuitState.HALF_OPEN) {
+                log.warn("Circuit breaker transitioning back to OPEN");
+                circuitState = CircuitState.OPEN;
+                circuitOpenedAt = Instant.now();
+            }
+
+            log.error(
+                    "Registration failure (attempt {}, circuit state: {}, retry in {}ms)",
+                    consecutiveFailures,
+                    circuitState,
+                    backoffMs,
+                    e);
+            log.trace("Registration retry period: {}", Duration.ofMillis(backoffMs));
+
+            executor.schedule(this::tryRegister, backoffMs, TimeUnit.MILLISECONDS);
         }
+    }
+
+    private long calculateBackoffMs() {
+        if (consecutiveFailures == 0) {
+            return registrationRetryMs;
+        }
+
+        // Exponential backoff: base * (multiplier ^ failures)
+        long backoff =
+                (long)
+                        (registrationRetryMs
+                                * Math.pow(backoffMultiplier, Math.min(consecutiveFailures, 10)));
+
+        // Cap at maximum
+        backoff = Math.min(backoff, maxBackoffMs);
+
+        // Add jitter to prevent thundering herd
+        double jitter = 1.0 + (random.nextDouble() * 2 - 1) * JITTER_FACTOR;
+        backoff = (long) (backoff * jitter);
+
+        return backoff;
     }
 
     private void tryUpdate() {
