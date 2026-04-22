@@ -322,8 +322,8 @@ public class Registration {
                                         this.webServer.resetCredentialId();
                                         this.pluginInfo.clear();
 
-                                        int failures = consecutiveFailures.incrementAndGet();
                                         long backoffMs = calculateBackoffMs();
+                                        int failures = consecutiveFailures.incrementAndGet();
 
                                         if (circuitState == CircuitState.CLOSED
                                                 && failures >= circuitBreakerThreshold) {
