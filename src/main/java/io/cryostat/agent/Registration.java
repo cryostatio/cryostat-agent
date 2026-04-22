@@ -30,6 +30,7 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
@@ -77,7 +78,7 @@ public class Registration {
     private volatile URI callback;
     private ScheduledFuture<?> registrationCheckTask;
 
-    private volatile int consecutiveFailures = 0;
+    private final AtomicInteger consecutiveFailures = new AtomicInteger(0);
     private static final double JITTER_FACTOR = 0.1;
     private volatile CircuitState circuitState = CircuitState.CLOSED;
     private volatile Instant circuitOpenedAt = null;
@@ -309,7 +310,7 @@ public class Registration {
                                             log.info("Circuit breaker transitioning to CLOSED");
                                         }
                                         circuitState = CircuitState.CLOSED;
-                                        consecutiveFailures = 0;
+                                        consecutiveFailures.set(0);
 
                                         if (previouslyRegistered) {
                                             notify(RegistrationEvent.State.REFRESHED);
@@ -321,15 +322,15 @@ public class Registration {
                                         this.webServer.resetCredentialId();
                                         this.pluginInfo.clear();
 
+                                        int failures = consecutiveFailures.incrementAndGet();
                                         long backoffMs = calculateBackoffMs();
-                                        consecutiveFailures++;
 
                                         if (circuitState == CircuitState.CLOSED
-                                                && consecutiveFailures >= circuitBreakerThreshold) {
+                                                && failures >= circuitBreakerThreshold) {
                                             log.warn(
                                                     "Circuit breaker transitioning to OPEN after {}"
                                                             + " failures",
-                                                    consecutiveFailures);
+                                                    failures);
                                             circuitState = CircuitState.OPEN;
                                             circuitOpenedAt = Instant.now();
                                         } else if (circuitState == CircuitState.HALF_OPEN) {
@@ -341,7 +342,7 @@ public class Registration {
                                         log.error(
                                                 "Registration failure (attempt {}, circuit state:"
                                                         + " {}, retry in {}ms)",
-                                                consecutiveFailures,
+                                                failures,
                                                 circuitState,
                                                 backoffMs,
                                                 t);
@@ -359,15 +360,14 @@ public class Registration {
     }
 
     private long calculateBackoffMs() {
-        if (consecutiveFailures == 0) {
+        int failures = consecutiveFailures.get();
+        if (failures == 0) {
             return registrationRetryMs;
         }
 
         // Exponential backoff: base * (multiplier ^ failures)
         long backoff =
-                (long)
-                        (registrationRetryMs
-                                * Math.pow(backoffMultiplier, Math.min(consecutiveFailures, 10)));
+                (long) (registrationRetryMs * Math.pow(backoffMultiplier, Math.min(failures, 10)));
 
         // Cap at maximum
         backoff = Math.min(backoff, maxBackoffMs);
