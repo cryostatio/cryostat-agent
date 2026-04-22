@@ -27,8 +27,6 @@ import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -83,6 +81,8 @@ public class Registration {
     private static final double JITTER_FACTOR = 0.1;
     private volatile CircuitState circuitState = CircuitState.CLOSED;
     private volatile Instant circuitOpenedAt = null;
+
+    private volatile CompletableFuture<?> currentRegistration = null;
 
     private enum CircuitState {
         CLOSED,
@@ -186,29 +186,29 @@ public class Registration {
                             this.registrationCheckTask =
                                     executor.scheduleAtFixedRate(
                                             () -> {
-                                                try {
-                                                    cryostat.checkRegistration(pluginInfo)
-                                                            .handle(
-                                                                    (v, t) -> {
-                                                                        if (t != null
-                                                                                || !Boolean.TRUE
-                                                                                        .equals(
-                                                                                                v)) {
-                                                                            this.pluginInfo.clear();
-                                                                            notify(
-                                                                                    RegistrationEvent
-                                                                                            .State
-                                                                                            .UNREGISTERED);
-                                                                        }
-                                                                        return null;
-                                                                    })
-                                                            .get();
-                                                } catch (ExecutionException
-                                                        | InterruptedException e) {
-                                                    log.error(
-                                                            "Could not check registration status",
-                                                            e);
-                                                }
+                                                cryostat.checkRegistration(pluginInfo)
+                                                        .handle(
+                                                                (v, t) -> {
+                                                                    if (t != null
+                                                                            || !Boolean.TRUE.equals(
+                                                                                    v)) {
+                                                                        this.pluginInfo.clear();
+                                                                        notify(
+                                                                                RegistrationEvent
+                                                                                        .State
+                                                                                        .UNREGISTERED);
+                                                                    }
+                                                                    return null;
+                                                                })
+                                                        .exceptionally(
+                                                                e -> {
+                                                                    log.error(
+                                                                            "Could not check"
+                                                                                + " registration"
+                                                                                + " status",
+                                                                            e);
+                                                                    return null;
+                                                                });
                                             },
                                             registrationCheckMs,
                                             registrationCheckMs,
@@ -234,6 +234,11 @@ public class Registration {
     }
 
     void tryRegister() {
+        if (currentRegistration != null && !currentRegistration.isDone()) {
+            log.warn("Cancelling previous registration attempt");
+            currentRegistration.cancel(true);
+        }
+
         if (circuitState == CircuitState.OPEN) {
             if (Duration.between(circuitOpenedAt, Instant.now())
                             .compareTo(circuitBreakerOpenDuration)
@@ -255,92 +260,102 @@ public class Registration {
             notify(RegistrationEvent.State.UNREGISTERED);
             return;
         }
-        try {
-            cryostat.serverHealth()
-                    .thenAccept(
-                            health -> {
-                                Semver cryostatSemver = health.cryostatSemver();
-                                log.debug(
-                                        "Connected to Cryostat server: version {} , build {}",
-                                        cryostatSemver,
-                                        health.buildInfo().git().hash());
-                                try {
-                                    VersionInfo version = VersionInfo.load();
-                                    if (!version.validateServerVersion(cryostatSemver)) {
-                                        log.warn(
-                                                "Cryostat server version {} is outside of expected"
-                                                        + " range [{}, {})",
-                                                cryostatSemver,
-                                                version.getServerMin(),
-                                                version.getServerMax());
+
+        currentRegistration =
+                cryostat.serverHealth()
+                        .thenCompose(
+                                health -> {
+                                    Semver cryostatSemver = health.cryostatSemver();
+                                    log.debug(
+                                            "Connected to Cryostat server: version {} , build {}",
+                                            cryostatSemver,
+                                            health.buildInfo().git().hash());
+                                    try {
+                                        VersionInfo version = VersionInfo.load();
+                                        if (!version.validateServerVersion(cryostatSemver)) {
+                                            log.warn(
+                                                    "Cryostat server version {} is outside of"
+                                                            + " expected range [{}, {})",
+                                                    cryostatSemver,
+                                                    version.getServerMin(),
+                                                    version.getServerMax());
+                                        }
+                                    } catch (IOException ioe) {
+                                        log.error("Unable to read versions.properties file", ioe);
                                     }
-                                } catch (IOException ioe) {
-                                    log.error("Unable to read versions.properties file", ioe);
-                                }
-                            })
-                    .get();
-            URI credentialedCallback =
-                    new URIBuilder(callback)
-                            .setUserInfo("storedcredentials", String.valueOf(credentialId))
-                            .build();
-            CompletableFuture<Void> f =
-                    cryostat.register(credentialId, pluginInfo, credentialedCallback)
-                            .handle(
-                                    (plugin, t) -> {
-                                        if (plugin != null) {
-                                            boolean previouslyRegistered =
-                                                    this.pluginInfo.isInitialized();
-                                            this.pluginInfo.copyFrom(plugin);
-                                            log.debug("Registered as {}", this.pluginInfo.getId());
-                                            if (previouslyRegistered) {
-                                                notify(RegistrationEvent.State.REFRESHED);
-                                            } else {
-                                                notify(RegistrationEvent.State.REGISTERED);
-                                                tryUpdate();
-                                            }
-                                        } else if (t != null) {
-                                            this.webServer.resetCredentialId();
-                                            this.pluginInfo.clear();
-                                            throw new RegistrationException(t);
+
+                                    try {
+                                        URI credentialedCallback =
+                                                new URIBuilder(callback)
+                                                        .setUserInfo(
+                                                                "storedcredentials",
+                                                                String.valueOf(credentialId))
+                                                        .build();
+                                        return cryostat.register(
+                                                credentialId, pluginInfo, credentialedCallback);
+                                    } catch (URISyntaxException e) {
+                                        return CompletableFuture.failedFuture(e);
+                                    }
+                                })
+                        .handle(
+                                (plugin, t) -> {
+                                    if (plugin != null) {
+                                        boolean previouslyRegistered =
+                                                this.pluginInfo.isInitialized();
+                                        this.pluginInfo.copyFrom(plugin);
+                                        log.debug("Registered as {}", this.pluginInfo.getId());
+
+                                        if (circuitState == CircuitState.HALF_OPEN) {
+                                            log.info("Circuit breaker transitioning to CLOSED");
+                                        }
+                                        circuitState = CircuitState.CLOSED;
+                                        consecutiveFailures = 0;
+
+                                        if (previouslyRegistered) {
+                                            notify(RegistrationEvent.State.REFRESHED);
+                                        } else {
+                                            notify(RegistrationEvent.State.REGISTERED);
+                                            tryUpdate();
+                                        }
+                                    } else if (t != null) {
+                                        this.webServer.resetCredentialId();
+                                        this.pluginInfo.clear();
+
+                                        long backoffMs = calculateBackoffMs();
+                                        consecutiveFailures++;
+
+                                        if (circuitState == CircuitState.CLOSED
+                                                && consecutiveFailures >= circuitBreakerThreshold) {
+                                            log.warn(
+                                                    "Circuit breaker transitioning to OPEN after {}"
+                                                            + " failures",
+                                                    consecutiveFailures);
+                                            circuitState = CircuitState.OPEN;
+                                            circuitOpenedAt = Instant.now();
+                                        } else if (circuitState == CircuitState.HALF_OPEN) {
+                                            log.warn("Circuit breaker transitioning back to OPEN");
+                                            circuitState = CircuitState.OPEN;
+                                            circuitOpenedAt = Instant.now();
                                         }
 
-                                        return (Void) null;
-                                    });
-            f.get();
+                                        log.error(
+                                                "Registration failure (attempt {}, circuit state:"
+                                                        + " {}, retry in {}ms)",
+                                                consecutiveFailures,
+                                                circuitState,
+                                                backoffMs,
+                                                t);
+                                        log.trace(
+                                                "Registration retry period: {}",
+                                                Duration.ofMillis(backoffMs));
 
-            if (circuitState == CircuitState.HALF_OPEN) {
-                log.info("Circuit breaker transitioning to CLOSED");
-            }
-            circuitState = CircuitState.CLOSED;
-            consecutiveFailures = 0;
-
-        } catch (URISyntaxException | ExecutionException | InterruptedException e) {
-            long backoffMs = calculateBackoffMs();
-            consecutiveFailures++;
-
-            if (circuitState == CircuitState.CLOSED
-                    && consecutiveFailures >= circuitBreakerThreshold) {
-                log.warn(
-                        "Circuit breaker transitioning to OPEN after {} failures",
-                        consecutiveFailures);
-                circuitState = CircuitState.OPEN;
-                circuitOpenedAt = Instant.now();
-            } else if (circuitState == CircuitState.HALF_OPEN) {
-                log.warn("Circuit breaker transitioning back to OPEN");
-                circuitState = CircuitState.OPEN;
-                circuitOpenedAt = Instant.now();
-            }
-
-            log.error(
-                    "Registration failure (attempt {}, circuit state: {}, retry in {}ms)",
-                    consecutiveFailures,
-                    circuitState,
-                    backoffMs,
-                    e);
-            log.trace("Registration retry period: {}", Duration.ofMillis(backoffMs));
-
-            executor.schedule(this::tryRegister, backoffMs, TimeUnit.MILLISECONDS);
-        }
+                                        executor.schedule(
+                                                this::tryRegister,
+                                                backoffMs,
+                                                TimeUnit.MILLISECONDS);
+                                    }
+                                    return (Void) null;
+                                });
     }
 
     private long calculateBackoffMs() {
@@ -381,24 +396,23 @@ public class Registration {
                 selfNodes.stream()
                         .map(n -> n.getTarget().getConnectUrl())
                         .collect(Collectors.toList()));
-        Future<Void> f =
-                cryostat.update(pluginInfo, selfNodes)
-                        .handle(
-                                (n, t) -> {
-                                    if (t != null) {
-                                        log.error("Update failure", t);
-                                        deregister();
-                                    } else {
-                                        log.trace("Publish success");
-                                        notify(RegistrationEvent.State.PUBLISHED);
-                                    }
-                                    return (Void) null;
-                                });
-        try {
-            f.get();
-        } catch (ExecutionException | InterruptedException e) {
-            log.error("Failed to update", e);
-        }
+        cryostat.update(pluginInfo, selfNodes)
+                .handle(
+                        (n, t) -> {
+                            if (t != null) {
+                                log.error("Update failure", t);
+                                deregister();
+                            } else {
+                                log.trace("Publish success");
+                                notify(RegistrationEvent.State.PUBLISHED);
+                            }
+                            return (Void) null;
+                        })
+                .exceptionally(
+                        e -> {
+                            log.error("Failed to update", e);
+                            return null;
+                        });
     }
 
     private Set<DiscoveryNode> defineSelf() throws UnknownHostException, URISyntaxException {
@@ -465,7 +479,12 @@ public class Registration {
         return discoveryNodes;
     }
 
-    void stop() {}
+    void stop() {
+        if (currentRegistration != null && !currentRegistration.isDone()) {
+            log.info("Cancelling in-flight registration");
+            currentRegistration.cancel(true);
+        }
+    }
 
     CompletableFuture<Void> deregister() {
         if (!this.pluginInfo.isInitialized()) {

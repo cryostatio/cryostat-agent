@@ -33,7 +33,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.function.Function;
 
@@ -165,11 +164,15 @@ public class CryostatClient {
                                     throw new CompletionException(t);
                                 }
                                 if (!isOkStatus(res)) {
-                                    try {
-                                        deleteCredentials(credentialId).get();
-                                    } catch (InterruptedException | ExecutionException e) {
-                                        log.error("Failed to delete previous credentials", e);
-                                    }
+                                    deleteCredentials(credentialId)
+                                            .exceptionally(
+                                                    e -> {
+                                                        log.error(
+                                                                "Failed to delete previous"
+                                                                        + " credentials",
+                                                                e);
+                                                        return null;
+                                                    });
                                 }
                                 return assertOkStatus(req, res);
                             })
@@ -287,28 +290,48 @@ public class CryostatClient {
         log.trace("{}", req);
         req.setEntity(entityBuilder.build());
         return supply(req, (res) -> logResponse(req, res))
-                .thenApply(
+                .thenCompose(
                         res -> {
                             if (!isOkStatus(res)) {
-                                try {
-                                    if (res.getCode() == 409) {
-                                        int queried = queryExistingCredentials(callback).get();
-                                        if (queried >= 0) {
-                                            return queried;
-                                        }
-                                    }
-                                } catch (InterruptedException | ExecutionException e) {
-                                    log.error("Failed to query for existing credentials", e);
+                                if (res.getCode() == 409) {
+                                    return queryExistingCredentials(callback)
+                                            .thenCompose(
+                                                    queried -> {
+                                                        if (queried >= 0) {
+                                                            return CompletableFuture
+                                                                    .completedFuture(queried);
+                                                        }
+                                                        return deleteCredentials(prevId)
+                                                                .handle(
+                                                                        (v, t) -> {
+                                                                            if (t != null) {
+                                                                                log.error(
+                                                                                        "Failed to"
+                                                                                            + " delete"
+                                                                                            + " previous"
+                                                                                            + " credentials"
+                                                                                            + " with"
+                                                                                            + " id "
+                                                                                                + prevId,
+                                                                                        t);
+                                                                            }
+                                                                            throw new RegistrationException(
+                                                                                    new IllegalStateException(
+                                                                                            "Credential"
+                                                                                                + " conflict"));
+                                                                        });
+                                                    });
                                 }
-                                try {
-                                    deleteCredentials(prevId).get();
-                                } catch (InterruptedException | ExecutionException e) {
-                                    log.error(
-                                            "Failed to delete previous credentials with id "
-                                                    + prevId,
-                                            e);
-                                    throw new RegistrationException(e);
-                                }
+                                deleteCredentials(prevId)
+                                        .exceptionally(
+                                                e -> {
+                                                    log.error(
+                                                            "Failed to delete previous credentials"
+                                                                    + " with id "
+                                                                    + prevId,
+                                                            e);
+                                                    return null;
+                                                });
                             }
                             String location =
                                     assertOkStatus(req, res)
@@ -317,7 +340,7 @@ public class CryostatClient {
                             String id =
                                     location.substring(
                                             location.lastIndexOf('/') + 1, location.length());
-                            return Integer.valueOf(id);
+                            return CompletableFuture.completedFuture(Integer.valueOf(id));
                         })
                 .whenComplete((v, t) -> req.reset());
     }
