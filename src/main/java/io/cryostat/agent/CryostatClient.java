@@ -548,8 +548,8 @@ public class CryostatClient {
     private String selfMatchExpression(URI callback) {
         return String.format(
                 "target.connectUrl == \"%s\" && target.annotations.platform[\"INSTANCE_ID\"] =="
-                        + " \"%s\"",
-                callback, instanceId);
+                        + " \"%s\" && target.annotations.cryostat[\"REALM\"] == \"%s\"",
+                callback, instanceId, realm);
     }
 
     private boolean isOkStatus(ClassicHttpResponse res) {
