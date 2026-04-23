@@ -432,6 +432,22 @@ public class Registration {
                     consecutiveFailures.get());
             notify(RegistrationEvent.State.COOLDOWN);
 
+            webServer
+                    .performCleanup(this)
+                    .thenRun(
+                            () -> {
+                                log.trace("Cleanup complete, WebServer entering cooldown mode");
+                                webServer.enterCooldownMode();
+                            })
+                    .exceptionally(
+                            t -> {
+                                log.warn(
+                                        "Cleanup failed, WebServer entering cooldown mode anyway",
+                                        t);
+                                webServer.enterCooldownMode();
+                                return null;
+                            });
+
             cooldownExitTask =
                     executor.schedule(
                             this::exitCooldown, duration.toMillis(), TimeUnit.MILLISECONDS);
@@ -443,7 +459,11 @@ public class Registration {
         synchronized (cooldownLock) {
             log.trace("Exiting cooldown, ready for next registration attempt");
             cooldownUntil = null;
+
+            webServer.exitCooldownMode();
+
             notify(RegistrationEvent.State.UNREGISTERED);
+            tryRegister();
         }
     }
 

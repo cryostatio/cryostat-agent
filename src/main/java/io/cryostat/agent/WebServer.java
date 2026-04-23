@@ -28,6 +28,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.zip.DeflaterOutputStream;
 
@@ -58,6 +59,18 @@ class WebServer {
     private final AgentAuthenticator agentAuthenticator;
     private final RequestLoggingFilter requestLoggingFilter;
     private final CompressionFilter compressionFilter;
+    private final CooldownFilter cooldownFilter;
+
+    private volatile ServerState serverState = ServerState.STOPPED;
+    private final Object stateLock = new Object();
+
+    public enum ServerState {
+        STOPPED,
+        STARTING,
+        RUNNING,
+        REJECTING,
+        STOPPING
+    }
 
     WebServer(
             SecureRandom random,
@@ -77,9 +90,14 @@ class WebServer {
         this.agentAuthenticator = new AgentAuthenticator();
         this.requestLoggingFilter = new RequestLoggingFilter();
         this.compressionFilter = new CompressionFilter();
+        this.cooldownFilter = new CooldownFilter();
     }
 
     void start() {
+        synchronized (stateLock) {
+            serverState = ServerState.STARTING;
+        }
+
         Set<RemoteContext> mergedContexts = new HashSet<>(remoteContexts.get());
         mergedContexts.add(new PingContext(registration));
         mergedContexts.stream()
@@ -87,19 +105,106 @@ class WebServer {
                 .forEach(
                         rc -> {
                             HttpContext ctx = this.http.createContext(rc.path(), wrap(rc::handle));
+                            ctx.getFilters().add(0, cooldownFilter);
                             ctx.setAuthenticator(agentAuthenticator);
                             ctx.getFilters().add(requestLoggingFilter);
                             ctx.getFilters().add(compressionFilter);
                         });
         this.http.start();
+
+        synchronized (stateLock) {
+            serverState = ServerState.RUNNING;
+        }
         log.debug("WebServer listening on {}", this.http.getAddress());
     }
 
     void stop() {
+        synchronized (stateLock) {
+            serverState = ServerState.STOPPING;
+        }
         if (this.http != null) {
             this.http.stop(0);
             this.http = null;
         }
+        synchronized (stateLock) {
+            serverState = ServerState.STOPPED;
+        }
+    }
+
+    /**
+     * Enter cooldown mode: keep socket bound but reject all requests. This allows Cryostat to
+     * detect the plugin as unhealthy while preventing port binding issues on restart.
+     */
+    void enterCooldownMode() {
+        synchronized (stateLock) {
+            if (serverState != ServerState.RUNNING) {
+                log.warn("Cannot enter cooldown from state: {}", serverState);
+                return;
+            }
+
+            log.debug("Entering cooldown mode");
+            serverState = ServerState.REJECTING;
+        }
+    }
+
+    /** Exit cooldown mode and resume accepting requests. */
+    void exitCooldownMode() {
+        synchronized (stateLock) {
+            if (serverState != ServerState.REJECTING) {
+                log.warn("Cannot exit cooldown from state: {}", serverState);
+                return;
+            }
+
+            log.debug("Exiting cooldown mode");
+            serverState = ServerState.RUNNING;
+        }
+    }
+
+    /** Check if server is in a state where it can accept requests. */
+    boolean canAcceptRequests() {
+        synchronized (stateLock) {
+            return serverState == ServerState.RUNNING;
+        }
+    }
+
+    /**
+     * Perform cleanup before entering cooldown. This is a best-effort operation that should not
+     * block cooldown entry.
+     *
+     * @param reg the Registration instance to use for deregistration
+     */
+    CompletableFuture<Void> performCleanup(Registration reg) {
+        log.debug("Performing cleanup before cooldown");
+
+        return CompletableFuture.runAsync(
+                        () -> {
+                            if (credentialId >= 0) {
+                                log.trace("Marking credential {} for deletion", credentialId);
+                                resetCredentialId();
+                            }
+
+                            try {
+                                reg.deregister()
+                                        .exceptionally(
+                                                t -> {
+                                                    log.warn(
+                                                            "Failed to deregister during cleanup",
+                                                            t);
+                                                    return null;
+                                                })
+                                        .get(5, TimeUnit.SECONDS);
+                            } catch (Exception e) {
+                                log.warn("Deregistration during cleanup failed or timed out", e);
+                            }
+
+                            log.trace("Cleanup completed");
+                        })
+                .orTimeout(10, TimeUnit.SECONDS)
+                .exceptionally(
+                        t -> {
+                            log.warn("Cleanup timed out or failed", t);
+                            return null;
+                        });
     }
 
     int getCredentialId() {
@@ -256,6 +361,31 @@ class WebServer {
         @Override
         public String description() {
             return "responseCompression";
+        }
+    }
+
+    private class CooldownFilter extends Filter {
+        @Override
+        public void doFilter(HttpExchange exchange, Chain chain) throws IOException {
+            if (!canAcceptRequests()) {
+                log.trace(
+                        "Rejecting request during cooldown: {} {}",
+                        exchange.getRequestMethod(),
+                        exchange.getRequestURI().getPath());
+
+                exchange.getResponseHeaders().add("Retry-After", "60");
+                exchange.sendResponseHeaders(
+                        HttpStatus.SC_SERVICE_UNAVAILABLE, RemoteContext.BODY_LENGTH_NONE);
+                exchange.close();
+                return;
+            }
+
+            chain.doFilter(exchange);
+        }
+
+        @Override
+        public String description() {
+            return "cooldownFilter";
         }
     }
 
