@@ -60,6 +60,8 @@ class RegistrationTest {
     private static final double BACKOFF_MULTIPLIER = 2.0;
     private static final int CIRCUIT_BREAKER_THRESHOLD = 10;
     private static final Duration CIRCUIT_BREAKER_DURATION = Duration.ofMinutes(5);
+    private static final Duration MIN_COOLDOWN_DURATION =
+            Duration.ZERO; // Disable cooldown for existing tests
 
     @BeforeEach
     void setup() {
@@ -84,6 +86,7 @@ class RegistrationTest {
                         BACKOFF_MULTIPLIER,
                         CIRCUIT_BREAKER_THRESHOLD,
                         CIRCUIT_BREAKER_DURATION,
+                        MIN_COOLDOWN_DURATION,
                         random);
     }
 

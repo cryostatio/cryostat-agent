@@ -798,10 +798,29 @@ public abstract class MainModule {
 
     @Provides
     @Singleton
+    public static CredentialTracker provideCredentialTracker() {
+        return new CredentialTracker();
+    }
+
+    @Provides
+    @Singleton
+    public static CredentialCleanupJob provideCredentialCleanupJob(
+            ScheduledExecutorService executor,
+            CredentialTracker tracker,
+            Lazy<CryostatClient> cryostat,
+            @Named(ConfigModule.CRYOSTAT_AGENT_CREDENTIAL_CLEANUP_INTERVAL)
+                    Duration cleanupInterval,
+            @Named(ConfigModule.CRYOSTAT_AGENT_CREDENTIAL_CLEANUP_MAX_RETRIES) int maxRetries) {
+        return new CredentialCleanupJob(executor, tracker, cryostat, cleanupInterval, maxRetries);
+    }
+
+    @Provides
+    @Singleton
     public static CryostatClient provideCryostatClient(
             ScheduledExecutorService executor,
             ObjectMapper objectMapper,
             HttpClient http,
+            CredentialTracker credentialTracker,
             @Named(ConfigModule.CRYOSTAT_AGENT_INSTANCE_ID) String instanceId,
             @Named(JVM_ID) String jvmId,
             @Named(ConfigModule.CRYOSTAT_AGENT_APP_NAME) String appName,
@@ -814,6 +833,7 @@ public abstract class MainModule {
                 executor,
                 objectMapper,
                 http,
+                credentialTracker,
                 instanceId,
                 jvmId,
                 appName,
@@ -858,6 +878,8 @@ public abstract class MainModule {
                     int circuitBreakerThreshold,
             @Named(ConfigModule.CRYOSTAT_AGENT_REGISTRATION_CIRCUIT_BREAKER_DURATION)
                     Duration circuitBreakerOpenDuration,
+            @Named(ConfigModule.CRYOSTAT_AGENT_REGISTRATION_MIN_COOLDOWN_MS)
+                    Duration minCooldownDuration,
             SecureRandom random) {
         Logger log = LoggerFactory.getLogger(Registration.class);
         return new Registration(
@@ -892,6 +914,7 @@ public abstract class MainModule {
                 backoffMultiplier,
                 circuitBreakerThreshold,
                 circuitBreakerOpenDuration,
+                minCooldownDuration,
                 random);
     }
 

@@ -85,6 +85,7 @@ public class CryostatClient {
     private final ObjectMapper mapper;
     private final HttpHost host;
     private final HttpClient http;
+    private final CredentialTracker credentialTracker;
 
     private final String appName;
     private final String instanceId;
@@ -97,6 +98,7 @@ public class CryostatClient {
             Executor executor,
             ObjectMapper mapper,
             HttpClient http,
+            CredentialTracker credentialTracker,
             String instanceId,
             String jvmId,
             String appName,
@@ -107,6 +109,7 @@ public class CryostatClient {
         this.mapper = mapper;
         this.host = HttpHost.create(baseUri);
         this.http = http;
+        this.credentialTracker = credentialTracker;
         this.instanceId = instanceId;
         this.jvmId = jvmId;
         this.appName = appName;
@@ -161,18 +164,11 @@ public class CryostatClient {
                     .handle(
                             (res, t) -> {
                                 if (t != null) {
+                                    credentialTracker.markForDeletion(credentialId);
                                     throw new CompletionException(t);
                                 }
                                 if (!isOkStatus(res)) {
-                                    deleteCredentials(credentialId)
-                                            .exceptionally(
-                                                    e -> {
-                                                        log.error(
-                                                                "Failed to delete previous"
-                                                                        + " credentials",
-                                                                e);
-                                                        return null;
-                                                    });
+                                    credentialTracker.markForDeletion(credentialId);
                                 }
                                 return assertOkStatus(req, res);
                             })
@@ -182,11 +178,13 @@ public class CryostatClient {
                                     return mapper.readValue(is, PluginInfo.class);
                                 } catch (IOException e) {
                                     log.error("Unable to parse response as JSON", e);
+                                    credentialTracker.markForDeletion(credentialId);
                                     throw new RegistrationException(e);
                                 }
                             })
                     .whenComplete((v, t) -> req.reset());
         } catch (JsonProcessingException e) {
+            credentialTracker.markForDeletion(credentialId);
             return CompletableFuture.failedFuture(e);
         }
     }
@@ -301,6 +299,7 @@ public class CryostatClient {
                                                             return CompletableFuture
                                                                     .completedFuture(queried);
                                                         }
+                                                        credentialTracker.markForDeletion(prevId);
                                                         return deleteCredentials(prevId)
                                                                 .handle(
                                                                         (v, t) -> {
@@ -322,16 +321,7 @@ public class CryostatClient {
                                                                         });
                                                     });
                                 }
-                                deleteCredentials(prevId)
-                                        .exceptionally(
-                                                e -> {
-                                                    log.error(
-                                                            "Failed to delete previous credentials"
-                                                                    + " with id "
-                                                                    + prevId,
-                                                            e);
-                                                    return null;
-                                                });
+                                credentialTracker.markForDeletion(prevId);
                             }
                             String location =
                                     assertOkStatus(req, res)
@@ -340,7 +330,9 @@ public class CryostatClient {
                             String id =
                                     location.substring(
                                             location.lastIndexOf('/') + 1, location.length());
-                            return CompletableFuture.completedFuture(Integer.valueOf(id));
+                            int credId = Integer.parseInt(id);
+                            credentialTracker.trackCreated(credId);
+                            return CompletableFuture.completedFuture(credId);
                         })
                 .whenComplete((v, t) -> req.reset());
     }

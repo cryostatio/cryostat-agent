@@ -70,6 +70,7 @@ public class Registration {
     private final double backoffMultiplier;
     private final int circuitBreakerThreshold;
     private final Duration circuitBreakerOpenDuration;
+    private final Duration minCooldownDuration;
     private final Random random;
 
     private final PluginInfo pluginInfo = new PluginInfo();
@@ -84,6 +85,11 @@ public class Registration {
     private volatile Instant circuitOpenedAt = null;
 
     private volatile CompletableFuture<?> currentRegistration = null;
+
+    private volatile Instant lastSuccessfulRegistration = Instant.EPOCH;
+    private volatile Instant cooldownUntil = null;
+    private volatile ScheduledFuture<?> cooldownExitTask = null;
+    private final Object cooldownLock = new Object();
 
     private enum CircuitState {
         CLOSED,
@@ -111,6 +117,7 @@ public class Registration {
             double backoffMultiplier,
             int circuitBreakerThreshold,
             Duration circuitBreakerOpenDuration,
+            Duration minCooldownDuration,
             Random random) {
         this.executor = executor;
         this.cryostat = cryostat;
@@ -131,6 +138,7 @@ public class Registration {
         this.backoffMultiplier = backoffMultiplier;
         this.circuitBreakerThreshold = circuitBreakerThreshold;
         this.circuitBreakerOpenDuration = circuitBreakerOpenDuration;
+        this.minCooldownDuration = minCooldownDuration;
         this.random = random;
     }
 
@@ -240,11 +248,18 @@ public class Registration {
             currentRegistration.cancel(true);
         }
 
+        if (isInCooldown()) {
+            Duration remaining = getCooldownRemaining();
+            log.debug("In cooldown, retry in {}", remaining);
+            executor.schedule(this::tryRegister, remaining.toMillis(), TimeUnit.MILLISECONDS);
+            return;
+        }
+
         if (circuitState == CircuitState.OPEN) {
             if (Duration.between(circuitOpenedAt, Instant.now())
                             .compareTo(circuitBreakerOpenDuration)
                     > 0) {
-                log.info("Circuit breaker transitioning to HALF_OPEN");
+                log.debug("Circuit breaker transitioning to HALF_OPEN");
                 circuitState = CircuitState.HALF_OPEN;
             } else {
                 log.debug("Circuit breaker OPEN, skipping registration attempt");
@@ -306,11 +321,20 @@ public class Registration {
                                         this.pluginInfo.copyFrom(plugin);
                                         log.debug("Registered as {}", this.pluginInfo.getId());
 
+                                        lastSuccessfulRegistration = Instant.now();
+                                        consecutiveFailures.set(0);
+
                                         if (circuitState == CircuitState.HALF_OPEN) {
-                                            log.info("Circuit breaker transitioning to CLOSED");
+                                            log.debug("Circuit breaker transitioning to CLOSED");
                                         }
                                         circuitState = CircuitState.CLOSED;
-                                        consecutiveFailures.set(0);
+
+                                        log.debug(
+                                                "Registration successful at {}, next attempt"
+                                                        + " allowed after {}",
+                                                lastSuccessfulRegistration,
+                                                lastSuccessfulRegistration.plus(
+                                                        minCooldownDuration));
 
                                         if (previouslyRegistered) {
                                             notify(RegistrationEvent.State.REFRESHED);
@@ -322,8 +346,9 @@ public class Registration {
                                         this.webServer.resetCredentialId();
                                         this.pluginInfo.clear();
 
-                                        long backoffMs = calculateBackoffMs();
                                         int failures = consecutiveFailures.incrementAndGet();
+                                        long backoffMs = calculateBackoffMs();
+                                        Duration cooldown = Duration.ofMillis(backoffMs);
 
                                         if (circuitState == CircuitState.CLOSED
                                                 && failures >= circuitBreakerThreshold) {
@@ -341,19 +366,20 @@ public class Registration {
 
                                         log.error(
                                                 "Registration failure (attempt {}, circuit state:"
-                                                        + " {}, retry in {}ms)",
+                                                        + " {}, cooldown: {})",
                                                 failures,
                                                 circuitState,
-                                                backoffMs,
+                                                cooldown,
                                                 t);
-                                        log.trace(
-                                                "Registration retry period: {}",
-                                                Duration.ofMillis(backoffMs));
 
-                                        executor.schedule(
-                                                this::tryRegister,
-                                                backoffMs,
-                                                TimeUnit.MILLISECONDS);
+                                        if (minCooldownDuration.isZero()) {
+                                            executor.schedule(
+                                                    this::tryRegister,
+                                                    backoffMs,
+                                                    TimeUnit.MILLISECONDS);
+                                        } else {
+                                            enterCooldown(cooldown);
+                                        }
                                     }
                                     return (Void) null;
                                 });
@@ -365,18 +391,86 @@ public class Registration {
             return registrationRetryMs;
         }
 
-        // Exponential backoff: base * (multiplier ^ failures)
-        long backoff =
-                (long) (registrationRetryMs * Math.pow(backoffMultiplier, Math.min(failures, 10)));
-
-        // Cap at maximum
-        backoff = Math.min(backoff, maxBackoffMs);
-
-        // Add jitter to prevent thundering herd
         double jitter = 1.0 + (random.nextDouble() * 2 - 1) * JITTER_FACTOR;
+        long backoff =
+                (long)
+                        (registrationRetryMs
+                                * Math.pow(backoffMultiplier, Math.min(failures - 1, 10)));
+        backoff = Math.min(backoff, maxBackoffMs);
         backoff = (long) (backoff * jitter);
+        backoff = Math.max(backoff, minCooldownDuration.toMillis());
 
         return backoff;
+    }
+
+    /**
+     * Check if the Agent is currently in cooldown period.
+     *
+     * @return true if in cooldown, false otherwise
+     */
+    boolean isInCooldown() {
+        synchronized (cooldownLock) {
+            return cooldownUntil != null && Instant.now().isBefore(cooldownUntil);
+        }
+    }
+
+    /**
+     * Enter cooldown state for the specified duration.
+     *
+     * @param duration the cooldown duration
+     */
+    private void enterCooldown(Duration duration) {
+        synchronized (cooldownLock) {
+            if (cooldownExitTask != null) {
+                cooldownExitTask.cancel(false);
+            }
+
+            cooldownUntil = Instant.now().plus(duration);
+            log.debug(
+                    "Entering cooldown for {} after {} consecutive failures",
+                    duration,
+                    consecutiveFailures.get());
+            notify(RegistrationEvent.State.COOLDOWN);
+
+            cooldownExitTask =
+                    executor.schedule(
+                            this::exitCooldown, duration.toMillis(), TimeUnit.MILLISECONDS);
+        }
+    }
+
+    /** Exit cooldown state and prepare for next registration attempt. */
+    private void exitCooldown() {
+        synchronized (cooldownLock) {
+            log.trace("Exiting cooldown, ready for next registration attempt");
+            cooldownUntil = null;
+            notify(RegistrationEvent.State.UNREGISTERED);
+        }
+    }
+
+    /**
+     * Get time remaining in cooldown period.
+     *
+     * @return Duration remaining, or Duration.ZERO if not in cooldown
+     */
+    Duration getCooldownRemaining() {
+        synchronized (cooldownLock) {
+            if (!isInCooldown()) {
+                return Duration.ZERO;
+            }
+            return Duration.between(Instant.now(), cooldownUntil);
+        }
+    }
+
+    /**
+     * Get time since last successful registration.
+     *
+     * @return Duration since last success, or null if never registered
+     */
+    Duration getTimeSinceLastSuccess() {
+        if (lastSuccessfulRegistration.equals(Instant.EPOCH)) {
+            return null;
+        }
+        return Duration.between(lastSuccessfulRegistration, Instant.now());
     }
 
     private void tryUpdate() {
@@ -481,7 +575,7 @@ public class Registration {
 
     void stop() {
         if (currentRegistration != null && !currentRegistration.isDone()) {
-            log.info("Cancelling in-flight registration");
+            log.trace("Cancelling in-flight registration");
             currentRegistration.cancel(true);
         }
     }
@@ -523,6 +617,7 @@ public class Registration {
             PUBLISHED,
             REFRESHING,
             REFRESHED,
+            COOLDOWN,
         }
 
         public final State state;

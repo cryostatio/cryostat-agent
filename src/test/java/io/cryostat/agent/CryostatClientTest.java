@@ -48,6 +48,7 @@ class CryostatClientTest {
     @Mock Executor executor;
     @Mock ObjectMapper mapper;
     @Mock HttpClient http;
+    @Mock CredentialTracker credentialTracker;
     @Mock ClassicHttpResponse checkResponse;
     @Mock ClassicHttpResponse submitResponse;
     @Mock HttpEntity checkEntity;
@@ -70,6 +71,7 @@ class CryostatClientTest {
                         executor,
                         mapper,
                         http,
+                        credentialTracker,
                         INSTANCE_ID,
                         JVM_ID,
                         APP_NAME,
@@ -161,6 +163,7 @@ class CryostatClientTest {
                         executor,
                         mapper,
                         http,
+                        credentialTracker,
                         INSTANCE_ID,
                         JVM_ID,
                         APP_NAME,

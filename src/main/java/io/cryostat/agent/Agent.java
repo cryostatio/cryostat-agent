@@ -23,13 +23,16 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 import javax.inject.Named;
 import javax.inject.Singleton;
@@ -226,6 +229,9 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
             Registration registration = client.registration();
             Harvester harvester = client.harvester();
             WebServer webServer = client.webServer();
+            CredentialCleanupJob credentialCleanupJob = client.credentialCleanupJob();
+            CredentialTracker credentialTracker = client.credentialTracker();
+            CryostatClient cryostatClient = client.cryostatClient();
             ExecutorService executor = client.executor();
             List<String> exitSignals = client.exitSignals();
             long exitDeregistrationTimeout = client.exitDeregistrationTimeout();
@@ -237,6 +243,9 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
                             registration,
                             harvester,
                             webServer,
+                            credentialCleanupJob,
+                            credentialTracker,
+                            cryostatClient,
                             executor,
                             exitDeregistrationTimeout);
             final AgentExitHandler fHandler = agentExitHandler;
@@ -272,6 +281,7 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
                     });
             webServer.start();
             registration.start();
+            credentialCleanupJob.start();
             client.triggerEvaluator().start(args.getSmartTriggers());
             log.trace("Startup complete");
         } catch (Exception e) {
@@ -288,11 +298,21 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
             Registration registration,
             Harvester harvester,
             WebServer webServer,
+            CredentialCleanupJob credentialCleanupJob,
+            CredentialTracker credentialTracker,
+            CryostatClient cryostatClient,
             ExecutorService executor,
             long exitDeregistrationTimeout) {
         AgentExitHandler agentExitHandler =
                 new AgentExitHandler(
-                        registration, harvester, webServer, executor, exitDeregistrationTimeout);
+                        registration,
+                        harvester,
+                        webServer,
+                        credentialCleanupJob,
+                        credentialTracker,
+                        cryostatClient,
+                        executor,
+                        exitDeregistrationTimeout);
         for (String s : exitSignals) {
             Signal signal = new Signal(s);
             try {
@@ -344,6 +364,12 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
 
         TriggerEvaluator triggerEvaluator();
 
+        CredentialCleanupJob credentialCleanupJob();
+
+        CredentialTracker credentialTracker();
+
+        CryostatClient cryostatClient();
+
         ScheduledExecutorService executor();
 
         @Named(ConfigModule.CRYOSTAT_AGENT_EXIT_SIGNALS)
@@ -366,6 +392,9 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
         private final Registration registration;
         private final Harvester harvester;
         private final WebServer webServer;
+        private final CredentialCleanupJob credentialCleanupJob;
+        private final CredentialTracker credentialTracker;
+        private final CryostatClient cryostatClient;
         private final ExecutorService executor;
         private final long exitDeregistrationTimeout;
 
@@ -373,11 +402,17 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
                 Registration registration,
                 Harvester harvester,
                 WebServer webServer,
+                CredentialCleanupJob credentialCleanupJob,
+                CredentialTracker credentialTracker,
+                CryostatClient cryostatClient,
                 ExecutorService executor,
                 long exitDeregistrationTimeout) {
             this.registration = Objects.requireNonNull(registration);
             this.harvester = Objects.requireNonNull(harvester);
             this.webServer = Objects.requireNonNull(webServer);
+            this.credentialCleanupJob = Objects.requireNonNull(credentialCleanupJob);
+            this.credentialTracker = Objects.requireNonNull(credentialTracker);
+            this.cryostatClient = Objects.requireNonNull(cryostatClient);
             this.executor = Objects.requireNonNull(executor);
             this.exitDeregistrationTimeout = exitDeregistrationTimeout;
         }
@@ -413,10 +448,33 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
                                     if (t != null) {
                                         log.warn("Exception during deregistration", t);
                                     }
+
+                                    try {
+                                        Set<Integer> orphaned =
+                                                credentialTracker.getOrphanedCredentials();
+                                        if (!orphaned.isEmpty()) {
+                                            log.debug(
+                                                    "Cleaning up {} credentials on shutdown",
+                                                    orphaned.size());
+                                            List<CompletableFuture<Void>> deletions =
+                                                    orphaned.stream()
+                                                            .map(cryostatClient::deleteCredentials)
+                                                            .collect(Collectors.toList());
+                                            CompletableFuture.allOf(
+                                                            deletions.toArray(
+                                                                    new CompletableFuture[0]))
+                                                    .get(30, TimeUnit.SECONDS);
+                                            log.debug("Cleaned up all credentials");
+                                        }
+                                    } catch (Exception e) {
+                                        log.error("Error during credential cleanup on shutdown", e);
+                                    }
+
                                     try {
                                         log.debug("Shutting down...");
                                         safeCall(webServer::stop);
                                         safeCall(registration::stop);
+                                        safeCall(credentialCleanupJob::stop);
                                         safeCall(executor::shutdown);
                                     } finally {
                                         log.debug("Shutdown complete");
