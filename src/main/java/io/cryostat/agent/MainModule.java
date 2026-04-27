@@ -48,6 +48,7 @@ import java.security.cert.X509Certificate;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.KeySpec;
 import java.security.spec.PKCS8EncodedKeySpec;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.HashSet;
@@ -797,10 +798,29 @@ public abstract class MainModule {
 
     @Provides
     @Singleton
+    public static CredentialTracker provideCredentialTracker() {
+        return new CredentialTracker();
+    }
+
+    @Provides
+    @Singleton
+    public static CredentialCleanupJob provideCredentialCleanupJob(
+            ScheduledExecutorService executor,
+            CredentialTracker tracker,
+            Lazy<CryostatClient> cryostat,
+            @Named(ConfigModule.CRYOSTAT_AGENT_CREDENTIAL_CLEANUP_INTERVAL)
+                    Duration cleanupInterval,
+            @Named(ConfigModule.CRYOSTAT_AGENT_CREDENTIAL_CLEANUP_MAX_RETRIES) int maxRetries) {
+        return new CredentialCleanupJob(executor, tracker, cryostat, cleanupInterval, maxRetries);
+    }
+
+    @Provides
+    @Singleton
     public static CryostatClient provideCryostatClient(
             ScheduledExecutorService executor,
             ObjectMapper objectMapper,
             HttpClient http,
+            CredentialTracker credentialTracker,
             @Named(ConfigModule.CRYOSTAT_AGENT_INSTANCE_ID) String instanceId,
             @Named(JVM_ID) String jvmId,
             @Named(ConfigModule.CRYOSTAT_AGENT_APP_NAME) String appName,
@@ -813,6 +833,7 @@ public abstract class MainModule {
                 executor,
                 objectMapper,
                 http,
+                credentialTracker,
                 instanceId,
                 jvmId,
                 appName,
@@ -849,7 +870,17 @@ public abstract class MainModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_REGISTRATION_JMX_IGNORE)
                     boolean registrationJmxIgnore,
             @Named(ConfigModule.CRYOSTAT_AGENT_REGISTRATION_JMX_USE_CALLBACK_HOST)
-                    boolean registrationJmxUseCallbackHost) {
+                    boolean registrationJmxUseCallbackHost,
+            @Named(ConfigModule.CRYOSTAT_AGENT_REGISTRATION_MAX_BACKOFF_MS) int maxBackoffMs,
+            @Named(ConfigModule.CRYOSTAT_AGENT_REGISTRATION_BACKOFF_MULTIPLIER)
+                    double backoffMultiplier,
+            @Named(ConfigModule.CRYOSTAT_AGENT_REGISTRATION_CIRCUIT_BREAKER_THRESHOLD)
+                    int circuitBreakerThreshold,
+            @Named(ConfigModule.CRYOSTAT_AGENT_REGISTRATION_CIRCUIT_BREAKER_DURATION)
+                    Duration circuitBreakerOpenDuration,
+            @Named(ConfigModule.CRYOSTAT_AGENT_REGISTRATION_MIN_COOLDOWN_MS)
+                    Duration minCooldownDuration,
+            SecureRandom random) {
         Logger log = LoggerFactory.getLogger(Registration.class);
         return new Registration(
                 Executors.newSingleThreadScheduledExecutor(
@@ -878,7 +909,13 @@ public abstract class MainModule {
                 registrationRetryMs,
                 registrationCheckMs,
                 registrationJmxIgnore,
-                registrationJmxUseCallbackHost);
+                registrationJmxUseCallbackHost,
+                maxBackoffMs,
+                backoffMultiplier,
+                circuitBreakerThreshold,
+                circuitBreakerOpenDuration,
+                minCooldownDuration,
+                random);
     }
 
     @Provides

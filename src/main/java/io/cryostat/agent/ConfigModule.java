@@ -31,6 +31,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivilegedExceptionAction;
 import java.security.SecureRandom;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -205,6 +206,16 @@ public abstract class ConfigModule {
             "cryostat.agent.registration.jmx.ignore";
     public static final String CRYOSTAT_AGENT_REGISTRATION_JMX_USE_CALLBACK_HOST =
             "cryostat.agent.registration.jmx.use-callback-host";
+    public static final String CRYOSTAT_AGENT_REGISTRATION_MAX_BACKOFF_MS =
+            "cryostat.agent.registration.max-backoff-ms";
+    public static final String CRYOSTAT_AGENT_REGISTRATION_BACKOFF_MULTIPLIER =
+            "cryostat.agent.registration.backoff-multiplier";
+    public static final String CRYOSTAT_AGENT_REGISTRATION_CIRCUIT_BREAKER_THRESHOLD =
+            "cryostat.agent.registration.circuit-breaker-threshold";
+    public static final String CRYOSTAT_AGENT_REGISTRATION_CIRCUIT_BREAKER_DURATION =
+            "cryostat.agent.registration.circuit-breaker-duration";
+    public static final String CRYOSTAT_AGENT_REGISTRATION_MIN_COOLDOWN_MS =
+            "cryostat.agent.registration.min-cooldown-ms";
     public static final String CRYOSTAT_AGENT_EXIT_SIGNALS = "cryostat.agent.exit.signals";
     public static final String CRYOSTAT_AGENT_EXIT_DEREGISTRATION_TIMEOUT_MS =
             "cryostat.agent.exit.deregistration.timeout-ms";
@@ -254,6 +265,11 @@ public abstract class ConfigModule {
 
     public static final String CRYOSTAT_AGENT_FLEET_SAMPLING_RATIO =
             "cryostat.agent.fleet-sampling-ratio";
+
+    public static final String CRYOSTAT_AGENT_CREDENTIAL_CLEANUP_INTERVAL =
+            "cryostat.agent.credential.cleanup.interval";
+    public static final String CRYOSTAT_AGENT_CREDENTIAL_CLEANUP_MAX_RETRIES =
+            "cryostat.agent.credential.cleanup.max-retries";
 
     @Provides
     @Singleton
@@ -953,6 +969,46 @@ public abstract class ConfigModule {
 
     @Provides
     @Singleton
+    @Named(CRYOSTAT_AGENT_REGISTRATION_MAX_BACKOFF_MS)
+    public static int provideCryostatAgentRegistrationMaxBackoffMs(SmallRyeConfig config) {
+        return config.getValue(CRYOSTAT_AGENT_REGISTRATION_MAX_BACKOFF_MS, int.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_REGISTRATION_BACKOFF_MULTIPLIER)
+    public static double provideCryostatAgentRegistrationBackoffMultiplier(SmallRyeConfig config) {
+        return config.getValue(CRYOSTAT_AGENT_REGISTRATION_BACKOFF_MULTIPLIER, double.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_REGISTRATION_CIRCUIT_BREAKER_THRESHOLD)
+    public static int provideCryostatAgentRegistrationCircuitBreakerThreshold(
+            SmallRyeConfig config) {
+        return config.getValue(CRYOSTAT_AGENT_REGISTRATION_CIRCUIT_BREAKER_THRESHOLD, int.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_REGISTRATION_CIRCUIT_BREAKER_DURATION)
+    public static Duration provideCryostatAgentRegistrationCircuitBreakerDuration(
+            SmallRyeConfig config) {
+        String durationStr =
+                config.getValue(CRYOSTAT_AGENT_REGISTRATION_CIRCUIT_BREAKER_DURATION, String.class);
+        return Duration.parse(durationStr);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_REGISTRATION_MIN_COOLDOWN_MS)
+    public static Duration provideCryostatAgentRegistrationMinCooldownMs(SmallRyeConfig config) {
+        int cooldownMs = config.getValue(CRYOSTAT_AGENT_REGISTRATION_MIN_COOLDOWN_MS, int.class);
+        return Duration.ofMillis(cooldownMs);
+    }
+
+    @Provides
+    @Singleton
     @Named(CRYOSTAT_AGENT_HARVESTER_PERIOD_MS)
     public static long provideCryostatAgentHarvesterPeriod(SmallRyeConfig config) {
         return config.getValue(CRYOSTAT_AGENT_HARVESTER_PERIOD_MS, long.class);
@@ -1095,6 +1151,20 @@ public abstract class ConfigModule {
     @Named(CRYOSTAT_AGENT_FLEET_SAMPLING_RATIO)
     public static double provideCryostatAgentFleetSamplingRatio(SmallRyeConfig config) {
         return config.getValue(CRYOSTAT_AGENT_FLEET_SAMPLING_RATIO, double.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_CREDENTIAL_CLEANUP_INTERVAL)
+    public static Duration provideCryostatAgentCredentialCleanupInterval(SmallRyeConfig config) {
+        return config.getValue(CRYOSTAT_AGENT_CREDENTIAL_CLEANUP_INTERVAL, Duration.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_CREDENTIAL_CLEANUP_MAX_RETRIES)
+    public static int provideCryostatAgentCredentialCleanupMaxRetries(SmallRyeConfig config) {
+        return config.getValue(CRYOSTAT_AGENT_CREDENTIAL_CLEANUP_MAX_RETRIES, int.class);
     }
 
     public enum URIRange {

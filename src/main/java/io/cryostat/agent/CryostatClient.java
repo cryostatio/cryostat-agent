@@ -33,7 +33,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.function.Function;
 
@@ -86,6 +85,7 @@ public class CryostatClient {
     private final ObjectMapper mapper;
     private final HttpHost host;
     private final HttpClient http;
+    private final CredentialTracker credentialTracker;
 
     private final String appName;
     private final String instanceId;
@@ -98,6 +98,7 @@ public class CryostatClient {
             Executor executor,
             ObjectMapper mapper,
             HttpClient http,
+            CredentialTracker credentialTracker,
             String instanceId,
             String jvmId,
             String appName,
@@ -108,6 +109,7 @@ public class CryostatClient {
         this.mapper = mapper;
         this.host = HttpHost.create(baseUri);
         this.http = http;
+        this.credentialTracker = credentialTracker;
         this.instanceId = instanceId;
         this.jvmId = jvmId;
         this.appName = appName;
@@ -162,14 +164,11 @@ public class CryostatClient {
                     .handle(
                             (res, t) -> {
                                 if (t != null) {
+                                    credentialTracker.markForDeletion(credentialId);
                                     throw new CompletionException(t);
                                 }
                                 if (!isOkStatus(res)) {
-                                    try {
-                                        deleteCredentials(credentialId).get();
-                                    } catch (InterruptedException | ExecutionException e) {
-                                        log.error("Failed to delete previous credentials", e);
-                                    }
+                                    credentialTracker.markForDeletion(credentialId);
                                 }
                                 return assertOkStatus(req, res);
                             })
@@ -179,11 +178,13 @@ public class CryostatClient {
                                     return mapper.readValue(is, PluginInfo.class);
                                 } catch (IOException e) {
                                     log.error("Unable to parse response as JSON", e);
+                                    credentialTracker.markForDeletion(credentialId);
                                     throw new RegistrationException(e);
                                 }
                             })
                     .whenComplete((v, t) -> req.reset());
         } catch (JsonProcessingException e) {
+            credentialTracker.markForDeletion(credentialId);
             return CompletableFuture.failedFuture(e);
         }
     }
@@ -287,28 +288,40 @@ public class CryostatClient {
         log.trace("{}", req);
         req.setEntity(entityBuilder.build());
         return supply(req, (res) -> logResponse(req, res))
-                .thenApply(
+                .thenCompose(
                         res -> {
                             if (!isOkStatus(res)) {
-                                try {
-                                    if (res.getCode() == 409) {
-                                        int queried = queryExistingCredentials(callback).get();
-                                        if (queried >= 0) {
-                                            return queried;
-                                        }
-                                    }
-                                } catch (InterruptedException | ExecutionException e) {
-                                    log.error("Failed to query for existing credentials", e);
+                                if (res.getCode() == 409) {
+                                    return queryExistingCredentials(callback)
+                                            .thenCompose(
+                                                    queried -> {
+                                                        if (queried >= 0) {
+                                                            return CompletableFuture
+                                                                    .completedFuture(queried);
+                                                        }
+                                                        credentialTracker.markForDeletion(prevId);
+                                                        return deleteCredentials(prevId)
+                                                                .handle(
+                                                                        (v, t) -> {
+                                                                            if (t != null) {
+                                                                                log.error(
+                                                                                        "Failed to"
+                                                                                            + " delete"
+                                                                                            + " previous"
+                                                                                            + " credentials"
+                                                                                            + " with"
+                                                                                            + " id "
+                                                                                                + prevId,
+                                                                                        t);
+                                                                            }
+                                                                            throw new RegistrationException(
+                                                                                    new IllegalStateException(
+                                                                                            "Credential"
+                                                                                                + " conflict"));
+                                                                        });
+                                                    });
                                 }
-                                try {
-                                    deleteCredentials(prevId).get();
-                                } catch (InterruptedException | ExecutionException e) {
-                                    log.error(
-                                            "Failed to delete previous credentials with id "
-                                                    + prevId,
-                                            e);
-                                    throw new RegistrationException(e);
-                                }
+                                credentialTracker.markForDeletion(prevId);
                             }
                             String location =
                                     assertOkStatus(req, res)
@@ -317,7 +330,9 @@ public class CryostatClient {
                             String id =
                                     location.substring(
                                             location.lastIndexOf('/') + 1, location.length());
-                            return Integer.valueOf(id);
+                            int credId = Integer.parseInt(id);
+                            credentialTracker.trackCreated(credId);
+                            return CompletableFuture.completedFuture(credId);
                         })
                 .whenComplete((v, t) -> req.reset());
     }
@@ -548,8 +563,8 @@ public class CryostatClient {
     private String selfMatchExpression(URI callback) {
         return String.format(
                 "target.connectUrl == \"%s\" && target.annotations.platform[\"INSTANCE_ID\"] =="
-                        + " \"%s\"",
-                callback, instanceId);
+                        + " \"%s\" && target.annotations.cryostat[\"REALM\"] == \"%s\"",
+                callback, instanceId, realm);
     }
 
     private boolean isOkStatus(ClassicHttpResponse res) {
