@@ -17,7 +17,7 @@ jobs:
 
     steps:
     - uses: actions/checkout@v6
-    - uses: skjolber/maven-cache-github-action@v3.1
+    - uses: skjolber/maven-cache-github-action@v1
       with:
         step: restore
     - name: Set up JDK 11
@@ -36,6 +36,6 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ github.token }}
 
-    - uses: skjolber/maven-cache-github-action@v3.1
+    - uses: skjolber/maven-cache-github-action@v1
       with:
         step: save
