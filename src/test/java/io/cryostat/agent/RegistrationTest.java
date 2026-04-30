@@ -293,4 +293,103 @@ class RegistrationTest {
         verify(executor, atLeast(CIRCUIT_BREAKER_THRESHOLD + 1))
                 .schedule(any(Runnable.class), anyLong(), eq(TimeUnit.MILLISECONDS));
     }
+
+    @Test
+    void testCalculateCooldownWithJitterAppliesVariation() {
+        // Test that jitter is applied correctly
+        Duration baseDuration = Duration.ofSeconds(30);
+
+        // Test with minimum jitter (random = 0.0)
+        when(random.nextDouble()).thenReturn(0.0);
+        Duration minJittered = registration.calculateCooldownWithJitter(baseDuration);
+        // With jitterFactor=0.2 and random=0.0: (1.0 - 0.2) + (0.0 * 0.4) = 0.8
+        // Expected: 30000ms * 0.8 = 24000ms
+        assertEquals(24000, minJittered.toMillis(), "Minimum jitter should be 80% of base");
+
+        // Test with maximum jitter (random = 1.0)
+        when(random.nextDouble()).thenReturn(1.0);
+        Duration maxJittered = registration.calculateCooldownWithJitter(baseDuration);
+        // With jitterFactor=0.2 and random=1.0: (1.0 - 0.2) + (1.0 * 0.4) = 1.2
+        // Expected: 30000ms * 1.2 = 36000ms
+        assertEquals(36000, maxJittered.toMillis(), "Maximum jitter should be 120% of base");
+
+        // Test with middle jitter (random = 0.5)
+        when(random.nextDouble()).thenReturn(0.5);
+        Duration midJittered = registration.calculateCooldownWithJitter(baseDuration);
+        // With jitterFactor=0.2 and random=0.5: (1.0 - 0.2) + (0.5 * 0.4) = 1.0
+        // Expected: 30000ms * 1.0 = 30000ms
+        assertEquals(30000, midJittered.toMillis(), "Middle jitter should be 100% of base");
+    }
+
+    @Test
+    void testCalculateCooldownWithJitterDifferentDurations() {
+        when(random.nextDouble()).thenReturn(0.5);
+
+        // Test with 1 second
+        Duration oneSecond = Duration.ofSeconds(1);
+        Duration jittered1s = registration.calculateCooldownWithJitter(oneSecond);
+        assertEquals(1000, jittered1s.toMillis(), "1 second with 0.5 random should remain 1000ms");
+
+        // Test with 1 minute
+        Duration oneMinute = Duration.ofMinutes(1);
+        Duration jittered1m = registration.calculateCooldownWithJitter(oneMinute);
+        assertEquals(
+                60000, jittered1m.toMillis(), "1 minute with 0.5 random should remain 60000ms");
+
+        // Test with 5 minutes
+        Duration fiveMinutes = Duration.ofMinutes(5);
+        Duration jittered5m = registration.calculateCooldownWithJitter(fiveMinutes);
+        assertEquals(
+                300000, jittered5m.toMillis(), "5 minutes with 0.5 random should remain 300000ms");
+    }
+
+    @Test
+    void testCalculateCooldownWithJitterProducesVariation() {
+        Duration baseDuration = Duration.ofSeconds(30);
+
+        // Simulate multiple agents with different random values
+        when(random.nextDouble()).thenReturn(0.1, 0.3, 0.5, 0.7, 0.9);
+
+        Duration jitter1 = registration.calculateCooldownWithJitter(baseDuration);
+        Duration jitter2 = registration.calculateCooldownWithJitter(baseDuration);
+        Duration jitter3 = registration.calculateCooldownWithJitter(baseDuration);
+        Duration jitter4 = registration.calculateCooldownWithJitter(baseDuration);
+        Duration jitter5 = registration.calculateCooldownWithJitter(baseDuration);
+
+        // All should be different
+        assertNotEquals(
+                jitter1.toMillis(),
+                jitter2.toMillis(),
+                "Different random values should produce different jittered durations");
+        assertNotEquals(
+                jitter2.toMillis(),
+                jitter3.toMillis(),
+                "Different random values should produce different jittered durations");
+        assertNotEquals(
+                jitter3.toMillis(),
+                jitter4.toMillis(),
+                "Different random values should produce different jittered durations");
+        assertNotEquals(
+                jitter4.toMillis(),
+                jitter5.toMillis(),
+                "Different random values should produce different jittered durations");
+
+        // All should be within expected range (80% to 120% of base)
+        long baseMs = baseDuration.toMillis();
+        assertTrue(
+                jitter1.toMillis() >= baseMs * 0.8 && jitter1.toMillis() <= baseMs * 1.2,
+                "Jittered duration should be within range");
+        assertTrue(
+                jitter2.toMillis() >= baseMs * 0.8 && jitter2.toMillis() <= baseMs * 1.2,
+                "Jittered duration should be within range");
+        assertTrue(
+                jitter3.toMillis() >= baseMs * 0.8 && jitter3.toMillis() <= baseMs * 1.2,
+                "Jittered duration should be within range");
+        assertTrue(
+                jitter4.toMillis() >= baseMs * 0.8 && jitter4.toMillis() <= baseMs * 1.2,
+                "Jittered duration should be within range");
+        assertTrue(
+                jitter5.toMillis() >= baseMs * 0.8 && jitter5.toMillis() <= baseMs * 1.2,
+                "Jittered duration should be within range");
+    }
 }

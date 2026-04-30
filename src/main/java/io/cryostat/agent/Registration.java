@@ -416,7 +416,7 @@ public class Registration {
      * @param baseDuration Base cooldown duration (e.g., PT30S)
      * @return Duration with jitter applied
      */
-    private Duration calculateCooldownWithJitter(Duration baseDuration) {
+    Duration calculateCooldownWithJitter(Duration baseDuration) {
         long baseMs = baseDuration.toMillis();
         // Add jitter: range is (1 - jitterFactor) to (1 + jitterFactor) times base duration
         // For jitterFactor=0.2, this gives 0.8x to 1.2x base duration
