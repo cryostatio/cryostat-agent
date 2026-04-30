@@ -272,6 +272,7 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
                             case REFRESHING:
                             case REFRESHED:
                             case PUBLISHED:
+                            case COOLDOWN:
                                 log.debug("Registration state: {}", evt.state);
                                 break;
                             default:
