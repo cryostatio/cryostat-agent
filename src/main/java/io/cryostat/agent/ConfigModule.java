@@ -220,6 +220,8 @@ public abstract class ConfigModule {
             "cryostat.agent.registration.cooldown-jitter-factor";
     public static final String CRYOSTAT_AGENT_REGISTRATION_RETRY_BACKOFF_JITTER_FACTOR =
             "cryostat.agent.registration.retry-backoff-jitter-factor";
+    public static final String CRYOSTAT_AGENT_REGISTRATION_MIN_INTERVAL =
+            "cryostat.agent.registration.min-interval";
     public static final String CRYOSTAT_AGENT_EXIT_SIGNALS = "cryostat.agent.exit.signals";
     public static final String CRYOSTAT_AGENT_EXIT_DEREGISTRATION_TIMEOUT_MS =
             "cryostat.agent.exit.deregistration.timeout-ms";
@@ -1031,6 +1033,15 @@ public abstract class ConfigModule {
             SmallRyeConfig config) {
         return config.getValue(
                 CRYOSTAT_AGENT_REGISTRATION_RETRY_BACKOFF_JITTER_FACTOR, double.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_REGISTRATION_MIN_INTERVAL)
+    public static Duration provideCryostatAgentRegistrationMinInterval(SmallRyeConfig config) {
+        String intervalStr =
+                config.getValue(CRYOSTAT_AGENT_REGISTRATION_MIN_INTERVAL, String.class);
+        return Duration.parse(intervalStr);
     }
 
     @Provides

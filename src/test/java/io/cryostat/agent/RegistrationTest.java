@@ -64,6 +64,8 @@ class RegistrationTest {
             Duration.ZERO; // Disable cooldown for existing tests
     private static final double COOLDOWN_JITTER_FACTOR = 0.2;
     private static final double RETRY_BACKOFF_JITTER_FACTOR = 0.1;
+    private static final Duration MIN_REGISTRATION_INTERVAL =
+            Duration.ZERO; // Disable min interval for existing tests
 
     @BeforeEach
     void setup() {
@@ -91,6 +93,7 @@ class RegistrationTest {
                         MIN_COOLDOWN_DURATION,
                         COOLDOWN_JITTER_FACTOR,
                         RETRY_BACKOFF_JITTER_FACTOR,
+                        MIN_REGISTRATION_INTERVAL,
                         random);
     }
 

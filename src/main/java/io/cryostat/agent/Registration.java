@@ -73,6 +73,7 @@ public class Registration {
     private final Duration minCooldownDuration;
     private final double cooldownJitterFactor;
     private final double retryBackoffJitterFactor;
+    private final Duration minRegistrationInterval;
     private final Random random;
 
     private final PluginInfo pluginInfo = new PluginInfo();
@@ -91,6 +92,9 @@ public class Registration {
     private volatile Instant cooldownUntil = null;
     private volatile ScheduledFuture<?> cooldownExitTask = null;
     private final Object cooldownLock = new Object();
+
+    private volatile Instant lastRegistrationAttempt = Instant.MIN;
+    private final Object registrationLock = new Object();
 
     private enum CircuitState {
         CLOSED,
@@ -121,6 +125,7 @@ public class Registration {
             Duration minCooldownDuration,
             double cooldownJitterFactor,
             double retryBackoffJitterFactor,
+            Duration minRegistrationInterval,
             Random random) {
         this.executor = executor;
         this.cryostat = cryostat;
@@ -144,6 +149,7 @@ public class Registration {
         this.minCooldownDuration = minCooldownDuration;
         this.cooldownJitterFactor = cooldownJitterFactor;
         this.retryBackoffJitterFactor = retryBackoffJitterFactor;
+        this.minRegistrationInterval = minRegistrationInterval;
         this.random = random;
     }
 
@@ -247,7 +253,38 @@ public class Registration {
         this.listeners.add(listener);
     }
 
+    /**
+     * Check if sufficient time has passed since the last registration attempt to allow a new one.
+     * This prevents rapid-fire registration attempts from external triggers.
+     *
+     * @return true if registration should proceed, false if too soon
+     */
+    private boolean shouldAttemptRegistration() {
+        synchronized (registrationLock) {
+            Instant now = Instant.now();
+            Duration timeSinceLastAttempt = Duration.between(lastRegistrationAttempt, now);
+
+            if (timeSinceLastAttempt.compareTo(minRegistrationInterval) < 0) {
+                Duration remaining = minRegistrationInterval.minus(timeSinceLastAttempt);
+                log.debug(
+                        "Skipping registration attempt - minimum interval not met. Last attempt:"
+                                + " {}, next allowed: {} (in {})",
+                        lastRegistrationAttempt,
+                        lastRegistrationAttempt.plus(minRegistrationInterval),
+                        remaining);
+                return false;
+            }
+
+            lastRegistrationAttempt = now;
+            return true;
+        }
+    }
+
     void tryRegister() {
+        if (!shouldAttemptRegistration()) {
+            return;
+        }
+
         if (currentRegistration != null && !currentRegistration.isDone()) {
             log.warn("Cancelling previous registration attempt");
             currentRegistration.cancel(true);

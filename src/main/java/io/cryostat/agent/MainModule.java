@@ -888,6 +888,8 @@ public abstract class MainModule {
                     double cooldownJitterFactor,
             @Named(ConfigModule.CRYOSTAT_AGENT_REGISTRATION_RETRY_BACKOFF_JITTER_FACTOR)
                     double retryBackoffJitterFactor,
+            @Named(ConfigModule.CRYOSTAT_AGENT_REGISTRATION_MIN_INTERVAL)
+                    Duration minRegistrationInterval,
             SecureRandom random) {
         Logger log = LoggerFactory.getLogger(Registration.class);
         return new Registration(
@@ -925,6 +927,7 @@ public abstract class MainModule {
                 minCooldownDuration,
                 cooldownJitterFactor,
                 retryBackoffJitterFactor,
+                minRegistrationInterval,
                 random);
     }
 
