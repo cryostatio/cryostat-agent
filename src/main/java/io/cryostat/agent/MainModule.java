@@ -884,6 +884,10 @@ public abstract class MainModule {
                     Duration circuitBreakerOpenDuration,
             @Named(ConfigModule.CRYOSTAT_AGENT_REGISTRATION_MIN_COOLDOWN_MS)
                     Duration minCooldownDuration,
+            @Named(ConfigModule.CRYOSTAT_AGENT_REGISTRATION_COOLDOWN_JITTER_FACTOR)
+                    double cooldownJitterFactor,
+            @Named(ConfigModule.CRYOSTAT_AGENT_REGISTRATION_RETRY_BACKOFF_JITTER_FACTOR)
+                    double retryBackoffJitterFactor,
             SecureRandom random) {
         Logger log = LoggerFactory.getLogger(Registration.class);
         return new Registration(
@@ -919,6 +923,8 @@ public abstract class MainModule {
                 circuitBreakerThreshold,
                 circuitBreakerOpenDuration,
                 minCooldownDuration,
+                cooldownJitterFactor,
+                retryBackoffJitterFactor,
                 random);
     }
 

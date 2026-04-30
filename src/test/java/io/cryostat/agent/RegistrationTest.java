@@ -62,6 +62,8 @@ class RegistrationTest {
     private static final Duration CIRCUIT_BREAKER_DURATION = Duration.ofMinutes(5);
     private static final Duration MIN_COOLDOWN_DURATION =
             Duration.ZERO; // Disable cooldown for existing tests
+    private static final double COOLDOWN_JITTER_FACTOR = 0.2;
+    private static final double RETRY_BACKOFF_JITTER_FACTOR = 0.1;
 
     @BeforeEach
     void setup() {
@@ -87,6 +89,8 @@ class RegistrationTest {
                         CIRCUIT_BREAKER_THRESHOLD,
                         CIRCUIT_BREAKER_DURATION,
                         MIN_COOLDOWN_DURATION,
+                        COOLDOWN_JITTER_FACTOR,
+                        RETRY_BACKOFF_JITTER_FACTOR,
                         random);
     }
 
