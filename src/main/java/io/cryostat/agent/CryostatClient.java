@@ -202,23 +202,30 @@ public class CryostatClient {
                                 return submitCredentials(prevId, credentials, callback);
                             });
         }
-        HttpGet req = new HttpGet(baseUri.resolve(CREDENTIALS_API_PATH + "/" + prevId));
-        log.trace("{}", req);
-        return supply(req, (res) -> logResponse(req, res))
-                .handle(
-                        (v, t) -> {
-                            if (t != null) {
-                                log.error("Failed to get credentials with ID " + prevId, t);
-                                throw new CompletionException(t);
-                            }
-                            return isOkStatus(v);
-                        })
+        return credentialExists(prevId)
                 .thenCompose(
                         exists -> {
                             if (exists) {
                                 return CompletableFuture.completedFuture(prevId);
                             }
                             return submitCredentials(prevId, credentials, callback);
+                        });
+    }
+
+    public CompletableFuture<Boolean> credentialExists(int credentialId) {
+        if (credentialId < 0) {
+            return CompletableFuture.completedFuture(false);
+        }
+        HttpGet req = new HttpGet(baseUri.resolve(CREDENTIALS_API_PATH + "/" + credentialId));
+        log.trace("{}", req);
+        return supply(req, (res) -> logResponse(req, res))
+                .handle(
+                        (v, t) -> {
+                            if (t != null) {
+                                log.error("Failed to get credentials with ID {}", credentialId, t);
+                                throw new CompletionException(t);
+                            }
+                            return isOkStatus(v);
                         })
                 .whenComplete((v, t) -> req.reset());
     }
