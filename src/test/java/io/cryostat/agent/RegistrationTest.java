@@ -395,4 +395,57 @@ class RegistrationTest {
                 jitter5.toMillis() >= baseMs * 0.8 && jitter5.toMillis() <= baseMs * 1.2,
                 "Jittered duration should be within range");
     }
+
+    @Test
+    void testMinimumRegistrationIntervalSchedulesRefreshingRetry() {
+        Registration throttledRegistration =
+                new Registration(
+                        executor,
+                        cryostat,
+                        callbackResolver,
+                        webServer,
+                        appNameResolver,
+                        INSTANCE_ID,
+                        JVM_ID,
+                        APP_NAME,
+                        REALM,
+                        HOSTNAME,
+                        JMX_PORT,
+                        REGISTRATION_RETRY_MS,
+                        REGISTRATION_CHECK_MS,
+                        false,
+                        true,
+                        MAX_BACKOFF_MS,
+                        BACKOFF_MULTIPLIER,
+                        CIRCUIT_BREAKER_THRESHOLD,
+                        CIRCUIT_BREAKER_DURATION,
+                        MIN_COOLDOWN_DURATION,
+                        COOLDOWN_JITTER_FACTOR,
+                        RETRY_BACKOFF_JITTER_FACTOR,
+                        Duration.ofSeconds(30),
+                        random);
+
+        when(executor.schedule(any(Runnable.class), anyLong(), any(TimeUnit.class)))
+                .thenReturn(null);
+
+        throttledRegistration.tryRegister();
+        throttledRegistration.tryRegister();
+
+        ArgumentCaptor<Long> delayCaptor = ArgumentCaptor.forClass(Long.class);
+        verify(executor, atLeastOnce())
+                .schedule(any(Runnable.class), delayCaptor.capture(), eq(TimeUnit.MILLISECONDS));
+        long scheduledDelay =
+                delayCaptor.getAllValues().stream()
+                        .filter(delay -> delay >= 0 && delay <= Duration.ofSeconds(30).toMillis())
+                        .findFirst()
+                        .orElseThrow(
+                                () ->
+                                        new AssertionError(
+                                                "Expected a retry delay within the remaining"
+                                                        + " minimum interval window"));
+        assertTrue(
+                scheduledDelay <= Duration.ofSeconds(30).toMillis(),
+                "Retry delay should be scheduled within the remaining minimum interval window");
+        verify(cryostat, times(1)).serverHealth();
+    }
 }

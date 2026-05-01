@@ -254,34 +254,38 @@ public class Registration {
     }
 
     /**
-     * Check if sufficient time has passed since the last registration attempt to allow a new one.
-     * This prevents rapid-fire registration attempts from external triggers.
+     * Determine when the next registration attempt is allowed. This prevents rapid-fire
+     * registration attempts from external triggers.
      *
-     * @return true if registration should proceed, false if too soon
+     * @return the instant when registration may next be attempted
      */
-    private boolean shouldAttemptRegistration() {
+    private Instant shouldAttemptRegistrationAt() {
         synchronized (registrationLock) {
             Instant now = Instant.now();
-            Duration timeSinceLastAttempt = Duration.between(lastRegistrationAttempt, now);
+            Instant nextAllowed = lastRegistrationAttempt.plus(minRegistrationInterval);
 
-            if (timeSinceLastAttempt.compareTo(minRegistrationInterval) < 0) {
-                Duration remaining = minRegistrationInterval.minus(timeSinceLastAttempt);
+            if (now.isBefore(nextAllowed)) {
+                Duration remaining = Duration.between(now, nextAllowed);
                 log.debug(
                         "Skipping registration attempt - minimum interval not met. Last attempt:"
                                 + " {}, next allowed: {} (in {})",
                         lastRegistrationAttempt,
-                        lastRegistrationAttempt.plus(minRegistrationInterval),
+                        nextAllowed,
                         remaining);
-                return false;
+                return nextAllowed;
             }
 
             lastRegistrationAttempt = now;
-            return true;
+            return now;
         }
     }
 
     void tryRegister() {
-        if (!shouldAttemptRegistration()) {
+        Instant shouldAttemptRegistrationAt = shouldAttemptRegistrationAt();
+        if (Instant.now().isBefore(shouldAttemptRegistrationAt)) {
+            long delay = Duration.between(Instant.now(), shouldAttemptRegistrationAt).toMillis();
+            executor.schedule(
+                    () -> notify(RegistrationEvent.State.REFRESHING), delay, TimeUnit.MILLISECONDS);
             return;
         }
 
