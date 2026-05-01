@@ -55,6 +55,8 @@ class WebServer {
     private final Lazy<Registration> registration;
     private HttpServer http;
     private volatile int credentialId = -1;
+    private final Object credentialGenerationLock = new Object();
+    private CompletableFuture<Void> credentialGeneration;
 
     private final AgentAuthenticator agentAuthenticator;
     private final RequestLoggingFilter requestLoggingFilter;
@@ -216,26 +218,47 @@ class WebServer {
     }
 
     CompletableFuture<Void> generateCredentials(URI callback) {
-        this.credentials.regenerate();
-        return this.cryostat
-                .get()
-                .submitCredentialsIfRequired(
-                        this.credentialId, this.credentials, Objects.requireNonNull(callback))
-                .handle(
-                        (v, t) -> {
-                            this.credentials.clear();
-                            if (t != null) {
-                                this.resetCredentialId();
-                                log.error("Could not submit credentials", t);
-                                throw new CompletionException("Could not submit credentials", t);
-                            }
-                            return v;
-                        })
-                .thenAccept(
-                        i -> {
-                            this.credentialId = i;
-                            log.trace("Defined credentials with id {}", i);
-                        });
+        synchronized (credentialGenerationLock) {
+            if (this.credentialGeneration != null && !this.credentialGeneration.isDone()) {
+                log.trace("Reusing in-progress credential generation");
+                return this.credentialGeneration;
+            }
+
+            this.credentials.regenerate();
+            this.credentialGeneration =
+                    this.cryostat
+                            .get()
+                            .submitCredentialsIfRequired(
+                                    this.credentialId,
+                                    this.credentials,
+                                    Objects.requireNonNull(callback))
+                            .handle(
+                                    (v, t) -> {
+                                        this.credentials.clear();
+                                        if (t != null) {
+                                            this.resetCredentialId();
+                                            log.error("Could not submit credentials", t);
+                                            throw new CompletionException(
+                                                    "Could not submit credentials", t);
+                                        }
+                                        return v;
+                                    })
+                            .thenAccept(
+                                    i -> {
+                                        this.credentialId = i;
+                                        log.trace("Defined credentials with id {}", i);
+                                    })
+                            .whenComplete(
+                                    (v, t) -> {
+                                        synchronized (credentialGenerationLock) {
+                                            if (this.credentialGeneration != null
+                                                    && this.credentialGeneration.isDone()) {
+                                                this.credentialGeneration = null;
+                                            }
+                                        }
+                                    });
+            return this.credentialGeneration;
+        }
     }
 
     private HttpHandler wrap(HttpHandler handler) {
