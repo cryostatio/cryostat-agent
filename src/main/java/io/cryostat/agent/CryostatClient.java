@@ -346,7 +346,8 @@ public class CryostatClient {
                             credentialTracker.trackCreated(credId);
                             return CompletableFuture.completedFuture(credId);
                         })
-                .whenComplete((v, t) -> req.reset());
+                .whenComplete((v, t) -> req.reset())
+                .whenComplete((v, t) -> Arrays.fill(passwordCopy, (byte) 0));
     }
 
     public CompletableFuture<Void> deleteCredentials(int id) {
