@@ -18,14 +18,23 @@ package io.cryostat.agent;
 import java.net.URI;
 
 public class HttpException extends RuntimeException {
+
+    private final int statusCode;
+
     HttpException(int statusCode, URI uri) {
         super(
                 String.format(
                         "Unexpected non-OK status code %d on API path %s",
                         statusCode, uri.toString()));
+        this.statusCode = statusCode;
     }
 
     HttpException(int statusCode, Throwable cause) {
         super(String.format("HTTP %d", statusCode), cause);
+        this.statusCode = statusCode;
+    }
+
+    public int statusCode() {
+        return statusCode;
     }
 }

@@ -115,6 +115,21 @@ public class CredentialCleanupJob {
                             .handle(
                                     (v, t) -> {
                                         if (t != null) {
+                                            Throwable cause = t;
+                                            while (cause.getCause() != null) {
+                                                cause = cause.getCause();
+                                            }
+                                            if (cause instanceof HttpException
+                                                    && ((HttpException) cause).statusCode()
+                                                            == 404) {
+                                                log.debug(
+                                                        "Credential {} was already deleted"
+                                                                + " remotely",
+                                                        credentialId);
+                                                retryCount.remove(credentialId);
+                                                tracker.trackDeleted(credentialId);
+                                                return null;
+                                            }
                                             log.warn(
                                                     "Failed to delete credential {} (attempt {})",
                                                     credentialId,
