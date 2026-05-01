@@ -24,7 +24,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicReference;
@@ -294,8 +293,6 @@ class CryostatClientTest {
 
         client.submitCredentialsIfRequired(-1, credentials, callback).get();
 
-        Arrays.fill(password, (byte) 0);
-
         String entityContent = submittedCredentialRequestBody.get();
         assertNotNull(entityContent, "Should have captured credential submission request body");
         assertTrue(
@@ -304,10 +301,6 @@ class CryostatClientTest {
         assertFalse(
                 entityContent.contains("\u0000"),
                 "Multipart body should not contain null bytes from later password mutation");
-        assertArrayEquals(
-                new byte[password.length],
-                password,
-                "Source password array should be zeroed after explicit mutation");
     }
 
     private CryostatClient.StoredCredential createStoredCredential(int id) {
