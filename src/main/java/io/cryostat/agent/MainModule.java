@@ -100,8 +100,7 @@ import org.apache.hc.client5.http.config.RequestConfig;
 import org.apache.hc.client5.http.impl.DefaultHttpRequestRetryStrategy;
 import org.apache.hc.client5.http.impl.classic.HttpClientBuilder;
 import org.apache.hc.client5.http.impl.classic.HttpClients;
-import org.apache.hc.client5.http.impl.io.BasicHttpClientConnectionManager;
-import org.apache.hc.client5.http.io.HttpClientConnectionManager;
+import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManager;
 import org.apache.hc.client5.http.socket.ConnectionSocketFactory;
 import org.apache.hc.client5.http.socket.PlainConnectionSocketFactory;
 import org.apache.hc.client5.http.ssl.DefaultHostnameVerifier;
@@ -661,7 +660,10 @@ public abstract class MainModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_TIMEOUT_MS) int responseTimeout,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_RETRY_COUNT) int retryCount,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_RESPONSE_RETRY_TIME) int retryTime,
-            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_REQUIRED) boolean tlsRequired) {
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_REQUIRED) boolean tlsRequired,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_CONNECTION_POOL_MAX_TOTAL) int maxTotal,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_CONNECTION_POOL_MAX_PER_ROUTE)
+                    int maxPerRoute) {
         SSLConnectionSocketFactory sslSocketFactory =
                 new SSLConnectionSocketFactory(
                         sslContext,
@@ -675,8 +677,10 @@ public abstract class MainModule {
         if (!tlsRequired) {
             socketFactoryRegistryBuilder.register("http", new PlainConnectionSocketFactory());
         }
-        HttpClientConnectionManager connMan =
-                new BasicHttpClientConnectionManager(socketFactoryRegistryBuilder.build());
+        PoolingHttpClientConnectionManager connMan =
+                new PoolingHttpClientConnectionManager(socketFactoryRegistryBuilder.build());
+        connMan.setMaxTotal(maxTotal);
+        connMan.setDefaultMaxPerRoute(maxPerRoute);
         HttpClientBuilder builder =
                 HttpClients.custom()
                         .setConnectionManager(connMan)

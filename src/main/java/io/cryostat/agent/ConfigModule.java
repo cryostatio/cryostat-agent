@@ -271,6 +271,11 @@ public abstract class ConfigModule {
     public static final String CRYOSTAT_AGENT_CREDENTIAL_CLEANUP_MAX_RETRIES =
             "cryostat.agent.credential.cleanup.max-retries";
 
+    public static final String CRYOSTAT_AGENT_WEBCLIENT_CONNECTION_POOL_MAX_TOTAL =
+            "cryostat.agent.webclient.connection-pool.max-total";
+    public static final String CRYOSTAT_AGENT_WEBCLIENT_CONNECTION_POOL_MAX_PER_ROUTE =
+            "cryostat.agent.webclient.connection-pool.max-per-route";
+
     @Provides
     @Singleton
     public static SmallRyeConfig provideConfig() {
@@ -1165,6 +1170,20 @@ public abstract class ConfigModule {
     @Named(CRYOSTAT_AGENT_CREDENTIAL_CLEANUP_MAX_RETRIES)
     public static int provideCryostatAgentCredentialCleanupMaxRetries(SmallRyeConfig config) {
         return config.getValue(CRYOSTAT_AGENT_CREDENTIAL_CLEANUP_MAX_RETRIES, int.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBCLIENT_CONNECTION_POOL_MAX_TOTAL)
+    public static int provideConnectionPoolMaxTotal(SmallRyeConfig config) {
+        return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_CONNECTION_POOL_MAX_TOTAL, int.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBCLIENT_CONNECTION_POOL_MAX_PER_ROUTE)
+    public static int provideConnectionPoolMaxPerRoute(SmallRyeConfig config) {
+        return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_CONNECTION_POOL_MAX_PER_ROUTE, int.class);
     }
 
     public enum URIRange {
