@@ -103,9 +103,7 @@ class CryostatClientTest {
                         invocation -> {
                             HttpPost request = invocation.getArgument(1);
                             if (request.getUri().getPath().contains("/api/v4/credentials")
-                                    && !request.getUri()
-                                            .getPath()
-                                            .contains("credential_exists")) {
+                                    && !request.getUri().getPath().contains("credential_exists")) {
                                 ByteArrayOutputStream out = new ByteArrayOutputStream();
                                 request.getEntity().writeTo(out);
                                 submittedCredentialRequestBody.set(
@@ -151,9 +149,7 @@ class CryostatClientTest {
         assertTrue(
                 entityContent.contains("target.annotations.cryostat[\"REALM\"]"),
                 "Match expression should contain REALM clause");
-        assertTrue(
-                entityContent.contains(REALM),
-                "Match expression should contain realm value");
+        assertTrue(entityContent.contains(REALM), "Match expression should contain realm value");
     }
 
     @Test
@@ -182,9 +178,7 @@ class CryostatClientTest {
                         invocation -> {
                             HttpPost request = invocation.getArgument(1);
                             if (request.getUri().getPath().contains("/api/v4/credentials")
-                                    && !request.getUri()
-                                            .getPath()
-                                            .contains("credential_exists")) {
+                                    && !request.getUri().getPath().contains("credential_exists")) {
                                 ByteArrayOutputStream out = new ByteArrayOutputStream();
                                 request.getEntity().writeTo(out);
                                 submittedCredentialRequestBody.set(
@@ -272,9 +266,7 @@ class CryostatClientTest {
                         invocation -> {
                             HttpPost request = invocation.getArgument(1);
                             if (request.getUri().getPath().contains("/api/v4/credentials")
-                                    && !request.getUri()
-                                            .getPath()
-                                            .contains("credential_exists")) {
+                                    && !request.getUri().getPath().contains("credential_exists")) {
                                 ByteArrayOutputStream out = new ByteArrayOutputStream();
                                 request.getEntity().writeTo(out);
                                 submittedCredentialRequestBody.set(
