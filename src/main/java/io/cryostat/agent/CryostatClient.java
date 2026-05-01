@@ -26,6 +26,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
@@ -262,6 +263,10 @@ public class CryostatClient {
     private CompletableFuture<Integer> submitCredentials(
             int prevId, Credentials credentials, URI callback) {
         HttpPost req = new HttpPost(baseUri.resolve(CREDENTIALS_API_PATH));
+        byte[] passwordCopy;
+        synchronized (credentials) {
+            passwordCopy = Arrays.copyOf(credentials.pass(), credentials.pass().length);
+        }
         MultipartEntityBuilder entityBuilder =
                 MultipartEntityBuilder.create()
                         .addPart(
@@ -274,7 +279,7 @@ public class CryostatClient {
                                 FormBodyPartBuilder.create(
                                                 "password",
                                                 new ByteArrayBody(
-                                                        credentials.pass(),
+                                                        passwordCopy,
                                                         ContentType.TEXT_PLAIN,
                                                         "pass"))
                                         .build())

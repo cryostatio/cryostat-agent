@@ -22,6 +22,8 @@ import static org.mockito.Mockito.*;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 
@@ -255,6 +257,63 @@ class CryostatClientTest {
         }
 
         assertTrue(foundCredentialCheck, "Should have found credential check request");
+    }
+
+    @Test
+    void testSubmitCredentialsUsesDefensivePasswordCopy() throws Exception {
+        URI callback = URI.create("http://agent.example.com:9977");
+        byte[] password = "testpass".getBytes(StandardCharsets.UTF_8);
+
+        when(http.execute(any(HttpHost.class), any(HttpPost.class)))
+                .thenReturn(checkResponse, submitResponse);
+        lenient().when(checkResponse.getCode()).thenReturn(404);
+        lenient().when(checkResponse.getEntity()).thenReturn(checkEntity);
+        lenient()
+                .when(checkEntity.getContent())
+                .thenReturn(new ByteArrayInputStream("{}".getBytes()));
+        lenient().when(submitResponse.getCode()).thenReturn(201);
+        lenient().when(submitResponse.getEntity()).thenReturn(submitEntity);
+        lenient()
+                .when(submitResponse.getFirstHeader("Location"))
+                .thenReturn(new BasicHeader("Location", "/api/v4/credentials/42"));
+        lenient()
+                .when(submitEntity.getContent())
+                .thenReturn(new ByteArrayInputStream("".getBytes()));
+
+        when(credentials.user()).thenReturn("testuser");
+        when(credentials.pass()).thenReturn(password);
+
+        client.submitCredentialsIfRequired(-1, credentials, callback).get();
+
+        Arrays.fill(password, (byte) 0);
+
+        ArgumentCaptor<HttpPost> requestCaptor = ArgumentCaptor.forClass(HttpPost.class);
+        verify(http, atLeastOnce()).execute(any(HttpHost.class), requestCaptor.capture());
+
+        boolean foundCredentialSubmission = false;
+        for (HttpPost capturedRequest : requestCaptor.getAllValues()) {
+            if (capturedRequest.getUri().getPath().contains("/api/v4/credentials")
+                    && !capturedRequest.getUri().getPath().contains("credential_exists")) {
+                HttpEntity requestEntity = capturedRequest.getEntity();
+                assertNotNull(requestEntity, "Request entity should not be null");
+
+                String entityContent =
+                        new String(
+                                requestEntity.getContent().readAllBytes(), StandardCharsets.UTF_8);
+
+                assertTrue(
+                        entityContent.contains("testpass"),
+                        "Multipart body should retain the original password contents");
+                assertFalse(
+                        entityContent.contains("\u0000"),
+                        "Multipart body should not contain null bytes from later password"
+                                + " mutation");
+                foundCredentialSubmission = true;
+                break;
+            }
+        }
+
+        assertTrue(foundCredentialSubmission, "Should have found credential submission request");
     }
 
     private CryostatClient.StoredCredential createStoredCredential(int id) {
