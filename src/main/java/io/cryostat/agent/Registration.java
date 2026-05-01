@@ -359,8 +359,12 @@ public class Registration {
                                         return CompletableFuture.failedFuture(e);
                                     }
                                 })
-                        .thenCompose(
-                                plugin -> {
+                        .handle(
+                                (plugin, t) -> {
+                                    if (t != null) {
+                                        return handleRegistrationFailure(credentialId, t);
+                                    }
+
                                     boolean previouslyRegistered = this.pluginInfo.isInitialized();
                                     this.pluginInfo.copyFrom(plugin);
                                     log.debug("Registered as {}", this.pluginInfo.getId());
@@ -387,7 +391,7 @@ public class Registration {
                                     }
                                     return CompletableFuture.<Void>completedFuture(null);
                                 })
-                        .exceptionallyCompose(t -> handleRegistrationFailure(credentialId, t));
+                        .thenCompose(f -> f);
     }
 
     private CompletableFuture<Void> handleRegistrationFailure(int credentialId, Throwable t) {
