@@ -71,6 +71,9 @@ public class Registration {
     private final int circuitBreakerThreshold;
     private final Duration circuitBreakerOpenDuration;
     private final Duration minCooldownDuration;
+    private final double cooldownJitterFactor;
+    private final double retryBackoffJitterFactor;
+    private final Duration minRegistrationInterval;
     private final Random random;
 
     private final PluginInfo pluginInfo = new PluginInfo();
@@ -80,7 +83,6 @@ public class Registration {
     private ScheduledFuture<?> registrationCheckTask;
 
     private final AtomicInteger consecutiveFailures = new AtomicInteger(0);
-    private static final double JITTER_FACTOR = 0.1;
     private volatile CircuitState circuitState = CircuitState.CLOSED;
     private volatile Instant circuitOpenedAt = null;
 
@@ -90,6 +92,9 @@ public class Registration {
     private volatile Instant cooldownUntil = null;
     private volatile ScheduledFuture<?> cooldownExitTask = null;
     private final Object cooldownLock = new Object();
+
+    private volatile Instant lastRegistrationAttempt = Instant.MIN;
+    private final Object registrationLock = new Object();
 
     private enum CircuitState {
         CLOSED,
@@ -102,7 +107,7 @@ public class Registration {
             CryostatClient cryostat,
             CallbackResolver callbackResolver,
             WebServer webServer,
-            io.cryostat.agent.util.AppNameResolver appNameResolver,
+            AppNameResolver appNameResolver,
             String instanceId,
             String jvmId,
             String appName,
@@ -118,6 +123,9 @@ public class Registration {
             int circuitBreakerThreshold,
             Duration circuitBreakerOpenDuration,
             Duration minCooldownDuration,
+            double cooldownJitterFactor,
+            double retryBackoffJitterFactor,
+            Duration minRegistrationInterval,
             Random random) {
         this.executor = executor;
         this.cryostat = cryostat;
@@ -139,6 +147,9 @@ public class Registration {
         this.circuitBreakerThreshold = circuitBreakerThreshold;
         this.circuitBreakerOpenDuration = circuitBreakerOpenDuration;
         this.minCooldownDuration = minCooldownDuration;
+        this.cooldownJitterFactor = cooldownJitterFactor;
+        this.retryBackoffJitterFactor = retryBackoffJitterFactor;
+        this.minRegistrationInterval = minRegistrationInterval;
         this.random = random;
     }
 
@@ -242,7 +253,42 @@ public class Registration {
         this.listeners.add(listener);
     }
 
+    /**
+     * Determine when the next registration attempt is allowed. This prevents rapid-fire
+     * registration attempts from external triggers.
+     *
+     * @return the instant when registration may next be attempted
+     */
+    private Instant shouldAttemptRegistrationAt() {
+        synchronized (registrationLock) {
+            Instant now = Instant.now();
+            Instant nextAllowed = lastRegistrationAttempt.plus(minRegistrationInterval);
+
+            if (now.isBefore(nextAllowed)) {
+                Duration remaining = Duration.between(now, nextAllowed);
+                log.debug(
+                        "Skipping registration attempt - minimum interval not met. Last attempt:"
+                                + " {}, next allowed: {} (in {})",
+                        lastRegistrationAttempt,
+                        nextAllowed,
+                        remaining);
+                return nextAllowed;
+            }
+
+            lastRegistrationAttempt = now;
+            return now;
+        }
+    }
+
     void tryRegister() {
+        Instant shouldAttemptRegistrationAt = shouldAttemptRegistrationAt();
+        if (Instant.now().isBefore(shouldAttemptRegistrationAt)) {
+            long delay = Duration.between(Instant.now(), shouldAttemptRegistrationAt).toMillis();
+            executor.schedule(
+                    () -> notify(RegistrationEvent.State.REFRESHING), delay, TimeUnit.MILLISECONDS);
+            return;
+        }
+
         if (currentRegistration != null && !currentRegistration.isDone()) {
             log.warn("Cancelling previous registration attempt");
             currentRegistration.cancel(true);
@@ -391,7 +437,7 @@ public class Registration {
             return registrationRetryMs;
         }
 
-        double jitter = 1.0 + (random.nextDouble() * 2 - 1) * JITTER_FACTOR;
+        double jitter = 1.0 + (random.nextDouble() * 2 - 1) * retryBackoffJitterFactor;
         long backoff =
                 (long)
                         (registrationRetryMs
@@ -401,6 +447,24 @@ public class Registration {
         backoff = Math.max(backoff, minCooldownDuration.toMillis());
 
         return backoff;
+    }
+
+    /**
+     * Calculate cooldown duration with jitter to prevent thundering herd problem. Adds random
+     * variation based on the configured jitter factor to the base duration so that multiple agents
+     * don't all exit cooldown simultaneously.
+     *
+     * @param baseDuration Base cooldown duration (e.g., PT30S)
+     * @return Duration with jitter applied
+     */
+    Duration calculateCooldownWithJitter(Duration baseDuration) {
+        long baseMs = baseDuration.toMillis();
+        // Add jitter: range is (1 - jitterFactor) to (1 + jitterFactor) times base duration
+        // For jitterFactor=0.2, this gives 0.8x to 1.2x base duration
+        double jitterRange = cooldownJitterFactor * 2;
+        double jitterFactor = (1.0 - cooldownJitterFactor) + (random.nextDouble() * jitterRange);
+        long jitteredMs = (long) (baseMs * jitterFactor);
+        return Duration.ofMillis(jitteredMs);
     }
 
     /**
@@ -425,9 +489,11 @@ public class Registration {
                 cooldownExitTask.cancel(false);
             }
 
-            cooldownUntil = Instant.now().plus(duration);
+            Duration jitteredDuration = calculateCooldownWithJitter(duration);
+            cooldownUntil = Instant.now().plus(jitteredDuration);
             log.debug(
-                    "Entering cooldown for {} after {} consecutive failures",
+                    "Entering cooldown for {} (base: {}) after {} consecutive failures",
+                    jitteredDuration,
                     duration,
                     consecutiveFailures.get());
             notify(RegistrationEvent.State.COOLDOWN);
@@ -450,7 +516,7 @@ public class Registration {
 
             cooldownExitTask =
                     executor.schedule(
-                            this::exitCooldown, duration.toMillis(), TimeUnit.MILLISECONDS);
+                            this::exitCooldown, jitteredDuration.toMillis(), TimeUnit.MILLISECONDS);
         }
     }
 

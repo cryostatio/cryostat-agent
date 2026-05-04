@@ -216,6 +216,12 @@ public abstract class ConfigModule {
             "cryostat.agent.registration.circuit-breaker-duration";
     public static final String CRYOSTAT_AGENT_REGISTRATION_MIN_COOLDOWN_MS =
             "cryostat.agent.registration.min-cooldown-ms";
+    public static final String CRYOSTAT_AGENT_REGISTRATION_COOLDOWN_JITTER_FACTOR =
+            "cryostat.agent.registration.cooldown-jitter-factor";
+    public static final String CRYOSTAT_AGENT_REGISTRATION_RETRY_BACKOFF_JITTER_FACTOR =
+            "cryostat.agent.registration.retry-backoff-jitter-factor";
+    public static final String CRYOSTAT_AGENT_REGISTRATION_MIN_INTERVAL =
+            "cryostat.agent.registration.min-interval";
     public static final String CRYOSTAT_AGENT_EXIT_SIGNALS = "cryostat.agent.exit.signals";
     public static final String CRYOSTAT_AGENT_EXIT_DEREGISTRATION_TIMEOUT_MS =
             "cryostat.agent.exit.deregistration.timeout-ms";
@@ -1010,6 +1016,32 @@ public abstract class ConfigModule {
     public static Duration provideCryostatAgentRegistrationMinCooldownMs(SmallRyeConfig config) {
         int cooldownMs = config.getValue(CRYOSTAT_AGENT_REGISTRATION_MIN_COOLDOWN_MS, int.class);
         return Duration.ofMillis(cooldownMs);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_REGISTRATION_COOLDOWN_JITTER_FACTOR)
+    public static double provideCryostatAgentRegistrationCooldownJitterFactor(
+            SmallRyeConfig config) {
+        return config.getValue(CRYOSTAT_AGENT_REGISTRATION_COOLDOWN_JITTER_FACTOR, double.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_REGISTRATION_RETRY_BACKOFF_JITTER_FACTOR)
+    public static double provideCryostatAgentRegistrationRetryBackoffJitterFactor(
+            SmallRyeConfig config) {
+        return config.getValue(
+                CRYOSTAT_AGENT_REGISTRATION_RETRY_BACKOFF_JITTER_FACTOR, double.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_REGISTRATION_MIN_INTERVAL)
+    public static Duration provideCryostatAgentRegistrationMinInterval(SmallRyeConfig config) {
+        String intervalStr =
+                config.getValue(CRYOSTAT_AGENT_REGISTRATION_MIN_INTERVAL, String.class);
+        return Duration.parse(intervalStr);
     }
 
     @Provides
