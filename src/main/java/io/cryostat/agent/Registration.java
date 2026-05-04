@@ -361,74 +361,97 @@ public class Registration {
                                 })
                         .handle(
                                 (plugin, t) -> {
-                                    if (plugin != null) {
-                                        boolean previouslyRegistered =
-                                                this.pluginInfo.isInitialized();
-                                        this.pluginInfo.copyFrom(plugin);
-                                        log.debug("Registered as {}", this.pluginInfo.getId());
-
-                                        lastSuccessfulRegistration = Instant.now();
-                                        consecutiveFailures.set(0);
-
-                                        if (circuitState == CircuitState.HALF_OPEN) {
-                                            log.debug("Circuit breaker transitioning to CLOSED");
-                                        }
-                                        circuitState = CircuitState.CLOSED;
-
-                                        log.debug(
-                                                "Registration successful at {}, next attempt"
-                                                        + " allowed after {}",
-                                                lastSuccessfulRegistration,
-                                                lastSuccessfulRegistration.plus(
-                                                        minCooldownDuration));
-
-                                        if (previouslyRegistered) {
-                                            notify(RegistrationEvent.State.REFRESHED);
-                                        } else {
-                                            notify(RegistrationEvent.State.REGISTERED);
-                                            tryUpdate();
-                                        }
-                                    } else if (t != null) {
-                                        this.webServer.resetCredentialId();
-                                        this.pluginInfo.clear();
-
-                                        int failures = consecutiveFailures.incrementAndGet();
-                                        long backoffMs = calculateBackoffMs();
-                                        Duration cooldown = Duration.ofMillis(backoffMs);
-
-                                        if (circuitState == CircuitState.CLOSED
-                                                && failures >= circuitBreakerThreshold) {
-                                            log.warn(
-                                                    "Circuit breaker transitioning to OPEN after {}"
-                                                            + " failures",
-                                                    failures);
-                                            circuitState = CircuitState.OPEN;
-                                            circuitOpenedAt = Instant.now();
-                                        } else if (circuitState == CircuitState.HALF_OPEN) {
-                                            log.warn("Circuit breaker transitioning back to OPEN");
-                                            circuitState = CircuitState.OPEN;
-                                            circuitOpenedAt = Instant.now();
-                                        }
-
-                                        log.error(
-                                                "Registration failure (attempt {}, circuit state:"
-                                                        + " {}, cooldown: {})",
-                                                failures,
-                                                circuitState,
-                                                cooldown,
-                                                t);
-
-                                        if (minCooldownDuration.isZero()) {
-                                            executor.schedule(
-                                                    this::tryRegister,
-                                                    backoffMs,
-                                                    TimeUnit.MILLISECONDS);
-                                        } else {
-                                            enterCooldown(cooldown);
-                                        }
+                                    if (t != null) {
+                                        return handleRegistrationFailure(credentialId, t);
                                     }
-                                    return (Void) null;
-                                });
+
+                                    boolean previouslyRegistered = this.pluginInfo.isInitialized();
+                                    this.pluginInfo.copyFrom(plugin);
+                                    log.debug("Registered as {}", this.pluginInfo.getId());
+
+                                    lastSuccessfulRegistration = Instant.now();
+                                    consecutiveFailures.set(0);
+
+                                    if (circuitState == CircuitState.HALF_OPEN) {
+                                        log.debug("Circuit breaker transitioning to CLOSED");
+                                    }
+                                    circuitState = CircuitState.CLOSED;
+
+                                    log.debug(
+                                            "Registration successful at {}, next attempt"
+                                                    + " allowed after {}",
+                                            lastSuccessfulRegistration,
+                                            lastSuccessfulRegistration.plus(minCooldownDuration));
+
+                                    if (previouslyRegistered) {
+                                        notify(RegistrationEvent.State.REFRESHED);
+                                    } else {
+                                        notify(RegistrationEvent.State.REGISTERED);
+                                        tryUpdate();
+                                    }
+                                    return CompletableFuture.<Void>completedFuture(null);
+                                })
+                        .thenCompose(f -> f);
+    }
+
+    private CompletableFuture<Void> handleRegistrationFailure(int credentialId, Throwable t) {
+        if (credentialId < 0) {
+            return completeRegistrationFailure(t);
+        }
+        return cryostat.credentialExists(credentialId)
+                .handle(
+                        (exists, checkError) -> {
+                            if (checkError != null) {
+                                log.warn(
+                                        "Unable to verify existence of credential ID {} after"
+                                                + " registration failure. Retaining local state",
+                                        credentialId,
+                                        checkError);
+                                return false;
+                            }
+                            if (!Boolean.TRUE.equals(exists)) {
+                                this.webServer.resetCredentialId();
+                                return true;
+                            }
+                            log.debug(
+                                    "Credential ID {} still exists remotely after registration"
+                                            + " failure. Retaining local state",
+                                    credentialId);
+                            return false;
+                        })
+                .thenCompose(v -> completeRegistrationFailure(t));
+    }
+
+    private CompletableFuture<Void> completeRegistrationFailure(Throwable t) {
+        this.pluginInfo.clear();
+
+        int failures = consecutiveFailures.incrementAndGet();
+        long backoffMs = calculateBackoffMs();
+        Duration cooldown = Duration.ofMillis(backoffMs);
+
+        if (circuitState == CircuitState.CLOSED && failures >= circuitBreakerThreshold) {
+            log.warn("Circuit breaker transitioning to OPEN after {} failures", failures);
+            circuitState = CircuitState.OPEN;
+            circuitOpenedAt = Instant.now();
+        } else if (circuitState == CircuitState.HALF_OPEN) {
+            log.warn("Circuit breaker transitioning back to OPEN");
+            circuitState = CircuitState.OPEN;
+            circuitOpenedAt = Instant.now();
+        }
+
+        log.error(
+                "Registration failure (attempt {}, circuit state: {}, cooldown: {})",
+                failures,
+                circuitState,
+                cooldown,
+                t);
+
+        if (minCooldownDuration.isZero()) {
+            executor.schedule(this::tryRegister, backoffMs, TimeUnit.MILLISECONDS);
+        } else {
+            enterCooldown(cooldown);
+        }
+        return CompletableFuture.completedFuture(null);
     }
 
     private long calculateBackoffMs() {

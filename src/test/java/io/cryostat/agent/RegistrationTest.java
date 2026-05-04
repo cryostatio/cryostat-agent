@@ -19,6 +19,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
+import java.net.URI;
 import java.time.Duration;
 import java.util.List;
 import java.util.Random;
@@ -103,13 +104,13 @@ class RegistrationTest {
         when(cryostat.serverHealth())
                 .thenReturn(
                         CompletableFuture.failedFuture(new RuntimeException("Connection failed")));
+        when(cryostat.credentialExists(1)).thenReturn(CompletableFuture.completedFuture(false));
         when(random.nextDouble()).thenReturn(0.5);
         when(executor.schedule(any(Runnable.class), anyLong(), any(TimeUnit.class)))
                 .thenReturn(null);
 
         ArgumentCaptor<Long> delayCaptor = ArgumentCaptor.forClass(Long.class);
 
-        // Trigger three failures
         registration.tryRegister();
         registration.tryRegister();
         registration.tryRegister();
@@ -129,7 +130,6 @@ class RegistrationTest {
                                 + " got %d",
                         REGISTRATION_RETRY_MS, firstDelay));
 
-        // Second failure - should apply exponential backoff
         long secondDelay = delays.get(1);
         long expectedSecondDelay = (long) (REGISTRATION_RETRY_MS * BACKOFF_MULTIPLIER);
         assertTrue(
@@ -140,7 +140,6 @@ class RegistrationTest {
                                 + " ~%d, got %d",
                         expectedSecondDelay, secondDelay));
 
-        // Third failure - should continue exponential backoff
         long thirdDelay = delays.get(2);
         long expectedThirdDelay = (long) (REGISTRATION_RETRY_MS * Math.pow(BACKOFF_MULTIPLIER, 2));
         assertTrue(
@@ -157,13 +156,13 @@ class RegistrationTest {
         when(cryostat.serverHealth())
                 .thenReturn(
                         CompletableFuture.failedFuture(new RuntimeException("Connection failed")));
+        when(cryostat.credentialExists(1)).thenReturn(CompletableFuture.completedFuture(false));
         when(random.nextDouble()).thenReturn(0.5);
         when(executor.schedule(any(Runnable.class), anyLong(), any(TimeUnit.class)))
                 .thenReturn(null);
 
         ArgumentCaptor<Long> delayCaptor = ArgumentCaptor.forClass(Long.class);
 
-        // Simulate many failures to reach max backoff
         for (int i = 0; i < 15; i++) {
             registration.tryRegister();
         }
@@ -171,7 +170,6 @@ class RegistrationTest {
         verify(executor, times(15))
                 .schedule(any(Runnable.class), delayCaptor.capture(), eq(TimeUnit.MILLISECONDS));
 
-        // Check that later delays don't exceed max backoff
         long lastDelay = delayCaptor.getAllValues().get(14);
         assertTrue(
                 lastDelay <= MAX_BACKOFF_MS * 1.1,
@@ -184,24 +182,21 @@ class RegistrationTest {
         when(cryostat.serverHealth())
                 .thenReturn(
                         CompletableFuture.failedFuture(new RuntimeException("Connection failed")));
+        when(cryostat.credentialExists(1)).thenReturn(CompletableFuture.completedFuture(false));
         when(random.nextDouble()).thenReturn(0.5);
         when(executor.schedule(any(Runnable.class), anyLong(), any(TimeUnit.class)))
                 .thenReturn(null);
 
-        // Trigger failures up to threshold
         for (int i = 0; i < CIRCUIT_BREAKER_THRESHOLD; i++) {
             registration.tryRegister();
         }
 
-        // Circuit should now be OPEN
-        // Next attempt should schedule with circuit breaker duration / 10
         registration.tryRegister();
 
         ArgumentCaptor<Long> delayCaptor = ArgumentCaptor.forClass(Long.class);
         verify(executor, atLeast(CIRCUIT_BREAKER_THRESHOLD + 1))
                 .schedule(any(Runnable.class), delayCaptor.capture(), eq(TimeUnit.MILLISECONDS));
 
-        // The last scheduled delay should be the circuit breaker check interval
         long lastDelay = delayCaptor.getAllValues().get(CIRCUIT_BREAKER_THRESHOLD);
         long expectedCircuitCheckDelay = CIRCUIT_BREAKER_DURATION.toMillis() / 10;
         assertEquals(
@@ -212,21 +207,17 @@ class RegistrationTest {
 
     @Test
     void testSuccessfulRegistrationResetsFailureCount() throws Exception {
-        // Since mocking a full successful registration is complex, we verify the
-        // behavior is correct by checking that the exponential backoff pattern
-        // is working as expected through the delay values.
-
         when(webServer.getCredentialId()).thenReturn(1);
         when(random.nextDouble()).thenReturn(0.5);
         when(cryostat.serverHealth())
                 .thenReturn(
                         CompletableFuture.failedFuture(new RuntimeException("Connection failed")));
+        when(cryostat.credentialExists(1)).thenReturn(CompletableFuture.completedFuture(false));
         when(executor.schedule(any(Runnable.class), anyLong(), any(TimeUnit.class)))
                 .thenReturn(null);
 
         ArgumentCaptor<Long> delayCaptor = ArgumentCaptor.forClass(Long.class);
 
-        // Trigger multiple failures to verify exponential backoff is working
         for (int i = 0; i < 5; i++) {
             registration.tryRegister();
         }
@@ -253,10 +244,10 @@ class RegistrationTest {
         when(cryostat.serverHealth())
                 .thenReturn(
                         CompletableFuture.failedFuture(new RuntimeException("Connection failed")));
+        when(cryostat.credentialExists(1)).thenReturn(CompletableFuture.completedFuture(false));
         when(executor.schedule(any(Runnable.class), anyLong(), any(TimeUnit.class)))
                 .thenReturn(null);
 
-        // Test with different random values to ensure jitter is applied
         when(random.nextDouble()).thenReturn(0.0, 0.5, 1.0);
 
         ArgumentCaptor<Long> delayCaptor = ArgumentCaptor.forClass(Long.class);
@@ -278,12 +269,11 @@ class RegistrationTest {
 
     @Test
     void testCircuitBreakerTransitionsToHalfOpen() throws Exception {
-        // This test would require time manipulation or a way to advance time
-        // For now, we verify the basic structure is in place
         when(webServer.getCredentialId()).thenReturn(1);
         when(cryostat.serverHealth())
                 .thenReturn(
                         CompletableFuture.failedFuture(new RuntimeException("Connection failed")));
+        when(cryostat.credentialExists(1)).thenReturn(CompletableFuture.completedFuture(false));
         when(random.nextDouble()).thenReturn(0.5);
         when(executor.schedule(any(Runnable.class), anyLong(), any(TimeUnit.class)))
                 .thenReturn(null);
@@ -447,5 +437,65 @@ class RegistrationTest {
                 scheduledDelay <= Duration.ofSeconds(30).toMillis(),
                 "Retry delay should be scheduled within the remaining minimum interval window");
         verify(cryostat, times(1)).serverHealth();
+    }
+
+    void testRegistrationFailureRetainsCredentialIdWhenCredentialStillExists() {
+        when(webServer.getCredentialId()).thenReturn(42);
+        when(cryostat.serverHealth())
+                .thenReturn(
+                        CompletableFuture.failedFuture(
+                                new RuntimeException("Server health failed")));
+        when(cryostat.credentialExists(42)).thenReturn(CompletableFuture.completedFuture(true));
+        when(random.nextDouble()).thenReturn(0.5);
+        when(executor.schedule(any(Runnable.class), anyLong(), any(TimeUnit.class)))
+                .thenReturn(null);
+
+        registration.tryRegister();
+
+        verify(webServer, never()).resetCredentialId();
+        verify(cryostat).credentialExists(42);
+        verify(cryostat, never()).register(anyInt(), any(), any(URI.class));
+        verify(executor).schedule(any(Runnable.class), anyLong(), eq(TimeUnit.MILLISECONDS));
+    }
+
+    @Test
+    void testRegistrationFailureResetsCredentialIdWhenServerHealthFailsAndCredentialIsMissing() {
+        when(webServer.getCredentialId()).thenReturn(42);
+        when(cryostat.serverHealth())
+                .thenReturn(
+                        CompletableFuture.failedFuture(
+                                new RuntimeException("Server health failed")));
+        when(cryostat.credentialExists(42)).thenReturn(CompletableFuture.completedFuture(false));
+        when(random.nextDouble()).thenReturn(0.5);
+        when(executor.schedule(any(Runnable.class), anyLong(), any(TimeUnit.class)))
+                .thenReturn(null);
+
+        registration.tryRegister();
+
+        verify(webServer).resetCredentialId();
+        verify(cryostat).credentialExists(42);
+        verify(cryostat, never()).register(anyInt(), any(), any(URI.class));
+        verify(executor).schedule(any(Runnable.class), anyLong(), eq(TimeUnit.MILLISECONDS));
+    }
+
+    @Test
+    void testRegistrationFailureRetainsCredentialIdWhenServerHealthFailsAndCredentialCheckFails() {
+        when(webServer.getCredentialId()).thenReturn(42);
+        when(cryostat.serverHealth())
+                .thenReturn(
+                        CompletableFuture.failedFuture(
+                                new RuntimeException("Server health failed")));
+        when(cryostat.credentialExists(42))
+                .thenReturn(CompletableFuture.failedFuture(new RuntimeException("Lookup failed")));
+        when(random.nextDouble()).thenReturn(0.5);
+        when(executor.schedule(any(Runnable.class), anyLong(), any(TimeUnit.class)))
+                .thenReturn(null);
+
+        registration.tryRegister();
+
+        verify(webServer, never()).resetCredentialId();
+        verify(cryostat).credentialExists(42);
+        verify(cryostat, never()).register(anyInt(), any(), any(URI.class));
+        verify(executor).schedule(any(Runnable.class), anyLong(), eq(TimeUnit.MILLISECONDS));
     }
 }

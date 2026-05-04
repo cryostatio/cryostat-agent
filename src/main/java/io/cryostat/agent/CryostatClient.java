@@ -26,6 +26,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
@@ -201,23 +202,30 @@ public class CryostatClient {
                                 return submitCredentials(prevId, credentials, callback);
                             });
         }
-        HttpGet req = new HttpGet(baseUri.resolve(CREDENTIALS_API_PATH + "/" + prevId));
-        log.trace("{}", req);
-        return supply(req, (res) -> logResponse(req, res))
-                .handle(
-                        (v, t) -> {
-                            if (t != null) {
-                                log.error("Failed to get credentials with ID " + prevId, t);
-                                throw new CompletionException(t);
-                            }
-                            return isOkStatus(v);
-                        })
+        return credentialExists(prevId)
                 .thenCompose(
                         exists -> {
                             if (exists) {
                                 return CompletableFuture.completedFuture(prevId);
                             }
                             return submitCredentials(prevId, credentials, callback);
+                        });
+    }
+
+    public CompletableFuture<Boolean> credentialExists(int credentialId) {
+        if (credentialId < 0) {
+            return CompletableFuture.completedFuture(false);
+        }
+        HttpGet req = new HttpGet(baseUri.resolve(CREDENTIALS_API_PATH + "/" + credentialId));
+        log.trace("{}", req);
+        return supply(req, (res) -> logResponse(req, res))
+                .handle(
+                        (v, t) -> {
+                            if (t != null) {
+                                log.error("Failed to get credentials with ID {}", credentialId, t);
+                                throw new CompletionException(t);
+                            }
+                            return isOkStatus(v);
                         })
                 .whenComplete((v, t) -> req.reset());
     }
@@ -262,6 +270,10 @@ public class CryostatClient {
     private CompletableFuture<Integer> submitCredentials(
             int prevId, Credentials credentials, URI callback) {
         HttpPost req = new HttpPost(baseUri.resolve(CREDENTIALS_API_PATH));
+        byte[] passwordCopy;
+        synchronized (credentials) {
+            passwordCopy = Arrays.copyOf(credentials.pass(), credentials.pass().length);
+        }
         MultipartEntityBuilder entityBuilder =
                 MultipartEntityBuilder.create()
                         .addPart(
@@ -274,7 +286,7 @@ public class CryostatClient {
                                 FormBodyPartBuilder.create(
                                                 "password",
                                                 new ByteArrayBody(
-                                                        credentials.pass(),
+                                                        passwordCopy,
                                                         ContentType.TEXT_PLAIN,
                                                         "pass"))
                                         .build())
@@ -334,7 +346,8 @@ public class CryostatClient {
                             credentialTracker.trackCreated(credId);
                             return CompletableFuture.completedFuture(credId);
                         })
-                .whenComplete((v, t) -> req.reset());
+                .whenComplete((v, t) -> req.reset())
+                .whenComplete((v, t) -> Arrays.fill(passwordCopy, (byte) 0));
     }
 
     public CompletableFuture<Void> deleteCredentials(int id) {
