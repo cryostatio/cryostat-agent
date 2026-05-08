@@ -140,4 +140,26 @@ class CredentialCleanupJobTest {
         verify(cryostatClient, times(MAX_RETRIES)).deleteCredentials(1);
         verify(tracker, times(1)).trackDeleted(1);
     }
+
+    @Test
+    void testCleanupOrphanedCredentialsHandles404AndDoesNotRetry() {
+        CredentialTracker tracker = new CredentialTracker();
+        tracker.trackCreated(1);
+        tracker.markForDeletion(1);
+
+        CredentialCleanupJob jobWithRealTracker =
+                new CredentialCleanupJob(
+                        executor, tracker, cryostat, CLEANUP_INTERVAL, MAX_RETRIES);
+
+        HttpException notFoundException = new HttpException(404, new RuntimeException("Not Found"));
+        when(cryostatClient.deleteCredentials(1))
+                .thenReturn(CompletableFuture.failedFuture(notFoundException));
+
+        // Run cleanup twice. Second time should not attempt deletion again
+        jobWithRealTracker.cleanupOrphanedCredentials();
+        jobWithRealTracker.cleanupOrphanedCredentials();
+
+        // Should only delete once
+        verify(cryostatClient, times(1)).deleteCredentials(1);
+    }
 }

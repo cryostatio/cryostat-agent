@@ -42,6 +42,7 @@ public class CredentialTracker {
 
     public void trackDeleted(int credentialId) {
         createdCredentials.remove(credentialId);
+        pendingDeletion.remove(credentialId);
         log.debug("Credential deleted: {}", credentialId);
     }
 
