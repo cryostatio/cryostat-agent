@@ -357,6 +357,7 @@ public class CryostatClient {
         HttpDelete req = new HttpDelete(baseUri.resolve(CREDENTIALS_API_PATH + "/" + id));
         log.trace("{}", req);
         return supply(req, (res) -> logResponse(req, res))
+                .thenApply(res -> assertOkStatus(req, res))
                 .whenComplete((v, t) -> req.reset())
                 .thenApply(res -> null);
     }
