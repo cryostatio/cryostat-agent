@@ -47,7 +47,7 @@ public class CredentialTracker {
     }
 
     public void markForDeletion(int credentialId) {
-        if (createdCredentials.contains(credentialId)) {
+        if (createdCredentials.contains(credentialId) && !pendingDeletion.contains(credentialId)) {
             pendingDeletion.offer(credentialId);
             log.debug("Marked credential for deletion: {}", credentialId);
         }
