@@ -30,6 +30,7 @@ import javax.inject.Named;
 import javax.inject.Singleton;
 
 import dagger.Lazy;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -115,13 +116,11 @@ public class CredentialCleanupJob {
                             .handle(
                                     (v, t) -> {
                                         if (t != null) {
-                                            Throwable cause = t;
-                                            while (cause.getCause() != null) {
-                                                cause = cause.getCause();
-                                            }
-                                            if (cause instanceof HttpException
-                                                    && ((HttpException) cause).statusCode()
-                                                            == 404) {
+                                            HttpException httpException =
+                                                    ExceptionUtils.throwableOfType(
+                                                            t, HttpException.class);
+                                            if (httpException != null
+                                                    && httpException.statusCode() == 404) {
                                                 log.debug(
                                                         "Credential {} was already deleted"
                                                                 + " remotely",
