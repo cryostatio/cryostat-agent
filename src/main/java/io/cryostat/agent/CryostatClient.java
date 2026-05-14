@@ -459,6 +459,11 @@ public class CryostatClient {
                         })
                 .whenComplete(
                         (v, t) -> {
+                            try {
+                                is.close();
+                            } catch (IOException ioe) {
+                                log.warn("Failed to close heap dump upload stream", ioe);
+                            }
                             // Heap dump files tend to be very large, clean up after uploading
                             try {
                                 Files.delete(heapDump);
@@ -549,7 +554,15 @@ public class CryostatClient {
                             assertOkStatus(req, res);
                             return (Void) null;
                         })
-                .whenComplete((v, t) -> req.reset());
+                .whenComplete(
+                        (v, t) -> {
+                            try {
+                                is.close();
+                            } catch (IOException ioe) {
+                                log.warn("Failed to close recording upload stream", ioe);
+                            }
+                            req.reset();
+                        });
     }
 
     private ClassicHttpResponse logResponse(HttpUriRequestBase req, ClassicHttpResponse res) {
