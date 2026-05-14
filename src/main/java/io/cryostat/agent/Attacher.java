@@ -42,10 +42,6 @@ class Attacher {
     static final String AUTO_ATTACH_PID = "0";
 
     void attach(Agent agent) throws Exception {
-        List<String> pids = getAttachPid(agent.pid);
-        if (pids.isEmpty()) {
-            throw new IllegalStateException("No candidate JVM PIDs");
-        }
         String agentmainArg =
                 new AgentArgs(
                                 agent.properties,
@@ -53,10 +49,16 @@ class Attacher {
                                         ",",
                                         Optional.ofNullable(agent.smartTriggers).orElse(List.of())))
                         .toAgentMain();
+
         if (agent.watch) {
             this.watchIncludeKeywords.addAll(agent.watchIncludeKeywords);
             startWatch(agentmainArg);
             return;
+        }
+
+        List<String> pids = getAttachPid(agent.pid);
+        if (pids.isEmpty()) {
+            throw new IllegalStateException("No candidate JVM PIDs");
         }
 
         List<VirtualMachineDescriptor> vmds = getAttachDescriptors(agent.pid);
