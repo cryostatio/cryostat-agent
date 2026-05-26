@@ -1,4 +1,4 @@
-FROM registry.access.redhat.com/ubi9-micro:9.8-1777876409
+FROM registry.access.redhat.com/ubi9-micro:9.8-1779773398
 ARG OUTDIR=/cryostat/agent
 COPY target/cryostat-agent-*-shaded.jar ${OUTDIR}/
 RUN ln -s ${OUTDIR}/cryostat-agent-*-shaded.jar ${OUTDIR}/cryostat-agent-shaded.jar
