@@ -20,7 +20,7 @@ on:
 
 jobs:
 
-  codequality:
+  spotless:
     if: ${{ github.repository_owner == 'cryostatio' }}
     runs-on: ubuntu-24.04
     steps:
@@ -37,6 +37,27 @@ jobs:
       with:
         step: restore
     - run: mvn spotless:check
+    - uses: skjolber/maven-cache-github-action@c4a30022e05fa8a86dde82cd8c1e49420d4a45dd # v3.1.2
+      with:
+        step: save
+
+  spotbugs:
+    if: ${{ github.repository_owner == 'cryostatio' }}
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      with:
+        repository: ${{ github.event.pull_request.head.repo.full_name }}
+        ref: ${{ github.event.pull_request.head.ref }}
+        submodules: true
+    - uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+      with:
+        distribution: 'temurin'
+        java-version: 21
+    - uses: skjolber/maven-cache-github-action@c4a30022e05fa8a86dde82cd8c1e49420d4a45dd # v3.1.2
+      with:
+        step: restore
+    - run: mvn clean compile spotbugs:check
     - uses: skjolber/maven-cache-github-action@c4a30022e05fa8a86dde82cd8c1e49420d4a45dd # v3.1.2
       with:
         step: save
@@ -68,7 +89,7 @@ jobs:
     - uses: skjolber/maven-cache-github-action@c4a30022e05fa8a86dde82cd8c1e49420d4a45dd # v3.1.2
       with:
         step: restore
-    - run: mvn -Dspotless.check.skip -Psnapshots -B -U clean verify
+    - run: mvn -Dspotless.check.skip -Dspotbugs.skip -Psnapshots -B -U clean verify
     - uses: skjolber/maven-cache-github-action@c4a30022e05fa8a86dde82cd8c1e49420d4a45dd # v3.1.2
       with:
         step: save
@@ -122,6 +143,7 @@ jobs:
         step: restore
     - run: |
         mvn -Dspotless.check.skip \
+            -Dspotbugs.skip \
             -DskipUnitTests=true \
             -Dcryostat.agent.shaded.jar=${{ steps.locate-jar.outputs.jar_path }} \
             -Psnapshots \
