@@ -176,7 +176,7 @@ public class ProcessTestHelper {
             Class<?> klazz, StringBuilder dummyStdout, StringBuilder dummyStderr) {
         String testClass = klazz.getCanonicalName();
         String testMethodName =
-                StackWalker.getInstance().walk(s -> s.skip(0).findFirst()).get().getMethodName();
+                StackWalker.getInstance().walk(s -> s.skip(1).findFirst()).get().getMethodName();
         System.out.println(String.format("%s#%s %s", testClass, testMethodName, "-".repeat(40)));
         System.out.println(
                 String.format("%s#%s stdout:%n%s", testClass, testMethodName, dummyStdout));
