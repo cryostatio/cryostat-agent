@@ -21,12 +21,10 @@ import java.net.URISyntaxException;
 import java.net.UnknownHostException;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Collection;
 import java.util.HashSet;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -40,7 +38,6 @@ import io.cryostat.agent.model.PluginInfo;
 import io.cryostat.agent.util.AppNameResolver;
 
 import org.apache.commons.lang3.StringUtils;
-import org.apache.hc.core5.net.URIBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -169,34 +166,9 @@ public class Registration {
                                         () -> notify(RegistrationEvent.State.UNREGISTERED),
                                         registrationRetryMs,
                                         TimeUnit.MILLISECONDS);
+                                break;
                             }
-                            executor.submit(
-                                    () -> {
-                                        webServer
-                                                .generateCredentials(callback)
-                                                .handle(
-                                                        (v, t) -> {
-                                                            if (t != null) {
-                                                                executor.schedule(
-                                                                        () ->
-                                                                                notify(
-                                                                                        RegistrationEvent
-                                                                                                .State
-                                                                                                .UNREGISTERED),
-                                                                        registrationRetryMs,
-                                                                        TimeUnit.MILLISECONDS);
-                                                                log.error(
-                                                                        "Failed to generate"
-                                                                                + " credentials",
-                                                                        t);
-                                                                throw new CompletionException(t);
-                                                            }
-                                                            notify(
-                                                                    RegistrationEvent.State
-                                                                            .REFRESHING);
-                                                            return v;
-                                                        });
-                                    });
+                            notify(RegistrationEvent.State.REFRESHING);
                             break;
                         case REGISTERED:
                             if (this.registrationCheckTask != null) {
@@ -317,14 +289,10 @@ public class Registration {
             }
         }
 
-        int credentialId = webServer.getCredentialId();
-        if (credentialId < 0) {
-            notify(RegistrationEvent.State.UNREGISTERED);
-            return;
-        }
-
         currentRegistration =
-                cryostat.serverHealth()
+                webServer
+                        .generateCredentials(callback)
+                        .thenCompose(v -> cryostat.serverHealth())
                         .thenCompose(
                                 health -> {
                                     Semver cryostatSemver = health.cryostatSemver();
@@ -347,22 +315,25 @@ public class Registration {
                                     }
 
                                     try {
-                                        URI credentialedCallback =
-                                                new URIBuilder(callback)
-                                                        .setUserInfo(
-                                                                "storedcredentials",
-                                                                String.valueOf(credentialId))
-                                                        .build();
+                                        Set<DiscoveryNode> selfNodes = defineSelf();
+                                        log.trace(
+                                                "registering and publishing self as {}",
+                                                selfNodes.stream()
+                                                        .map(n -> n.getTarget().getConnectUrl())
+                                                        .collect(Collectors.toList()));
                                         return cryostat.register(
-                                                credentialId, pluginInfo, credentialedCallback);
-                                    } catch (URISyntaxException e) {
+                                                callback,
+                                                webServer.getCredentialsSnapshot(),
+                                                selfNodes);
+                                    } catch (UnknownHostException | URISyntaxException e) {
                                         return CompletableFuture.failedFuture(e);
                                     }
                                 })
+                        .whenComplete((plugin, t) -> webServer.clearPlaintextCredentials())
                         .handle(
                                 (plugin, t) -> {
                                     if (t != null) {
-                                        return handleRegistrationFailure(credentialId, t);
+                                        return completeRegistrationFailure(t);
                                     }
 
                                     boolean previouslyRegistered = this.pluginInfo.isInitialized();
@@ -387,39 +358,11 @@ public class Registration {
                                         notify(RegistrationEvent.State.REFRESHED);
                                     } else {
                                         notify(RegistrationEvent.State.REGISTERED);
-                                        tryUpdate();
                                     }
+                                    notify(RegistrationEvent.State.PUBLISHED);
                                     return CompletableFuture.<Void>completedFuture(null);
                                 })
                         .thenCompose(f -> f);
-    }
-
-    private CompletableFuture<Void> handleRegistrationFailure(int credentialId, Throwable t) {
-        if (credentialId < 0) {
-            return completeRegistrationFailure(t);
-        }
-        return cryostat.credentialExists(credentialId)
-                .handle(
-                        (exists, checkError) -> {
-                            if (checkError != null) {
-                                log.warn(
-                                        "Unable to verify existence of credential ID {} after"
-                                                + " registration failure. Retaining local state",
-                                        credentialId,
-                                        checkError);
-                                return false;
-                            }
-                            if (!Boolean.TRUE.equals(exists)) {
-                                this.webServer.resetCredentialId();
-                                return true;
-                            }
-                            log.debug(
-                                    "Credential ID {} still exists remotely after registration"
-                                            + " failure. Retaining local state",
-                                    credentialId);
-                            return false;
-                        })
-                .thenCompose(v -> completeRegistrationFailure(t));
     }
 
     private CompletableFuture<Void> completeRegistrationFailure(Throwable t) {
@@ -582,42 +525,6 @@ public class Registration {
         return Duration.between(lastSuccessfulRegistration, Instant.now());
     }
 
-    private void tryUpdate() {
-        if (!this.pluginInfo.isInitialized()) {
-            log.warn("update attempted before initialized");
-            return;
-        }
-        Collection<DiscoveryNode> selfNodes;
-        try {
-            selfNodes = defineSelf();
-        } catch (UnknownHostException | URISyntaxException e) {
-            log.error("Unable to define self", e);
-            return;
-        }
-        log.trace(
-                "publishing self as {}",
-                selfNodes.stream()
-                        .map(n -> n.getTarget().getConnectUrl())
-                        .collect(Collectors.toList()));
-        cryostat.update(pluginInfo, selfNodes)
-                .handle(
-                        (n, t) -> {
-                            if (t != null) {
-                                log.error("Update failure", t);
-                                deregister();
-                            } else {
-                                log.trace("Publish success");
-                                notify(RegistrationEvent.State.PUBLISHED);
-                            }
-                            return (Void) null;
-                        })
-                .exceptionally(
-                        e -> {
-                            log.error("Failed to update", e);
-                            return null;
-                        });
-    }
-
     private Set<DiscoveryNode> defineSelf() throws UnknownHostException, URISyntaxException {
         Set<DiscoveryNode> discoveryNodes = new HashSet<>();
 
@@ -651,8 +558,7 @@ public class Registration {
                         javaMain,
                         startTime);
         discoveryNodes.add(
-                new DiscoveryNode(
-                        appName + "-agent-" + pluginInfo.getId(), AGENT_NODE_TYPE, httpSelf));
+                new DiscoveryNode(appName + "-agent-" + instanceId, AGENT_NODE_TYPE, httpSelf));
 
         if (!registrationJmxIgnore && jmxPort > 0) {
             uri =
@@ -675,8 +581,7 @@ public class Registration {
                             javaMain,
                             startTime);
             discoveryNodes.add(
-                    new DiscoveryNode(
-                            appName + "-jmx-" + pluginInfo.getId(), JMX_NODE_TYPE, jmxSelf));
+                    new DiscoveryNode(appName + "-jmx-" + instanceId, JMX_NODE_TYPE, jmxSelf));
         }
 
         return discoveryNodes;
@@ -694,8 +599,7 @@ public class Registration {
             log.warn("Deregistration requested before registration complete!");
             return CompletableFuture.completedFuture(null);
         }
-        return cryostat.deleteCredentials(webServer.getCredentialId())
-                .handle((v, t) -> cryostat.deregister(pluginInfo))
+        return cryostat.deregister(pluginInfo)
                 .handle(
                         (n, t) -> {
                             if (t != null) {

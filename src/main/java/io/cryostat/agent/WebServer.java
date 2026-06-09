@@ -27,7 +27,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.zip.DeflaterOutputStream;
@@ -50,11 +49,9 @@ class WebServer {
     private final Logger log = LoggerFactory.getLogger(getClass());
 
     private final Lazy<Set<RemoteContext>> remoteContexts;
-    private final Lazy<CryostatClient> cryostat;
     private final Credentials credentials;
     private final Lazy<Registration> registration;
     private HttpServer http;
-    private volatile int credentialId = -1;
     private final Object credentialGenerationLock = new Object();
     private CompletableFuture<Void> credentialGeneration;
 
@@ -77,14 +74,12 @@ class WebServer {
     WebServer(
             SecureRandom random,
             Lazy<Set<RemoteContext>> remoteContexts,
-            Lazy<CryostatClient> cryostat,
             HttpServer http,
             MessageDigest digest,
             String user,
             int passLength,
             Lazy<Registration> registration) {
         this.remoteContexts = remoteContexts;
-        this.cryostat = cryostat;
         this.http = http;
         this.credentials = new Credentials(random, digest, user, passLength);
         this.registration = registration;
@@ -180,11 +175,6 @@ class WebServer {
 
         return CompletableFuture.runAsync(
                         () -> {
-                            if (credentialId >= 0) {
-                                log.trace("Marking credential {} for deletion", credentialId);
-                                resetCredentialId();
-                            }
-
                             try {
                                 reg.deregister()
                                         .exceptionally(
@@ -209,14 +199,6 @@ class WebServer {
                         });
     }
 
-    int getCredentialId() {
-        return credentialId;
-    }
-
-    void resetCredentialId() {
-        this.credentialId = -1;
-    }
-
     CompletableFuture<Void> generateCredentials(URI callback) {
         synchronized (credentialGenerationLock) {
             if (this.credentialGeneration != null && !this.credentialGeneration.isDone()) {
@@ -225,39 +207,20 @@ class WebServer {
             }
 
             this.credentials.regenerate();
-            this.credentialGeneration =
-                    this.cryostat
-                            .get()
-                            .submitCredentialsIfRequired(
-                                    this.credentialId,
-                                    this.credentials,
-                                    Objects.requireNonNull(callback))
-                            .handle(
-                                    (v, t) -> {
-                                        this.credentials.clear();
-                                        if (t != null) {
-                                            this.resetCredentialId();
-                                            log.error("Could not submit credentials", t);
-                                            throw new CompletionException(
-                                                    "Could not submit credentials", t);
-                                        }
-                                        return v;
-                                    })
-                            .thenAccept(
-                                    i -> {
-                                        this.credentialId = i;
-                                        log.trace("Defined credentials with id {}", i);
-                                    })
-                            .whenComplete(
-                                    (v, t) -> {
-                                        synchronized (credentialGenerationLock) {
-                                            if (this.credentialGeneration != null
-                                                    && this.credentialGeneration.isDone()) {
-                                                this.credentialGeneration = null;
-                                            }
-                                        }
-                                    });
+            Objects.requireNonNull(callback);
+            this.credentialGeneration = CompletableFuture.completedFuture(null);
             return this.credentialGeneration;
+        }
+    }
+
+    CredentialsSnapshot getCredentialsSnapshot() {
+        return this.credentials.snapshot();
+    }
+
+    void clearPlaintextCredentials() {
+        this.credentials.clear();
+        synchronized (credentialGenerationLock) {
+            this.credentialGeneration = null;
         }
     }
 
@@ -479,6 +442,31 @@ class WebServer {
 
         private byte[] hash(byte[] bytes) {
             return digest.digest(bytes);
+        }
+
+        synchronized CredentialsSnapshot snapshot() {
+            if (passHash.length == 0) {
+                throw new IllegalStateException("credentials have not been generated");
+            }
+            return new CredentialsSnapshot(user, Arrays.copyOf(pass, pass.length));
+        }
+    }
+
+    static class CredentialsSnapshot {
+        private final String user;
+        private final byte[] pass;
+
+        CredentialsSnapshot(String user, byte[] pass) {
+            this.user = user;
+            this.pass = Arrays.copyOf(pass, pass.length);
+        }
+
+        String user() {
+            return user;
+        }
+
+        byte[] pass() {
+            return Arrays.copyOf(pass, pass.length);
         }
     }
 }

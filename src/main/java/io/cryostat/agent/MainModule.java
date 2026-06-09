@@ -173,15 +173,13 @@ public abstract class MainModule {
     public static WebServer provideWebServer(
             SecureRandom random,
             Lazy<Set<RemoteContext>> remoteContexts,
-            Lazy<CryostatClient> cryostat,
             HttpServer http,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_CREDENTIALS_PASS_HASH_FUNCTION)
                     MessageDigest digest,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_CREDENTIALS_USER) String user,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_CREDENTIALS_PASS_LENGTH) int passLength,
             Lazy<Registration> registration) {
-        return new WebServer(
-                random, remoteContexts, cryostat, http, digest, user, passLength, registration);
+        return new WebServer(random, remoteContexts, http, digest, user, passLength, registration);
     }
 
     private static Optional<CharBuffer> readPass(
@@ -802,29 +800,10 @@ public abstract class MainModule {
 
     @Provides
     @Singleton
-    public static CredentialTracker provideCredentialTracker() {
-        return new CredentialTracker();
-    }
-
-    @Provides
-    @Singleton
-    public static CredentialCleanupJob provideCredentialCleanupJob(
-            ScheduledExecutorService executor,
-            CredentialTracker tracker,
-            Lazy<CryostatClient> cryostat,
-            @Named(ConfigModule.CRYOSTAT_AGENT_CREDENTIAL_CLEANUP_INTERVAL)
-                    Duration cleanupInterval,
-            @Named(ConfigModule.CRYOSTAT_AGENT_CREDENTIAL_CLEANUP_MAX_RETRIES) int maxRetries) {
-        return new CredentialCleanupJob(executor, tracker, cryostat, cleanupInterval, maxRetries);
-    }
-
-    @Provides
-    @Singleton
     public static CryostatClient provideCryostatClient(
             ScheduledExecutorService executor,
             ObjectMapper objectMapper,
             HttpClient http,
-            CredentialTracker credentialTracker,
             @Named(ConfigModule.CRYOSTAT_AGENT_INSTANCE_ID) String instanceId,
             @Named(JVM_ID) String jvmId,
             @Named(ConfigModule.CRYOSTAT_AGENT_APP_NAME) String appName,
@@ -837,7 +816,6 @@ public abstract class MainModule {
                 executor,
                 objectMapper,
                 http,
-                credentialTracker,
                 instanceId,
                 jvmId,
                 appName,
