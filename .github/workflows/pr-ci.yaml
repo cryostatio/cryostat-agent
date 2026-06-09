@@ -72,3 +72,60 @@ jobs:
     - uses: skjolber/maven-cache-github-action@c4a30022e05fa8a86dde82cd8c1e49420d4a45dd # v3.1.2
       with:
         step: save
+    - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.0
+      with:
+        name: cryostat-agent-${{ matrix.arch }}-jdk${{ matrix.JVM_version }}
+        path: target/*-shaded.jar
+        retention-days: 7
+
+  integration-test:
+    if: ${{ github.repository_owner == 'cryostatio' }}
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - amd64
+          - arm64
+        JVM_version:
+          - '11'
+          - '17'
+          - '21'
+          - '25'
+    runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
+    steps:
+    - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      with:
+        repository: ${{ github.event.pull_request.head.repo.full_name }}
+        ref: ${{ github.event.pull_request.head.ref }}
+        submodules: true
+    - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      with:
+        name: cryostat-agent-${{ matrix.arch }}-jdk${{ matrix.JVM_version }}
+        path: target/
+    - name: Locate downloaded artifact
+      id: locate-jar
+      run: |
+        JAR_PATH=$(find target -name '*-shaded.jar' -type f | head -n 1)
+        echo "jar_path=$JAR_PATH" >> $GITHUB_OUTPUT
+        echo "Found artifact at: $JAR_PATH"
+        ls -lh "$JAR_PATH"
+    - uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+      with:
+        distribution: 'temurin'
+        java-version: ${{ matrix.JVM_version }}
+        java-package: jre
+    - uses: skjolber/maven-cache-github-action@c4a30022e05fa8a86dde82cd8c1e49420d4a45dd # v3.1.2
+      with:
+        step: restore
+    - run: |
+        mvn -Dspotless.check.skip \
+            -DskipTests \
+            -Dcryostat.agent.shaded.jar=${{ steps.locate-jar.outputs.jar_path }} \
+            -Psnapshots \
+            -B \
+            failsafe:integration-test \
+            failsafe:verify
+    - uses: skjolber/maven-cache-github-action@c4a30022e05fa8a86dde82cd8c1e49420d4a45dd # v3.1.2
+      with:
+        step: save
