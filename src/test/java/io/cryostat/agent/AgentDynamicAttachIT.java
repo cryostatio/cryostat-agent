@@ -26,7 +26,6 @@ import org.hamcrest.Matchers;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.DisabledIfEnvironmentVariable;
 
 class AgentDynamicAttachIT {
 
@@ -46,7 +45,6 @@ class AgentDynamicAttachIT {
     }
 
     @Test
-    @DisabledIfEnvironmentVariable(named = "JAVA_PACKAGE_TYPE", matches = "jre")
     void testAgentDynamicAttachToSeparateProcess() throws Exception {
         StringBuilder dummyStdout = new StringBuilder();
         StringBuilder dummyStderr = new StringBuilder();

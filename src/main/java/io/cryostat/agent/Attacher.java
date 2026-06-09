@@ -15,7 +15,7 @@
  */
 package io.cryostat.agent;
 
-import java.io.IOException;
+import java.io.File;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.file.Path;
@@ -30,13 +30,12 @@ import java.util.stream.Collectors;
 
 import io.cryostat.agent.shaded.ShadeLogger;
 
-import com.sun.tools.attach.VirtualMachine;
-import com.sun.tools.attach.VirtualMachineDescriptor;
+import net.bytebuddy.agent.ByteBuddyAgent;
 
 class Attacher {
 
     private final Set<String> watchIncludeKeywords = new HashSet<>();
-    private final Set<VirtualMachineDescriptor> watchedDescriptors = new HashSet<>();
+    private final Set<JavaProcessInfo> watchedDescriptors = new HashSet<>();
 
     static final String ALL_PIDS = "*";
     static final String AUTO_ATTACH_PID = "0";
@@ -59,7 +58,7 @@ class Attacher {
             return;
         }
 
-        List<VirtualMachineDescriptor> vmds = getAttachDescriptors(agent.pid);
+        List<JavaProcessInfo> vmds = getAttachDescriptors(agent.pid);
         if (vmds.isEmpty()) {
             throw new IllegalStateException("No candidate JVM PIDs");
         }
@@ -67,7 +66,7 @@ class Attacher {
     }
 
     private void startWatch(String agentMainArg) throws Exception {
-        Predicate<VirtualMachineDescriptor> p =
+        Predicate<JavaProcessInfo> p =
                 (watchIncludeKeywords == null || watchIncludeKeywords.isEmpty())
                         ? v -> true
                         : v ->
@@ -80,7 +79,7 @@ class Attacher {
                                                                 .strip()
                                                                 .contains(k.toLowerCase().strip()));
         while (!Thread.currentThread().isInterrupted()) {
-            Set<VirtualMachineDescriptor> observedDescriptors =
+            Set<JavaProcessInfo> observedDescriptors =
                     getAttachDescriptors(ALL_PIDS).stream().filter(p).collect(Collectors.toSet());
             observedDescriptors.removeAll(watchedDescriptors);
             tryAttachToDescriptors(agentMainArg, observedDescriptors, true);
@@ -89,9 +88,9 @@ class Attacher {
         }
     }
 
-    private static List<VirtualMachineDescriptor> getAttachDescriptors(String pidSpec) {
-        List<VirtualMachineDescriptor> vms = VirtualMachine.list();
-        Predicate<VirtualMachineDescriptor> vmFilter;
+    private static List<JavaProcessInfo> getAttachDescriptors(String pidSpec) {
+        List<JavaProcessInfo> vms = ProcessDiscovery.listJavaProcesses();
+        Predicate<JavaProcessInfo> vmFilter;
         if (ALL_PIDS.equals(pidSpec)) {
             long ownId = ProcessHandle.current().pid();
             vmFilter = vmd -> !Objects.equals(String.valueOf(ownId), vmd.id());
@@ -118,14 +117,11 @@ class Attacher {
     }
 
     private void tryAttachToDescriptors(
-            String agentMainArg,
-            Collection<VirtualMachineDescriptor> vmds,
-            boolean suppressFailures)
+            String agentMainArg, Collection<JavaProcessInfo> vmds, boolean suppressFailures)
             throws Exception {
-        for (VirtualMachineDescriptor vmd : vmds) {
-            VirtualMachine vm = null;
+        for (JavaProcessInfo vmd : vmds) {
             try {
-                vm = tryAttachToDescriptor(agentMainArg, vmd);
+                tryAttachToDescriptor(agentMainArg, vmd);
             } catch (Exception e) {
                 if (suppressFailures) {
                     ShadeLogger.getAnonymousLogger()
@@ -135,33 +131,22 @@ class Attacher {
                 } else {
                     throw e;
                 }
-            } finally {
-                if (vm != null) {
-                    try {
-                        vm.detach();
-                    } catch (IOException ioe) {
-                        ioe.printStackTrace();
-                    }
-                }
             }
         }
     }
 
-    private VirtualMachine tryAttachToDescriptor(String agentmainArg, VirtualMachineDescriptor vmd)
-            throws Exception {
-        VirtualMachine vm;
+    private void tryAttachToDescriptor(String agentmainArg, JavaProcessInfo vmd) throws Exception {
         ShadeLogger.getAnonymousLogger()
                 .fine(String.format("Attaching to VM: %s %s", vmd.displayName(), vmd.id()));
-        vm = VirtualMachine.attach(vmd.id());
+        File agentJar = new File(Path.of(selfJarLocation()).toAbsolutePath().toString());
         ShadeLogger.getAnonymousLogger()
                 .fine(String.format("Injecting agent into PID %s", vmd.id()));
-        vm.loadAgent(Path.of(selfJarLocation()).toAbsolutePath().toString(), agentmainArg);
-        return vm;
+        ByteBuddyAgent.attach(agentJar, vmd.id(), agentmainArg);
     }
 
     private static List<String> getAttachPid(String pidSpec) {
-        List<VirtualMachineDescriptor> vms = VirtualMachine.list();
-        Predicate<VirtualMachineDescriptor> vmFilter;
+        List<JavaProcessInfo> vms = ProcessDiscovery.listJavaProcesses();
+        Predicate<JavaProcessInfo> vmFilter;
         if (ALL_PIDS.equals(pidSpec)) {
             vmFilter = vmd -> true;
         } else if (pidSpec == null || AUTO_ATTACH_PID.equals(pidSpec)) {
@@ -192,7 +177,7 @@ class Attacher {
                                                 String.format(
                                                         "Attaching to VM: %s %s",
                                                         vmd.displayName(), vmd.id())))
-                .map(VirtualMachineDescriptor::id)
+                .map(JavaProcessInfo::id)
                 .collect(Collectors.toList());
     }
 

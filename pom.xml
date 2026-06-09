@@ -91,6 +91,7 @@
   <com.google.protobuf-java.version>4.31.1</com.google.protobuf-java.version>
   <info.picocli.version>4.7.7</info.picocli.version>
   <com.redhat.insights.agent.version>1.0.3</com.redhat.insights.agent.version>
+  <net.bytebuddy.version>1.14.19</net.bytebuddy.version>
 
   <com.github.spotbugs.version>4.10.1</com.github.spotbugs.version>
   <com.github.spotbugs.plugin.version>4.9.8.4</com.github.spotbugs.plugin.version>
@@ -233,6 +234,11 @@
         <artifactId>jdk.tools</artifactId>
       </exclusion>
     </exclusions>
+  </dependency>
+  <dependency>
+    <groupId>net.bytebuddy</groupId>
+    <artifactId>byte-buddy-agent</artifactId>
+    <version>${net.bytebuddy.version}</version>
   </dependency>
 
   <!-- test deps -->
@@ -385,6 +391,10 @@
               <relocation>
                 <pattern>picocli</pattern>
                 <shadedPattern>${shade.prefix}.picocli</shadedPattern>
+              </relocation>
+              <relocation>
+                <pattern>net.bytebuddy</pattern>
+                <shadedPattern>${shade.prefix}.net.bytebuddy</shadedPattern>
               </relocation>
             </relocations>
             <transformers>
