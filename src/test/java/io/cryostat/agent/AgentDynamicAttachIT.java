@@ -26,6 +26,7 @@ import org.hamcrest.Matchers;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIf;
 
 class AgentDynamicAttachIT {
 
@@ -44,7 +45,15 @@ class AgentDynamicAttachIT {
         }
     }
 
+    static boolean isJdkAvailable() {
+        String javaPackageType = System.getenv("JAVA_PACKAGE_TYPE");
+        return javaPackageType == null
+                || javaPackageType.isEmpty()
+                || "jdk".equalsIgnoreCase(javaPackageType);
+    }
+
     @Test
+    @EnabledIf("isJdkAvailable")
     void testAgentDynamicAttachToSeparateProcess() throws Exception {
         StringBuilder dummyStdout = new StringBuilder();
         StringBuilder dummyStderr = new StringBuilder();

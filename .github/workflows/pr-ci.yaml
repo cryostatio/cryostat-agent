@@ -90,6 +90,8 @@ jobs:
       with:
         step: restore
     - run: mvn -Dspotless.check.skip -Dspotbugs.skip -Psnapshots -B -U clean verify
+      env:
+        JAVA_PACKAGE_TYPE: jdk
     - uses: skjolber/maven-cache-github-action@c4a30022e05fa8a86dde82cd8c1e49420d4a45dd # v3.1.2
       with:
         step: save
@@ -150,6 +152,8 @@ jobs:
             -B \
             failsafe:integration-test \
             failsafe:verify
+      env:
+        JAVA_PACKAGE_TYPE: jre
     - uses: skjolber/maven-cache-github-action@c4a30022e05fa8a86dde82cd8c1e49420d4a45dd # v3.1.2
       with:
         step: save
