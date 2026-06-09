@@ -171,4 +171,17 @@ public class ProcessTestHelper {
         }
         return false;
     }
+
+    public static void printStreams(
+            Class<?> klazz, StringBuilder dummyStdout, StringBuilder dummyStderr) {
+        String testClass = klazz.getCanonicalName();
+        String testMethodName =
+                StackWalker.getInstance().walk(s -> s.skip(0).findFirst()).get().getMethodName();
+        System.out.println(String.format("%s#%s %s", testClass, testMethodName, "-".repeat(40)));
+        System.out.println(
+                String.format("%s#%s stdout:%n%s", testClass, testMethodName, dummyStdout));
+        System.out.println(
+                String.format("%s#%s stderr:%n%s", testClass, testMethodName, dummyStderr));
+        System.out.println(String.format("%s#%s %s", testClass, testMethodName, "-".repeat(40)));
+    }
 }
