@@ -54,9 +54,6 @@ jobs:
           - '17'
           - '21'
           - '25'
-        JVM_type:
-          - jdk
-          - jre
     runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
     steps:
     - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -68,7 +65,6 @@ jobs:
       with:
         distribution: 'temurin'
         java-version: ${{ matrix.JVM_version }}
-        java-package: ${{ matrix.JVM_type }}
     - uses: skjolber/maven-cache-github-action@c4a30022e05fa8a86dde82cd8c1e49420d4a45dd # v3.1.2
       with:
         step: restore
