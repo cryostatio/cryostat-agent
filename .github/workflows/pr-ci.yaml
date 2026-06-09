@@ -120,7 +120,7 @@ jobs:
         step: restore
     - run: |
         mvn -Dspotless.check.skip \
-            -DskipTests \
+            -DskipUnitTests=true \
             -Dcryostat.agent.shaded.jar=${{ steps.locate-jar.outputs.jar_path }} \
             -Psnapshots \
             -B \
