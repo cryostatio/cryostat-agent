@@ -75,7 +75,9 @@ jobs:
     - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.0
       with:
         name: cryostat-agent-${{ matrix.arch }}-jdk${{ matrix.JVM_version }}
-        path: target/*-shaded.jar
+        path: |
+          target/*-shaded.jar
+          target/test-classes/
         retention-days: 7
 
   integration-test:
@@ -124,7 +126,6 @@ jobs:
             -Dcryostat.agent.shaded.jar=${{ steps.locate-jar.outputs.jar_path }} \
             -Psnapshots \
             -B \
-            test-compile \
             failsafe:integration-test \
             failsafe:verify
     - uses: skjolber/maven-cache-github-action@c4a30022e05fa8a86dde82cd8c1e49420d4a45dd # v3.1.2
