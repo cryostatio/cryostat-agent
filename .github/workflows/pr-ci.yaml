@@ -124,6 +124,7 @@ jobs:
             -Dcryostat.agent.shaded.jar=${{ steps.locate-jar.outputs.jar_path }} \
             -Psnapshots \
             -B \
+            test-compile \
             failsafe:integration-test \
             failsafe:verify
     - uses: skjolber/maven-cache-github-action@c4a30022e05fa8a86dde82cd8c1e49420d4a45dd # v3.1.2
