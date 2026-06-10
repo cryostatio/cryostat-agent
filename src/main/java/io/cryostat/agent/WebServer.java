@@ -40,6 +40,7 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 import dagger.Lazy;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.apache.hc.core5.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -452,13 +453,15 @@ class WebServer {
         }
     }
 
-    static class CredentialsSnapshot {
+    @SuppressFBWarnings("EI_EXPOSE_REP2")
+    static class CredentialsSnapshot implements AutoCloseable {
         private final String user;
         private final byte[] pass;
 
+        // takes ownership of the pass buffer, which is zeroed on close()
         CredentialsSnapshot(String user, byte[] pass) {
             this.user = user;
-            this.pass = Arrays.copyOf(pass, pass.length);
+            this.pass = pass;
         }
 
         String user() {
@@ -467,6 +470,11 @@ class WebServer {
 
         byte[] pass() {
             return Arrays.copyOf(pass, pass.length);
+        }
+
+        @Override
+        public void close() {
+            Arrays.fill(pass, (byte) 0);
         }
     }
 }

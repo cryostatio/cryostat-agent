@@ -321,10 +321,10 @@ public class Registration {
                                                 selfNodes.stream()
                                                         .map(n -> n.getTarget().getConnectUrl())
                                                         .collect(Collectors.toList()));
-                                        return cryostat.register(
-                                                callback,
-                                                webServer.getCredentialsSnapshot(),
-                                                selfNodes);
+                                        WebServer.CredentialsSnapshot credentials =
+                                                webServer.getCredentialsSnapshot();
+                                        return cryostat.register(callback, credentials, selfNodes)
+                                                .whenComplete((v, t) -> credentials.close());
                                     } catch (UnknownHostException | URISyntaxException e) {
                                         return CompletableFuture.failedFuture(e);
                                     }

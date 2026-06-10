@@ -20,7 +20,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -47,8 +46,12 @@ import io.cryostat.agent.model.PluginInfo;
 import io.cryostat.agent.model.ServerHealth;
 import io.cryostat.agent.triggers.TriggerEvaluator.SmartTriggerUpdate;
 
+import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonSerializer;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializerProvider;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import jdk.jfr.Recording;
 import org.apache.commons.io.FileUtils;
@@ -66,6 +69,7 @@ import org.apache.hc.client5.http.entity.mime.StringBody;
 import org.apache.hc.core5.http.ClassicHttpResponse;
 import org.apache.hc.core5.http.ContentType;
 import org.apache.hc.core5.http.HttpHost;
+import org.apache.hc.core5.http.io.entity.ByteArrayEntity;
 import org.apache.hc.core5.http.io.entity.StringEntity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -73,7 +77,7 @@ import org.slf4j.LoggerFactory;
 public class CryostatClient {
 
     private static final String DISCOVERY_API_PATH = "/api/v4/discovery";
-    private static final String AGENT_REGISTRATION_API_PATH = "/api/v4/discovery/agents";
+    private static final String AGENT_REGISTRATION_API_PATH = "/api/v4.3/discovery/agents";
     private static final String DISCOVERY_PUBLISH_API_PATH = "/api/v4.2/discovery";
     private static final String DISCOVERY_TOKEN_HEADER = "Cryostat-Discovery-Authentication";
 
@@ -145,7 +149,7 @@ public class CryostatClient {
 
     public CompletableFuture<PluginInfo> register(
             URI callback, CredentialsSnapshot credentials, Collection<DiscoveryNode> subtree) {
-        byte[] passwordCopy = Arrays.copyOf(credentials.pass(), credentials.pass().length);
+        byte[] passwordCopy = credentials.pass();
         try {
             DiscoveryPublication publication =
                     new DiscoveryPublication(discoveryPublication, subtree);
@@ -156,15 +160,14 @@ public class CryostatClient {
                             new AgentCredential(
                                     selfMatchExpression(callback),
                                     credentials.user(),
-                                    new String(passwordCopy, StandardCharsets.US_ASCII)),
+                                    passwordCopy),
                             publication.getNodes(),
                             publication.getFillStrategy(),
                             publication.getContext());
             HttpPost req = new HttpPost(baseUri.resolve(AGENT_REGISTRATION_API_PATH));
             log.trace("{}", req);
-            req.setEntity(
-                    new StringEntity(
-                            mapper.writeValueAsString(registration), ContentType.APPLICATION_JSON));
+            byte[] body = mapper.writeValueAsBytes(registration);
+            req.setEntity(new ByteArrayEntity(body, ContentType.APPLICATION_JSON));
             return supply(req, (res) -> logResponse(req, res))
                     .thenApply(res -> assertOkStatus(req, res))
                     .thenApply(
@@ -177,10 +180,13 @@ public class CryostatClient {
                                 }
                             })
                     .whenComplete((v, t) -> req.reset())
-                    .whenComplete((v, t) -> Arrays.fill(passwordCopy, (byte) 0));
+                    .whenComplete((v, t) -> Arrays.fill(body, (byte) 0));
         } catch (JsonProcessingException e) {
-            Arrays.fill(passwordCopy, (byte) 0);
             return CompletableFuture.failedFuture(e);
+        } finally {
+            // the serialized request body holds its own copy of the password, so the
+            // buffer can be cleared as soon as serialization has happened (or failed)
+            Arrays.fill(passwordCopy, (byte) 0);
         }
     }
 
@@ -486,12 +492,13 @@ public class CryostatClient {
         }
     }
 
+    @SuppressFBWarnings("EI_EXPOSE_REP2")
     static class AgentCredential {
         private final String matchExpression;
         private final String username;
-        private final String password;
+        private final byte[] password;
 
-        AgentCredential(String matchExpression, String username, String password) {
+        AgentCredential(String matchExpression, String username, byte[] password) {
             this.matchExpression = matchExpression;
             this.username = username;
             this.password = password;
@@ -505,8 +512,28 @@ public class CryostatClient {
             return username;
         }
 
-        public String getPassword() {
+        @SuppressFBWarnings("EI_EXPOSE_REP")
+        @JsonSerialize(using = PasswordSerializer.class)
+        public byte[] getPassword() {
             return password;
+        }
+    }
+
+    // writes the password bytes as a JSON string field without constructing an intermediate
+    // String, so the only unmanaged plaintext copies are the serializer's transient buffers
+    static class PasswordSerializer extends JsonSerializer<byte[]> {
+        @Override
+        public void serialize(byte[] value, JsonGenerator gen, SerializerProvider serializers)
+                throws IOException {
+            char[] chars = new char[value.length];
+            for (int i = 0; i < value.length; i++) {
+                chars[i] = (char) (value[i] & 0xff);
+            }
+            try {
+                gen.writeString(chars, 0, chars.length);
+            } finally {
+                Arrays.fill(chars, (char) 0);
+            }
         }
     }
 

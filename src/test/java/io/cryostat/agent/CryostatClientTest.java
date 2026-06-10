@@ -124,7 +124,7 @@ class CryostatClientTest {
 
         ArgumentCaptor<HttpPost> requestCaptor = ArgumentCaptor.forClass(HttpPost.class);
         verify(http).execute(any(HttpHost.class), requestCaptor.capture());
-        assertEquals("/api/v4/discovery/agents", requestCaptor.getValue().getUri().getPath());
+        assertEquals("/api/v4.3/discovery/agents", requestCaptor.getValue().getUri().getPath());
 
         JsonNode requestBody = mapper.readTree(submittedRequestBody.get());
         assertEquals(REALM, requestBody.get("realm").asText());
