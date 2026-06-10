@@ -72,13 +72,26 @@ class WebServerTest {
     }
 
     @Test
-    void testClearPlaintextCredentialsClearsGeneratedPassword() throws Exception {
+    void testSnapshotAfterClearPlaintextCredentialsThrows() throws Exception {
         URI callback = URI.create("http://agent.example.com:9977");
 
         webServer.generateCredentials(callback).get();
         webServer.clearPlaintextCredentials();
 
+        assertThrows(IllegalStateException.class, webServer::getCredentialsSnapshot);
+    }
+
+    @Test
+    void testSnapshotClearsPlaintextAndKeepsItsOwnCopy() throws Exception {
+        URI callback = URI.create("http://agent.example.com:9977");
+
+        webServer.generateCredentials(callback).get();
+
         WebServer.CredentialsSnapshot snapshot = webServer.getCredentialsSnapshot();
+        assertFalse(Arrays.equals(new byte[16], snapshot.pass()));
+        assertThrows(IllegalStateException.class, webServer::getCredentialsSnapshot);
+
+        snapshot.close();
         assertArrayEquals(new byte[16], snapshot.pass());
     }
 }

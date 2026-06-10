@@ -40,7 +40,6 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 import dagger.Lazy;
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.apache.hc.core5.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -395,6 +394,7 @@ class WebServer {
         private final String user;
         private final byte[] pass;
         private byte[] passHash = new byte[0];
+        private boolean plaintextCleared = true;
 
         Credentials(SecureRandom random, MessageDigest digest, String user, int passLength) {
             this.random = random;
@@ -414,18 +414,16 @@ class WebServer {
                 this.pass[idx] = randomAscii();
             }
             this.passHash = hash(this.pass);
+            this.plaintextCleared = false;
         }
 
         String user() {
             return user;
         }
 
-        synchronized byte[] pass() {
-            return pass;
-        }
-
         synchronized void clear() {
             Arrays.fill(this.pass, (byte) 0);
+            this.plaintextCleared = true;
         }
 
         private byte randomAscii() {
@@ -449,19 +447,22 @@ class WebServer {
             if (passHash.length == 0) {
                 throw new IllegalStateException("credentials have not been generated");
             }
-            return new CredentialsSnapshot(user, Arrays.copyOf(pass, pass.length));
+            if (plaintextCleared) {
+                throw new IllegalStateException("plaintext credentials have already been cleared");
+            }
+            CredentialsSnapshot snapshot = new CredentialsSnapshot(user, pass);
+            clear();
+            return snapshot;
         }
     }
 
-    @SuppressFBWarnings("EI_EXPOSE_REP2")
     static class CredentialsSnapshot implements AutoCloseable {
         private final String user;
         private final byte[] pass;
 
-        // takes ownership of the pass buffer, which is zeroed on close()
         CredentialsSnapshot(String user, byte[] pass) {
             this.user = user;
-            this.pass = pass;
+            this.pass = Arrays.copyOf(pass, pass.length);
         }
 
         String user() {

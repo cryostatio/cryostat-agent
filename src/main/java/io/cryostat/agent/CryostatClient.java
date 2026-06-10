@@ -76,6 +76,12 @@ import org.slf4j.LoggerFactory;
 
 public class CryostatClient {
 
+    /*
+     * NOTE: if any new API paths are added here, or existing ones changed, the Cryostat
+     * Operator's nginx agent proxy allowlist (AllowedPathPrefixes in
+     * internal/controller/configmaps.go) must be updated to match.
+     * See https://github.com/cryostatio/cryostat-agent/issues/907
+     */
     private static final String DISCOVERY_API_PATH = "/api/v4/discovery";
     private static final String AGENT_REGISTRATION_API_PATH = "/api/v4.3/discovery/agents";
     private static final String DISCOVERY_PUBLISH_API_PATH = "/api/v4.2/discovery";
@@ -492,7 +498,6 @@ public class CryostatClient {
         }
     }
 
-    @SuppressFBWarnings("EI_EXPOSE_REP2")
     static class AgentCredential {
         private final String matchExpression;
         private final String username;
@@ -512,7 +517,6 @@ public class CryostatClient {
             return username;
         }
 
-        @SuppressFBWarnings("EI_EXPOSE_REP")
         @JsonSerialize(using = PasswordSerializer.class)
         public byte[] getPassword() {
             return password;
