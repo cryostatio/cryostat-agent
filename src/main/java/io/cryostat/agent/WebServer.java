@@ -394,7 +394,6 @@ class WebServer {
         private final String user;
         private final byte[] pass;
         private byte[] passHash = new byte[0];
-        private boolean plaintextCleared = true;
 
         Credentials(SecureRandom random, MessageDigest digest, String user, int passLength) {
             this.random = random;
@@ -414,7 +413,6 @@ class WebServer {
                 this.pass[idx] = randomAscii();
             }
             this.passHash = hash(this.pass);
-            this.plaintextCleared = false;
         }
 
         String user() {
@@ -423,7 +421,17 @@ class WebServer {
 
         synchronized void clear() {
             Arrays.fill(this.pass, (byte) 0);
-            this.plaintextCleared = true;
+        }
+
+        // generated passwords contain only printable ASCII, so an all-zero buffer can only
+        // mean the plaintext has been cleared
+        private boolean isPlaintextCleared() {
+            for (byte b : pass) {
+                if (b != 0) {
+                    return false;
+                }
+            }
+            return true;
         }
 
         private byte randomAscii() {
@@ -447,7 +455,7 @@ class WebServer {
             if (passHash.length == 0) {
                 throw new IllegalStateException("credentials have not been generated");
             }
-            if (plaintextCleared) {
+            if (isPlaintextCleared()) {
                 throw new IllegalStateException("plaintext credentials have already been cleared");
             }
             CredentialsSnapshot snapshot = new CredentialsSnapshot(user, pass);
