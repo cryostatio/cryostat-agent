@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Optional;
 
 import io.cryostat.agent.FlightRecorderHelper.TemplatedRecording;
+import io.cryostat.libcryostat.templates.TemplateType;
 
 import jdk.jfr.Recording;
 import org.junit.jupiter.api.AfterEach;
@@ -68,12 +69,35 @@ public class FlightRecorderHelperTest {
         assertEquals(5, recordings.size());
     }
 
+    @Test
+    public void shouldCreateTemplatedRecordingViaFactory() {
+        Recording recording = new Recording();
+        FlightRecorderHelper.ConfigurationInfo configurationInfo =
+                FlightRecorderHelper.ConfigurationInfo.create(
+                        TemplateType.TARGET, "template", "Template");
+
+        TemplatedRecording templatedRecording =
+                TemplatedRecording.create(configurationInfo, recording);
+
+        assertSame(configurationInfo, templatedRecording.getConfigurationInfo());
+        assertSame(recording, templatedRecording.getRecording());
+
+        recording.close();
+    }
+
+    @Test
+    public void shouldRejectNullTemplatedRecordingConfigurationBeforeConstruction() {
+        Recording recording = new Recording();
+
+        assertThrows(NullPointerException.class, () -> TemplatedRecording.create(null, recording));
+
+        recording.close();
+    }
+
     @AfterEach
     public void cleanup() {
         FlightRecorderHelper helper = new FlightRecorderHelper();
 
-        Recording recording = helper.getRecordings().get(0);
-        recording.close();
-        helper.getRecordings().clear();
+        helper.getRecordings().forEach(Recording::close);
     }
 }

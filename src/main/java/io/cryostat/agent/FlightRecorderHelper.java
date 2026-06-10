@@ -78,8 +78,9 @@ public class FlightRecorderHelper {
             recording.setToDisk(true);
 
             return Optional.of(
-                    new TemplatedRecording(
-                            new ConfigurationInfo(TemplateType.TARGET, "ALL", "ALL"), recording));
+                    TemplatedRecording.create(
+                            ConfigurationInfo.create(TemplateType.TARGET, "ALL", "ALL"),
+                            recording));
         } else {
             Optional<Configuration> opt = getTemplate(templateNameOrLabel);
             if (opt.isEmpty()) {
@@ -94,7 +95,7 @@ public class FlightRecorderHelper {
             recording.setToDisk(true);
 
             return Optional.of(
-                    new TemplatedRecording(new ConfigurationInfo(configuration), recording));
+                    TemplatedRecording.create(ConfigurationInfo.create(configuration), recording));
         }
     }
 
@@ -133,9 +134,15 @@ public class FlightRecorderHelper {
         private final ConfigurationInfo configuration;
         private final Recording recording;
 
-        public TemplatedRecording(ConfigurationInfo configuration, Recording recording) {
-            this.configuration = Objects.requireNonNull(configuration);
-            this.recording = Objects.requireNonNull(recording);
+        private TemplatedRecording(ConfigurationInfo configuration, Recording recording) {
+            this.configuration = configuration;
+            this.recording = recording;
+        }
+
+        public static TemplatedRecording create(
+                ConfigurationInfo configuration, Recording recording) {
+            return new TemplatedRecording(
+                    Objects.requireNonNull(configuration), Objects.requireNonNull(recording));
         }
 
         public ConfigurationInfo getConfigurationInfo() {
@@ -152,14 +159,25 @@ public class FlightRecorderHelper {
         private final String label;
         private final TemplateType type;
 
-        public ConfigurationInfo(TemplateType type, String name, String label) {
-            this.type = Objects.requireNonNull(type);
-            this.name = Objects.requireNonNull(name);
-            this.label = Objects.requireNonNull(label);
+        private ConfigurationInfo(TemplateType type, String name, String label) {
+            this.type = type;
+            this.name = name;
+            this.label = label;
         }
 
-        public ConfigurationInfo(Configuration configuration) {
-            this(TemplateType.TARGET, configuration.getName(), configuration.getLabel());
+        public static ConfigurationInfo create(TemplateType type, String name, String label) {
+            return new ConfigurationInfo(
+                    Objects.requireNonNull(type),
+                    Objects.requireNonNull(name),
+                    Objects.requireNonNull(label));
+        }
+
+        public static ConfigurationInfo create(Configuration configuration) {
+            Configuration nonNullConfiguration = Objects.requireNonNull(configuration);
+            return create(
+                    TemplateType.TARGET,
+                    nonNullConfiguration.getName(),
+                    nonNullConfiguration.getLabel());
         }
 
         public String getName() {

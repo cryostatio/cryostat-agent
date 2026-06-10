@@ -305,7 +305,7 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
             ExecutorService executor,
             long exitDeregistrationTimeout) {
         AgentExitHandler agentExitHandler =
-                new AgentExitHandler(
+                AgentExitHandler.create(
                         registration,
                         harvester,
                         webServer,
@@ -408,14 +408,34 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
                 CryostatClient cryostatClient,
                 ExecutorService executor,
                 long exitDeregistrationTimeout) {
-            this.registration = Objects.requireNonNull(registration);
-            this.harvester = Objects.requireNonNull(harvester);
-            this.webServer = Objects.requireNonNull(webServer);
-            this.credentialCleanupJob = Objects.requireNonNull(credentialCleanupJob);
-            this.credentialTracker = Objects.requireNonNull(credentialTracker);
-            this.cryostatClient = Objects.requireNonNull(cryostatClient);
-            this.executor = Objects.requireNonNull(executor);
+            this.registration = registration;
+            this.harvester = harvester;
+            this.webServer = webServer;
+            this.credentialCleanupJob = credentialCleanupJob;
+            this.credentialTracker = credentialTracker;
+            this.cryostatClient = cryostatClient;
+            this.executor = executor;
             this.exitDeregistrationTimeout = exitDeregistrationTimeout;
+        }
+
+        static AgentExitHandler create(
+                Registration registration,
+                Harvester harvester,
+                WebServer webServer,
+                CredentialCleanupJob credentialCleanupJob,
+                CredentialTracker credentialTracker,
+                CryostatClient cryostatClient,
+                ExecutorService executor,
+                long exitDeregistrationTimeout) {
+            return new AgentExitHandler(
+                    Objects.requireNonNull(registration),
+                    Objects.requireNonNull(harvester),
+                    Objects.requireNonNull(webServer),
+                    Objects.requireNonNull(credentialCleanupJob),
+                    Objects.requireNonNull(credentialTracker),
+                    Objects.requireNonNull(cryostatClient),
+                    Objects.requireNonNull(executor),
+                    exitDeregistrationTimeout);
         }
 
         void setOldHandler(Signal signal, SignalHandler oldHandler) {

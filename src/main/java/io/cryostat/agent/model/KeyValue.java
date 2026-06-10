@@ -24,9 +24,13 @@ public class KeyValue {
 
     KeyValue() {}
 
-    public KeyValue(String key, String value) {
-        this.key = Objects.requireNonNull(key);
+    private KeyValue(String key, String value) {
+        this.key = key;
         this.value = value;
+    }
+
+    public static KeyValue of(String key, String value) {
+        return new KeyValue(Objects.requireNonNull(key), value);
     }
 
     public String getKey() {
