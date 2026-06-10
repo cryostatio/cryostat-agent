@@ -22,22 +22,10 @@ public class TruststoreConfig {
     private final String path;
     private final String type;
 
-    private TruststoreConfig(Builder builder) {
-        this.alias =
-                Objects.requireNonNull(
-                        builder.alias,
-                        "Imported certs for the agent's truststore must include a certificate"
-                                + " alias");
-        this.path =
-                Objects.requireNonNull(
-                        builder.path,
-                        "Imported certs for the agent's truststore must include a certificate"
-                                + " path");
-        this.type =
-                Objects.requireNonNull(
-                        builder.type,
-                        "Imported certs for the agent's truststore must include a certificate"
-                                + " type");
+    private TruststoreConfig(String alias, String path, String type) {
+        this.alias = alias;
+        this.path = path;
+        this.type = type;
     }
 
     public String getAlias() {
@@ -73,7 +61,19 @@ public class TruststoreConfig {
         }
 
         public TruststoreConfig build() {
-            return new TruststoreConfig(this);
+            return new TruststoreConfig(
+                    Objects.requireNonNull(
+                            alias,
+                            "Imported certs for the agent's truststore must include a certificate"
+                                    + " alias"),
+                    Objects.requireNonNull(
+                            path,
+                            "Imported certs for the agent's truststore must include a certificate"
+                                    + " path"),
+                    Objects.requireNonNull(
+                            type,
+                            "Imported certs for the agent's truststore must include a certificate"
+                                    + " type"));
         }
     }
 

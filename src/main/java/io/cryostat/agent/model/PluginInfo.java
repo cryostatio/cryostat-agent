@@ -40,7 +40,7 @@ public class PluginInfo {
                 id,
                 token,
                 env.entrySet().stream()
-                        .map(e -> new KeyValue(e.getKey(), e.getValue()))
+                        .map(e -> KeyValue.of(e.getKey(), e.getValue()))
                         .collect(Collectors.toList()));
     }
 
@@ -90,7 +90,7 @@ public class PluginInfo {
     public void setEnvFromMap(Map<String, String> env) {
         this.setEnv(
                 env.entrySet().stream()
-                        .map(e -> new KeyValue(e.getKey(), e.getValue()))
+                        .map(e -> KeyValue.of(e.getKey(), e.getValue()))
                         .collect(Collectors.toList()));
     }
 
