@@ -314,17 +314,14 @@ public class Registration {
                                         log.error("Unable to read versions.properties file", ioe);
                                     }
 
-                                    try {
+                                    try (var credentials = webServer.getCredentialsSnapshot()) {
                                         Set<DiscoveryNode> selfNodes = defineSelf();
                                         log.trace(
                                                 "registering and publishing self as {}",
                                                 selfNodes.stream()
                                                         .map(n -> n.getTarget().getConnectUrl())
                                                         .collect(Collectors.toList()));
-                                        WebServer.CredentialsSnapshot credentials =
-                                                webServer.getCredentialsSnapshot();
-                                        return cryostat.register(callback, credentials, selfNodes)
-                                                .whenComplete((v, t) -> credentials.close());
+                                        return cryostat.register(callback, credentials, selfNodes);
                                     } catch (UnknownHostException | URISyntaxException e) {
                                         return CompletableFuture.failedFuture(e);
                                     }
