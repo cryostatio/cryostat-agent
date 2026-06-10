@@ -96,15 +96,22 @@ class RegistrationTest {
                         RETRY_BACKOFF_JITTER_FACTOR,
                         MIN_REGISTRATION_INTERVAL,
                         random);
+        lenient()
+                .when(webServer.generateCredentials(nullable(URI.class)))
+                .thenReturn(CompletableFuture.completedFuture(null));
+        lenient()
+                .when(webServer.getCredentialsSnapshot())
+                .thenReturn(
+                        new WebServer.CredentialsSnapshot(
+                                "user",
+                                "pass".getBytes(java.nio.charset.StandardCharsets.US_ASCII)));
     }
 
     @Test
     void testExponentialBackoffCalculation() throws Exception {
-        when(webServer.getCredentialId()).thenReturn(1);
         when(cryostat.serverHealth())
                 .thenReturn(
                         CompletableFuture.failedFuture(new RuntimeException("Connection failed")));
-        when(cryostat.credentialExists(1)).thenReturn(CompletableFuture.completedFuture(false));
         when(random.nextDouble()).thenReturn(0.5);
         when(executor.schedule(any(Runnable.class), anyLong(), any(TimeUnit.class)))
                 .thenReturn(null);
@@ -152,11 +159,9 @@ class RegistrationTest {
 
     @Test
     void testBackoffCappedAtMaximum() throws Exception {
-        when(webServer.getCredentialId()).thenReturn(1);
         when(cryostat.serverHealth())
                 .thenReturn(
                         CompletableFuture.failedFuture(new RuntimeException("Connection failed")));
-        when(cryostat.credentialExists(1)).thenReturn(CompletableFuture.completedFuture(false));
         when(random.nextDouble()).thenReturn(0.5);
         when(executor.schedule(any(Runnable.class), anyLong(), any(TimeUnit.class)))
                 .thenReturn(null);
@@ -178,11 +183,9 @@ class RegistrationTest {
 
     @Test
     void testCircuitBreakerOpensAfterThreshold() throws Exception {
-        when(webServer.getCredentialId()).thenReturn(1);
         when(cryostat.serverHealth())
                 .thenReturn(
                         CompletableFuture.failedFuture(new RuntimeException("Connection failed")));
-        when(cryostat.credentialExists(1)).thenReturn(CompletableFuture.completedFuture(false));
         when(random.nextDouble()).thenReturn(0.5);
         when(executor.schedule(any(Runnable.class), anyLong(), any(TimeUnit.class)))
                 .thenReturn(null);
@@ -207,12 +210,10 @@ class RegistrationTest {
 
     @Test
     void testSuccessfulRegistrationResetsFailureCount() throws Exception {
-        when(webServer.getCredentialId()).thenReturn(1);
         when(random.nextDouble()).thenReturn(0.5);
         when(cryostat.serverHealth())
                 .thenReturn(
                         CompletableFuture.failedFuture(new RuntimeException("Connection failed")));
-        when(cryostat.credentialExists(1)).thenReturn(CompletableFuture.completedFuture(false));
         when(executor.schedule(any(Runnable.class), anyLong(), any(TimeUnit.class)))
                 .thenReturn(null);
 
@@ -240,11 +241,9 @@ class RegistrationTest {
 
     @Test
     void testJitterPreventsThunderingHerd() throws Exception {
-        when(webServer.getCredentialId()).thenReturn(1);
         when(cryostat.serverHealth())
                 .thenReturn(
                         CompletableFuture.failedFuture(new RuntimeException("Connection failed")));
-        when(cryostat.credentialExists(1)).thenReturn(CompletableFuture.completedFuture(false));
         when(executor.schedule(any(Runnable.class), anyLong(), any(TimeUnit.class)))
                 .thenReturn(null);
 
@@ -269,11 +268,9 @@ class RegistrationTest {
 
     @Test
     void testCircuitBreakerTransitionsToHalfOpen() throws Exception {
-        when(webServer.getCredentialId()).thenReturn(1);
         when(cryostat.serverHealth())
                 .thenReturn(
                         CompletableFuture.failedFuture(new RuntimeException("Connection failed")));
-        when(cryostat.credentialExists(1)).thenReturn(CompletableFuture.completedFuture(false));
         when(random.nextDouble()).thenReturn(0.5);
         when(executor.schedule(any(Runnable.class), anyLong(), any(TimeUnit.class)))
                 .thenReturn(null);
@@ -439,63 +436,52 @@ class RegistrationTest {
         verify(cryostat, times(1)).serverHealth();
     }
 
-    void testRegistrationFailureRetainsCredentialIdWhenCredentialStillExists() {
-        when(webServer.getCredentialId()).thenReturn(42);
+    @Test
+    void testRegistrationFailureDoesNotCheckRemoteCredentialState() {
         when(cryostat.serverHealth())
                 .thenReturn(
                         CompletableFuture.failedFuture(
                                 new RuntimeException("Server health failed")));
-        when(cryostat.credentialExists(42)).thenReturn(CompletableFuture.completedFuture(true));
         when(random.nextDouble()).thenReturn(0.5);
         when(executor.schedule(any(Runnable.class), anyLong(), any(TimeUnit.class)))
                 .thenReturn(null);
 
         registration.tryRegister();
 
-        verify(webServer, never()).resetCredentialId();
-        verify(cryostat).credentialExists(42);
-        verify(cryostat, never()).register(anyInt(), any(), any(URI.class));
+        verify(cryostat, never()).register(any(URI.class), any(), anyCollection());
         verify(executor).schedule(any(Runnable.class), anyLong(), eq(TimeUnit.MILLISECONDS));
     }
 
     @Test
-    void testRegistrationFailureResetsCredentialIdWhenServerHealthFailsAndCredentialIsMissing() {
-        when(webServer.getCredentialId()).thenReturn(42);
+    void testRegistrationFailureClearsPlaintextCredentials() {
         when(cryostat.serverHealth())
                 .thenReturn(
                         CompletableFuture.failedFuture(
                                 new RuntimeException("Server health failed")));
-        when(cryostat.credentialExists(42)).thenReturn(CompletableFuture.completedFuture(false));
         when(random.nextDouble()).thenReturn(0.5);
         when(executor.schedule(any(Runnable.class), anyLong(), any(TimeUnit.class)))
                 .thenReturn(null);
 
         registration.tryRegister();
 
-        verify(webServer).resetCredentialId();
-        verify(cryostat).credentialExists(42);
-        verify(cryostat, never()).register(anyInt(), any(), any(URI.class));
+        verify(webServer).clearPlaintextCredentials();
+        verify(cryostat, never()).register(any(URI.class), any(), anyCollection());
         verify(executor).schedule(any(Runnable.class), anyLong(), eq(TimeUnit.MILLISECONDS));
     }
 
     @Test
-    void testRegistrationFailureRetainsCredentialIdWhenServerHealthFailsAndCredentialCheckFails() {
-        when(webServer.getCredentialId()).thenReturn(42);
+    void testRegistrationFailureSchedulesRetryWhenServerHealthFails() {
         when(cryostat.serverHealth())
                 .thenReturn(
                         CompletableFuture.failedFuture(
                                 new RuntimeException("Server health failed")));
-        when(cryostat.credentialExists(42))
-                .thenReturn(CompletableFuture.failedFuture(new RuntimeException("Lookup failed")));
         when(random.nextDouble()).thenReturn(0.5);
         when(executor.schedule(any(Runnable.class), anyLong(), any(TimeUnit.class)))
                 .thenReturn(null);
 
         registration.tryRegister();
 
-        verify(webServer, never()).resetCredentialId();
-        verify(cryostat).credentialExists(42);
-        verify(cryostat, never()).register(anyInt(), any(), any(URI.class));
+        verify(cryostat, never()).register(any(URI.class), any(), anyCollection());
         verify(executor).schedule(any(Runnable.class), anyLong(), eq(TimeUnit.MILLISECONDS));
     }
 }

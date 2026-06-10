@@ -65,8 +65,7 @@ class AgentStaticAttachIT {
         Assertions.assertTrue(dummyReady, "Dummy app should start and print PID");
 
         boolean registrationFailed =
-                ProcessTestHelper.waitForOutput(
-                        dummyOutput, "Failed to generate credentials", 100, 100);
+                ProcessTestHelper.waitForOutput(dummyOutput, "Registration failure", 100, 100);
 
         dummyAppWithAgent.destroy();
         dummyAppWithAgent.waitFor(2, TimeUnit.SECONDS);
@@ -109,8 +108,7 @@ class AgentStaticAttachIT {
         Assertions.assertTrue(dummyReady, "Dummy app should start and print PID");
 
         boolean registrationFailed =
-                ProcessTestHelper.waitForOutput(
-                        dummyOutput, "Failed to generate credentials", 100, 100);
+                ProcessTestHelper.waitForOutput(dummyOutput, "Registration failure", 100, 100);
         Assertions.assertTrue(
                 registrationFailed, "Agent should fail to register without Cryostat server");
 
