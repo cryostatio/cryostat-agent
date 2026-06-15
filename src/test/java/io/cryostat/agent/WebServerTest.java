@@ -22,8 +22,8 @@ import static org.mockito.Mockito.*;
 import java.net.URI;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
+import java.util.Arrays;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
 
 import io.cryostat.agent.remote.RemoteContext;
 
@@ -39,23 +39,18 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class WebServerTest {
 
     @Mock Lazy<Set<RemoteContext>> remoteContexts;
-    @Mock Lazy<CryostatClient> cryostatClientLazy;
     @Mock Lazy<Registration> registrationLazy;
     @Mock HttpServer httpServer;
-    @Mock CryostatClient cryostatClient;
     @Mock Registration registration;
 
     private WebServer webServer;
 
     @BeforeEach
     void setup() throws Exception {
-        when(cryostatClientLazy.get()).thenReturn(cryostatClient);
-
         webServer =
                 new WebServer(
                         new SecureRandom(),
                         remoteContexts,
-                        cryostatClientLazy,
                         httpServer,
                         MessageDigest.getInstance("SHA-256"),
                         "testuser",
@@ -64,51 +59,39 @@ class WebServerTest {
     }
 
     @Test
-    void testGenerateCredentialsCoalescesConcurrentRequests() throws Exception {
+    void testGenerateCredentialsCreatesSnapshot() throws Exception {
         URI callback = URI.create("http://agent.example.com:9977");
-        CompletableFuture<Integer> submission = new CompletableFuture<>();
 
-        when(cryostatClient.submitCredentialsIfRequired(anyInt(), any(), eq(callback)))
-                .thenReturn(submission);
+        webServer.generateCredentials(callback).get();
 
-        CompletableFuture<Void> first = webServer.generateCredentials(callback);
-        CompletableFuture<Void> second = webServer.generateCredentials(callback);
+        WebServer.CredentialsSnapshot snapshot = webServer.getCredentialsSnapshot();
 
-        assertSame(first, second, "Concurrent credential generation should share the same future");
-        verify(cryostatClient, times(1)).submitCredentialsIfRequired(anyInt(), any(), eq(callback));
-
-        submission.complete(42);
-
-        first.get();
-        second.get();
-
-        assertEquals(
-                42,
-                webServer.getCredentialId(),
-                "Credential ID should be updated from the shared result");
+        assertEquals("testuser", snapshot.user());
+        assertEquals(16, snapshot.pass().length);
+        assertFalse(Arrays.equals(new byte[16], snapshot.pass()));
     }
 
     @Test
-    void testGenerateCredentialsAllowsNewAttemptAfterCompletion() throws Exception {
+    void testSnapshotAfterClearPlaintextCredentialsThrows() throws Exception {
         URI callback = URI.create("http://agent.example.com:9977");
 
-        when(cryostatClient.submitCredentialsIfRequired(anyInt(), any(), eq(callback)))
-                .thenReturn(
-                        CompletableFuture.completedFuture(41),
-                        CompletableFuture.completedFuture(42));
+        webServer.generateCredentials(callback).get();
+        webServer.clearPlaintextCredentials();
 
-        CompletableFuture<Void> first = webServer.generateCredentials(callback);
-        first.get();
+        assertThrows(IllegalStateException.class, webServer::getCredentialsSnapshot);
+    }
 
-        CompletableFuture<Void> second = webServer.generateCredentials(callback);
-        second.get();
+    @Test
+    void testSnapshotClearsPlaintextAndKeepsItsOwnCopy() throws Exception {
+        URI callback = URI.create("http://agent.example.com:9977");
 
-        assertNotSame(
-                first, second, "A completed generation should not block a later fresh attempt");
-        verify(cryostatClient, times(2)).submitCredentialsIfRequired(anyInt(), any(), eq(callback));
-        assertEquals(
-                42,
-                webServer.getCredentialId(),
-                "Latest completed generation should update credential ID");
+        webServer.generateCredentials(callback).get();
+
+        WebServer.CredentialsSnapshot snapshot = webServer.getCredentialsSnapshot();
+        assertFalse(Arrays.equals(new byte[16], snapshot.pass()));
+        assertThrows(IllegalStateException.class, webServer::getCredentialsSnapshot);
+
+        snapshot.close();
+        assertArrayEquals(new byte[16], snapshot.pass());
     }
 }

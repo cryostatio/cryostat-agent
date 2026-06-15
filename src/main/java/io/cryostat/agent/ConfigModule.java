@@ -272,11 +272,6 @@ public abstract class ConfigModule {
     public static final String CRYOSTAT_AGENT_FLEET_SAMPLING_RATIO =
             "cryostat.agent.fleet-sampling-ratio";
 
-    public static final String CRYOSTAT_AGENT_CREDENTIAL_CLEANUP_INTERVAL =
-            "cryostat.agent.credential.cleanup.interval";
-    public static final String CRYOSTAT_AGENT_CREDENTIAL_CLEANUP_MAX_RETRIES =
-            "cryostat.agent.credential.cleanup.max-retries";
-
     public static final String CRYOSTAT_AGENT_WEBCLIENT_CONNECTION_POOL_MAX_TOTAL =
             "cryostat.agent.webclient.connection-pool.max-total";
     public static final String CRYOSTAT_AGENT_WEBCLIENT_CONNECTION_POOL_MAX_PER_ROUTE =
@@ -1188,20 +1183,6 @@ public abstract class ConfigModule {
     @Named(CRYOSTAT_AGENT_FLEET_SAMPLING_RATIO)
     public static double provideCryostatAgentFleetSamplingRatio(SmallRyeConfig config) {
         return config.getValue(CRYOSTAT_AGENT_FLEET_SAMPLING_RATIO, double.class);
-    }
-
-    @Provides
-    @Singleton
-    @Named(CRYOSTAT_AGENT_CREDENTIAL_CLEANUP_INTERVAL)
-    public static Duration provideCryostatAgentCredentialCleanupInterval(SmallRyeConfig config) {
-        return config.getValue(CRYOSTAT_AGENT_CREDENTIAL_CLEANUP_INTERVAL, Duration.class);
-    }
-
-    @Provides
-    @Singleton
-    @Named(CRYOSTAT_AGENT_CREDENTIAL_CLEANUP_MAX_RETRIES)
-    public static int provideCryostatAgentCredentialCleanupMaxRetries(SmallRyeConfig config) {
-        return config.getValue(CRYOSTAT_AGENT_CREDENTIAL_CLEANUP_MAX_RETRIES, int.class);
     }
 
     @Provides

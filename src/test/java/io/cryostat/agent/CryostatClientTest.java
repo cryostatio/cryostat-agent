@@ -19,25 +19,28 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
-import java.io.InputStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicReference;
 
 import io.cryostat.agent.CryostatClient.DiscoveryPublication;
-import io.cryostat.agent.WebServer.Credentials;
+import io.cryostat.agent.WebServer.CredentialsSnapshot;
+import io.cryostat.agent.model.DiscoveryNode;
+import io.cryostat.agent.model.PluginInfo;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.hc.client5.http.classic.HttpClient;
 import org.apache.hc.client5.http.classic.methods.HttpPost;
 import org.apache.hc.core5.http.ClassicHttpResponse;
 import org.apache.hc.core5.http.HttpEntity;
 import org.apache.hc.core5.http.HttpHost;
-import org.apache.hc.core5.http.message.BasicHeader;
+import org.apache.hc.core5.http.io.entity.StringEntity;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -49,15 +52,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class CryostatClientTest {
 
     @Mock Executor executor;
-    @Mock ObjectMapper mapper;
     @Mock HttpClient http;
-    @Mock CredentialTracker credentialTracker;
-    @Mock ClassicHttpResponse checkResponse;
-    @Mock ClassicHttpResponse submitResponse;
-    @Mock HttpEntity checkEntity;
-    @Mock HttpEntity submitEntity;
-    @Mock Credentials credentials;
+    @Mock ClassicHttpResponse response;
+    @Mock HttpEntity responseEntity;
 
+    private final ObjectMapper mapper = new ObjectMapper();
     private CryostatClient client;
     private static final String INSTANCE_ID = "test-instance-123";
     private static final String JVM_ID = "test-jvm-456";
@@ -68,13 +67,12 @@ class CryostatClientTest {
     @BeforeEach
     void setup() {
         DiscoveryPublication discoveryPublication =
-                new DiscoveryPublication("MERGE", java.util.Map.of());
+                new DiscoveryPublication("MERGE", Map.of("namespace", "test-namespace"));
         client =
                 new CryostatClient(
                         executor,
                         mapper,
                         http,
-                        credentialTracker,
                         INSTANCE_ID,
                         JVM_ID,
                         APP_NAME,
@@ -93,75 +91,74 @@ class CryostatClientTest {
     }
 
     @Test
-    void testSubmitCredentialsIncludesRealmInMatchExpression() throws Exception {
+    void testRegisterPostsAgentRegistration() throws Exception {
         URI callback = URI.create("http://agent.example.com:9977");
-        AtomicReference<String> submittedCredentialRequestBody = new AtomicReference<>();
+        AtomicReference<String> submittedRequestBody = new AtomicReference<>();
 
         when(http.execute(any(HttpHost.class), any(HttpPost.class)))
                 .thenAnswer(
                         invocation -> {
                             HttpPost request = invocation.getArgument(1);
-                            if (request.getUri().getPath().contains("/api/v4/credentials")
-                                    && !request.getUri().getPath().contains("credential_exists")) {
-                                ByteArrayOutputStream out = new ByteArrayOutputStream();
-                                request.getEntity().writeTo(out);
-                                submittedCredentialRequestBody.set(
-                                        out.toString(StandardCharsets.UTF_8));
-                                return submitResponse;
-                            }
-                            return checkResponse;
+                            ByteArrayOutputStream out = new ByteArrayOutputStream();
+                            request.getEntity().writeTo(out);
+                            submittedRequestBody.set(out.toString(StandardCharsets.UTF_8));
+                            return response;
                         });
-        lenient().when(checkResponse.getCode()).thenReturn(404);
-        lenient().when(checkResponse.getEntity()).thenReturn(checkEntity);
-        lenient()
-                .when(checkEntity.getContent())
-                .thenReturn(new ByteArrayInputStream("{}".getBytes()));
+        when(response.getCode()).thenReturn(200);
+        when(response.getEntity()).thenReturn(responseEntity);
+        when(responseEntity.getContent())
+                .thenReturn(
+                        new StringEntity("{\"id\":\"plugin-id\",\"token\":\"token\",\"env\":[]}")
+                                .getContent());
 
-        lenient().when(submitResponse.getCode()).thenReturn(201);
-        lenient().when(submitResponse.getEntity()).thenReturn(submitEntity);
-        lenient()
-                .when(submitResponse.getFirstHeader("Location"))
-                .thenReturn(new BasicHeader("Location", "/api/v4/credentials/42"));
-        lenient()
-                .when(submitEntity.getContent())
-                .thenReturn(new ByteArrayInputStream("".getBytes()));
+        PluginInfo pluginInfo =
+                client.register(
+                                callback,
+                                new CredentialsSnapshot(
+                                        "testuser", "testpass".getBytes(StandardCharsets.US_ASCII)),
+                                List.of(discoveryNode(callback)))
+                        .get();
 
-        lenient().when(credentials.user()).thenReturn("testuser");
-        lenient().when(credentials.pass()).thenReturn("testpass".getBytes());
+        assertEquals("plugin-id", pluginInfo.getId());
+        assertEquals("token", pluginInfo.getToken());
 
-        client.submitCredentialsIfRequired(-1, credentials, callback).get();
+        ArgumentCaptor<HttpPost> requestCaptor = ArgumentCaptor.forClass(HttpPost.class);
+        verify(http).execute(any(HttpHost.class), requestCaptor.capture());
+        assertEquals("/api/v4.3/discovery/agents", requestCaptor.getValue().getUri().getPath());
 
-        String entityContent = submittedCredentialRequestBody.get();
-        assertNotNull(entityContent, "Should have captured credential submission request body");
-        assertTrue(
-                entityContent.contains("target.connectUrl"),
-                "Match expression should contain connectUrl clause");
-        assertTrue(
-                entityContent.contains(callback.toString()),
-                "Match expression should contain callback URL");
-        assertTrue(
-                entityContent.contains("target.annotations.platform[\"INSTANCE_ID\"]"),
-                "Match expression should contain INSTANCE_ID clause");
-        assertTrue(
-                entityContent.contains(INSTANCE_ID),
-                "Match expression should contain instance ID value");
-        assertTrue(
-                entityContent.contains("target.annotations.cryostat[\"REALM\"]"),
-                "Match expression should contain REALM clause");
-        assertTrue(entityContent.contains(REALM), "Match expression should contain realm value");
+        JsonNode requestBody = mapper.readTree(submittedRequestBody.get());
+        assertEquals(REALM, requestBody.get("realm").asText());
+        assertEquals(callback.toString(), requestBody.get("callback").asText());
+        assertEquals("MERGE", requestBody.get("fillStrategy").asText());
+        assertEquals("test-namespace", requestBody.get("context").get("namespace").asText());
+        assertEquals("testuser", requestBody.get("credential").get("username").asText());
+        assertEquals("testpass", requestBody.get("credential").get("password").asText());
+        assertEquals("agent-node", requestBody.get("nodes").get(0).get("name").asText());
     }
 
     @Test
-    void testSubmitCredentialsWithDifferentRealm() throws Exception {
+    void testRegisterIncludesRealmInCredentialMatchExpression() throws Exception {
+        URI callback = URI.create("http://agent.example.com:9977");
+        JsonNode requestBody = captureRegistrationRequest(client, callback);
+
+        String matchExpression = requestBody.get("credential").get("matchExpression").asText();
+        assertTrue(matchExpression.contains("target.connectUrl"));
+        assertTrue(matchExpression.contains(callback.toString()));
+        assertTrue(matchExpression.contains("target.annotations.platform[\"INSTANCE_ID\"]"));
+        assertTrue(matchExpression.contains(INSTANCE_ID));
+        assertTrue(matchExpression.contains("target.annotations.cryostat[\"REALM\"]"));
+        assertTrue(matchExpression.contains(REALM));
+    }
+
+    @Test
+    void testRegisterUsesConfiguredRealmInCredentialMatchExpression() throws Exception {
         String differentRealm = "production-realm";
-        DiscoveryPublication discoveryPublication =
-                new DiscoveryPublication("MERGE", java.util.Map.of());
+        DiscoveryPublication discoveryPublication = new DiscoveryPublication("MERGE", Map.of());
         CryostatClient clientWithDifferentRealm =
                 new CryostatClient(
                         executor,
                         mapper,
                         http,
-                        credentialTracker,
                         INSTANCE_ID,
                         JVM_ID,
                         APP_NAME,
@@ -170,143 +167,57 @@ class CryostatClientTest {
                         discoveryPublication);
 
         URI callback = URI.create("http://agent.example.com:9977");
-        AtomicReference<String> submittedCredentialRequestBody = new AtomicReference<>();
+        JsonNode requestBody = captureRegistrationRequest(clientWithDifferentRealm, callback);
+
+        String matchExpression = requestBody.get("credential").get("matchExpression").asText();
+        assertTrue(matchExpression.contains(differentRealm));
+        assertFalse(matchExpression.contains(REALM));
+    }
+
+    private JsonNode captureRegistrationRequest(CryostatClient client, URI callback)
+            throws Exception {
+        AtomicReference<String> submittedRequestBody = new AtomicReference<>();
 
         when(http.execute(any(HttpHost.class), any(HttpPost.class)))
                 .thenAnswer(
                         invocation -> {
                             HttpPost request = invocation.getArgument(1);
-                            if (request.getUri().getPath().contains("/api/v4/credentials")
-                                    && !request.getUri().getPath().contains("credential_exists")) {
-                                ByteArrayOutputStream out = new ByteArrayOutputStream();
-                                request.getEntity().writeTo(out);
-                                submittedCredentialRequestBody.set(
-                                        out.toString(StandardCharsets.UTF_8));
-                                return submitResponse;
-                            }
-                            return checkResponse;
+                            ByteArrayOutputStream out = new ByteArrayOutputStream();
+                            request.getEntity().writeTo(out);
+                            submittedRequestBody.set(out.toString(StandardCharsets.UTF_8));
+                            return response;
                         });
-        lenient().when(checkResponse.getCode()).thenReturn(404);
-        lenient().when(checkResponse.getEntity()).thenReturn(checkEntity);
-        lenient()
-                .when(checkEntity.getContent())
-                .thenReturn(new ByteArrayInputStream("{}".getBytes()));
+        when(response.getCode()).thenReturn(200);
+        when(response.getEntity()).thenReturn(responseEntity);
+        when(responseEntity.getContent())
+                .thenReturn(
+                        new StringEntity("{\"id\":\"plugin-id\",\"token\":\"token\",\"env\":[]}")
+                                .getContent());
 
-        lenient().when(submitResponse.getCode()).thenReturn(201);
-        lenient().when(submitResponse.getEntity()).thenReturn(submitEntity);
-        lenient()
-                .when(submitResponse.getFirstHeader("Location"))
-                .thenReturn(new BasicHeader("Location", "/api/v4/credentials/99"));
-        lenient()
-                .when(submitEntity.getContent())
-                .thenReturn(new ByteArrayInputStream("".getBytes()));
+        client.register(
+                        callback,
+                        new CredentialsSnapshot(
+                                "testuser", "testpass".getBytes(StandardCharsets.US_ASCII)),
+                        List.of(discoveryNode(callback)))
+                .get();
 
-        lenient().when(credentials.user()).thenReturn("testuser");
-        lenient().when(credentials.pass()).thenReturn("testpass".getBytes());
-
-        clientWithDifferentRealm.submitCredentialsIfRequired(-1, credentials, callback).get();
-
-        String entityContent = submittedCredentialRequestBody.get();
-        assertNotNull(entityContent, "Should have captured credential submission request body");
-        assertTrue(
-                entityContent.contains(differentRealm),
-                "Match expression should contain the different realm value");
-        assertFalse(
-                entityContent.contains(REALM),
-                "Match expression should not contain the original realm value");
+        return mapper.readTree(submittedRequestBody.get());
     }
 
-    @Test
-    void testRealmIsolationInMatchExpression() throws Exception {
-        URI callback = URI.create("http://agent.example.com:9977");
-
-        when(http.execute(any(HttpHost.class), any(HttpPost.class))).thenReturn(checkResponse);
-        when(checkResponse.getCode()).thenReturn(200);
-        when(checkResponse.getEntity()).thenReturn(checkEntity);
-        when(checkEntity.getContent())
-                .thenReturn(new ByteArrayInputStream("{\"id\": 42}".getBytes()));
-        when(mapper.readValue(any(InputStream.class), eq(CryostatClient.StoredCredential.class)))
-                .thenReturn(createStoredCredential(42));
-
-        client.submitCredentialsIfRequired(-1, credentials, callback).get();
-
-        ArgumentCaptor<HttpPost> requestCaptor = ArgumentCaptor.forClass(HttpPost.class);
-        verify(http, atLeastOnce()).execute(any(HttpHost.class), requestCaptor.capture());
-
-        boolean foundCredentialCheck = false;
-        for (HttpPost capturedRequest : requestCaptor.getAllValues()) {
-            if (capturedRequest
-                    .getUri()
-                    .getPath()
-                    .contains("/api/beta/discovery/credential_exists")) {
-                HttpEntity requestEntity = capturedRequest.getEntity();
-                String entityContent = new String(requestEntity.getContent().readAllBytes());
-
-                assertTrue(
-                        entityContent.contains("target.annotations.cryostat[\"REALM\"]"),
-                        "Match expression should include realm clause to prevent cross-realm"
-                                + " credential reuse");
-                foundCredentialCheck = true;
-                break;
-            }
-        }
-
-        assertTrue(foundCredentialCheck, "Should have found credential check request");
-    }
-
-    @Test
-    void testSubmitCredentialsUsesDefensivePasswordCopy() throws Exception {
-        URI callback = URI.create("http://agent.example.com:9977");
-        byte[] password = "testpass".getBytes(StandardCharsets.UTF_8);
-        AtomicReference<String> submittedCredentialRequestBody = new AtomicReference<>();
-
-        when(http.execute(any(HttpHost.class), any(HttpPost.class)))
-                .thenAnswer(
-                        invocation -> {
-                            HttpPost request = invocation.getArgument(1);
-                            if (request.getUri().getPath().contains("/api/v4/credentials")
-                                    && !request.getUri().getPath().contains("credential_exists")) {
-                                ByteArrayOutputStream out = new ByteArrayOutputStream();
-                                request.getEntity().writeTo(out);
-                                submittedCredentialRequestBody.set(
-                                        out.toString(StandardCharsets.UTF_8));
-                                return submitResponse;
-                            }
-                            return checkResponse;
-                        });
-        lenient().when(checkResponse.getCode()).thenReturn(404);
-        lenient().when(checkResponse.getEntity()).thenReturn(checkEntity);
-        lenient()
-                .when(checkEntity.getContent())
-                .thenReturn(new ByteArrayInputStream("{}".getBytes()));
-        lenient().when(submitResponse.getCode()).thenReturn(201);
-        lenient().when(submitResponse.getEntity()).thenReturn(submitEntity);
-        lenient()
-                .when(submitResponse.getFirstHeader("Location"))
-                .thenReturn(new BasicHeader("Location", "/api/v4/credentials/42"));
-        lenient()
-                .when(submitEntity.getContent())
-                .thenReturn(new ByteArrayInputStream("".getBytes()));
-
-        when(credentials.user()).thenReturn("testuser");
-        when(credentials.pass()).thenReturn(password);
-
-        client.submitCredentialsIfRequired(-1, credentials, callback).get();
-
-        String entityContent = submittedCredentialRequestBody.get();
-        assertNotNull(entityContent, "Should have captured credential submission request body");
-        assertTrue(
-                entityContent.contains("testpass"),
-                "Multipart body should retain the original password contents");
-        assertFalse(
-                entityContent.contains("\u0000"),
-                "Multipart body should not contain null bytes from later password mutation");
-    }
-
-    private CryostatClient.StoredCredential createStoredCredential(int id) {
-        CryostatClient.StoredCredential credential = new CryostatClient.StoredCredential();
-        credential.id = id;
-        credential.matchExpression = "test-expression";
-        return credential;
+    private DiscoveryNode discoveryNode(URI callback) {
+        return new DiscoveryNode(
+                "agent-node",
+                "CryostatAgent",
+                new DiscoveryNode.Target(
+                        REALM,
+                        callback,
+                        APP_NAME,
+                        INSTANCE_ID,
+                        JVM_ID,
+                        1234,
+                        "agent.example.com",
+                        9977,
+                        "io.cryostat.agent.Agent",
+                        1_700_000_000L));
     }
 }

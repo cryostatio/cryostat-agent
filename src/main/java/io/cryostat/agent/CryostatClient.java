@@ -39,16 +39,19 @@ import java.util.function.Function;
 
 import io.cryostat.agent.FlightRecorderHelper.ConfigurationInfo;
 import io.cryostat.agent.FlightRecorderHelper.TemplatedRecording;
-import io.cryostat.agent.WebServer.Credentials;
+import io.cryostat.agent.WebServer.CredentialsSnapshot;
 import io.cryostat.agent.harvest.Harvester;
 import io.cryostat.agent.model.DiscoveryNode;
 import io.cryostat.agent.model.PluginInfo;
-import io.cryostat.agent.model.RegistrationInfo;
 import io.cryostat.agent.model.ServerHealth;
 import io.cryostat.agent.triggers.TriggerEvaluator.SmartTriggerUpdate;
 
+import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonSerializer;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializerProvider;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import jdk.jfr.Recording;
 import org.apache.commons.io.FileUtils;
@@ -59,25 +62,29 @@ import org.apache.hc.client5.http.classic.methods.HttpGet;
 import org.apache.hc.client5.http.classic.methods.HttpPost;
 import org.apache.hc.client5.http.classic.methods.HttpUriRequest;
 import org.apache.hc.client5.http.classic.methods.HttpUriRequestBase;
-import org.apache.hc.client5.http.entity.mime.ByteArrayBody;
 import org.apache.hc.client5.http.entity.mime.FormBodyPartBuilder;
 import org.apache.hc.client5.http.entity.mime.InputStreamBody;
 import org.apache.hc.client5.http.entity.mime.MultipartEntityBuilder;
 import org.apache.hc.client5.http.entity.mime.StringBody;
 import org.apache.hc.core5.http.ClassicHttpResponse;
 import org.apache.hc.core5.http.ContentType;
-import org.apache.hc.core5.http.HttpHeaders;
 import org.apache.hc.core5.http.HttpHost;
+import org.apache.hc.core5.http.io.entity.ByteArrayEntity;
 import org.apache.hc.core5.http.io.entity.StringEntity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class CryostatClient {
 
+    /*
+     * NOTE: if any new API paths are added here, or existing ones changed, the Cryostat
+     * Operator's nginx agent proxy allowlist (AllowedPathPrefixes in
+     * internal/controller/configmaps.go) must be updated to match.
+     * See https://github.com/cryostatio/cryostat-agent/issues/907
+     */
     private static final String DISCOVERY_API_PATH = "/api/v4/discovery";
+    private static final String AGENT_REGISTRATION_API_PATH = "/api/v4.3/discovery/agents";
     private static final String DISCOVERY_PUBLISH_API_PATH = "/api/v4.2/discovery";
-    private static final String CREDENTIALS_API_PATH = "/api/v4/credentials";
-    private static final String CHECK_CREDENTIAL_API_PATH = "/api/beta/discovery/credential_exists";
     private static final String DISCOVERY_TOKEN_HEADER = "Cryostat-Discovery-Authentication";
 
     private final Logger log = LoggerFactory.getLogger(getClass());
@@ -86,7 +93,6 @@ public class CryostatClient {
     private final ObjectMapper mapper;
     private final HttpHost host;
     private final HttpClient http;
-    private final CredentialTracker credentialTracker;
 
     private final String appName;
     private final String instanceId;
@@ -99,7 +105,6 @@ public class CryostatClient {
             Executor executor,
             ObjectMapper mapper,
             HttpClient http,
-            CredentialTracker credentialTracker,
             String instanceId,
             String jvmId,
             String appName,
@@ -110,7 +115,6 @@ public class CryostatClient {
         this.mapper = mapper;
         this.host = HttpHost.create(baseUri);
         this.http = http;
-        this.credentialTracker = credentialTracker;
         this.instanceId = instanceId;
         this.jvmId = jvmId;
         this.appName = appName;
@@ -150,216 +154,46 @@ public class CryostatClient {
     }
 
     public CompletableFuture<PluginInfo> register(
-            int credentialId, PluginInfo pluginInfo, URI callback) {
+            URI callback, CredentialsSnapshot credentials, Collection<DiscoveryNode> subtree) {
+        byte[] passwordCopy = credentials.pass();
         try {
-            RegistrationInfo registrationInfo =
-                    new RegistrationInfo(
-                            pluginInfo.getId(), realm, callback, pluginInfo.getToken());
-            HttpPost req = new HttpPost(baseUri.resolve(DISCOVERY_API_PATH));
+            DiscoveryPublication publication =
+                    new DiscoveryPublication(discoveryPublication, subtree);
+            AgentRegistration registration =
+                    new AgentRegistration(
+                            realm,
+                            callback,
+                            new AgentCredential(
+                                    selfMatchExpression(callback),
+                                    credentials.user(),
+                                    passwordCopy),
+                            publication.getNodes(),
+                            publication.getFillStrategy(),
+                            publication.getContext());
+            HttpPost req = new HttpPost(baseUri.resolve(AGENT_REGISTRATION_API_PATH));
             log.trace("{}", req);
-            req.setEntity(
-                    new StringEntity(
-                            mapper.writeValueAsString(registrationInfo),
-                            ContentType.APPLICATION_JSON));
+            byte[] body = mapper.writeValueAsBytes(registration);
+            req.setEntity(new ByteArrayEntity(body, ContentType.APPLICATION_JSON));
             return supply(req, (res) -> logResponse(req, res))
-                    .handle(
-                            (res, t) -> {
-                                if (t != null) {
-                                    credentialTracker.markForDeletion(credentialId);
-                                    throw new CompletionException(t);
-                                }
-                                if (!isOkStatus(res)) {
-                                    credentialTracker.markForDeletion(credentialId);
-                                }
-                                return assertOkStatus(req, res);
-                            })
+                    .thenApply(res -> assertOkStatus(req, res))
                     .thenApply(
                             res -> {
                                 try (InputStream is = res.getEntity().getContent()) {
                                     return mapper.readValue(is, PluginInfo.class);
                                 } catch (IOException e) {
                                     log.error("Unable to parse response as JSON", e);
-                                    credentialTracker.markForDeletion(credentialId);
                                     throw new RegistrationException(e);
                                 }
                             })
-                    .whenComplete((v, t) -> req.reset());
+                    .whenComplete((v, t) -> req.reset())
+                    .whenComplete((v, t) -> Arrays.fill(body, (byte) 0));
         } catch (JsonProcessingException e) {
-            credentialTracker.markForDeletion(credentialId);
             return CompletableFuture.failedFuture(e);
+        } finally {
+            // the serialized request body holds its own copy of the password, so the
+            // buffer can be cleared as soon as serialization has happened (or failed)
+            Arrays.fill(passwordCopy, (byte) 0);
         }
-    }
-
-    public CompletableFuture<Integer> submitCredentialsIfRequired(
-            int prevId, Credentials credentials, URI callback) {
-        if (prevId < 0) {
-            return queryExistingCredentials(callback)
-                    .thenCompose(
-                            id -> {
-                                if (id >= 0) {
-                                    return CompletableFuture.completedFuture(id);
-                                }
-                                return submitCredentials(prevId, credentials, callback);
-                            });
-        }
-        return credentialExists(prevId)
-                .thenCompose(
-                        exists -> {
-                            if (exists) {
-                                return CompletableFuture.completedFuture(prevId);
-                            }
-                            return submitCredentials(prevId, credentials, callback);
-                        });
-    }
-
-    public CompletableFuture<Boolean> credentialExists(int credentialId) {
-        if (credentialId < 0) {
-            return CompletableFuture.completedFuture(false);
-        }
-        HttpGet req = new HttpGet(baseUri.resolve(CREDENTIALS_API_PATH + "/" + credentialId));
-        log.trace("{}", req);
-        return supply(req, (res) -> logResponse(req, res))
-                .handle(
-                        (v, t) -> {
-                            if (t != null) {
-                                log.error("Failed to get credentials with ID {}", credentialId, t);
-                                throw new CompletionException(t);
-                            }
-                            return isOkStatus(v);
-                        })
-                .whenComplete((v, t) -> req.reset());
-    }
-
-    private CompletableFuture<Integer> queryExistingCredentials(URI callback) {
-        HttpPost req = new HttpPost(baseUri.resolve(CHECK_CREDENTIAL_API_PATH));
-        MultipartEntityBuilder entityBuilder =
-                MultipartEntityBuilder.create()
-                        .addPart(
-                                FormBodyPartBuilder.create(
-                                                "script",
-                                                new StringBody(
-                                                        selfMatchExpression(callback),
-                                                        ContentType.TEXT_PLAIN))
-                                        .build());
-        log.trace("{}", req);
-        req.setEntity(entityBuilder.build());
-        return supply(req, (res) -> logResponse(req, res))
-                .handle(
-                        (res, t) -> {
-                            if (t != null) {
-                                log.error("Failed to check credential", t);
-                                throw new CompletionException(t);
-                            }
-                            return res;
-                        })
-                .thenApply(
-                        res -> {
-                            if (!isOkStatus(res)) {
-                                return -1;
-                            }
-                            try (InputStream is = res.getEntity().getContent()) {
-                                return mapper.readValue(is, StoredCredential.class).id;
-                            } catch (IOException e) {
-                                log.error("Unable to parse response as JSON", e);
-                                throw new RegistrationException(e);
-                            }
-                        })
-                .whenComplete((v, t) -> req.reset());
-    }
-
-    private CompletableFuture<Integer> submitCredentials(
-            int prevId, Credentials credentials, URI callback) {
-        HttpPost req = new HttpPost(baseUri.resolve(CREDENTIALS_API_PATH));
-        byte[] passwordCopy;
-        synchronized (credentials) {
-            passwordCopy = Arrays.copyOf(credentials.pass(), credentials.pass().length);
-        }
-        MultipartEntityBuilder entityBuilder =
-                MultipartEntityBuilder.create()
-                        .addPart(
-                                FormBodyPartBuilder.create(
-                                                "username",
-                                                new StringBody(
-                                                        credentials.user(), ContentType.TEXT_PLAIN))
-                                        .build())
-                        .addPart(
-                                FormBodyPartBuilder.create(
-                                                "password",
-                                                new ByteArrayBody(
-                                                        passwordCopy,
-                                                        ContentType.TEXT_PLAIN,
-                                                        "pass"))
-                                        .build())
-                        .addPart(
-                                FormBodyPartBuilder.create(
-                                                "matchExpression",
-                                                new StringBody(
-                                                        selfMatchExpression(callback),
-                                                        ContentType.TEXT_PLAIN))
-                                        .build());
-        log.trace("{}", req);
-        req.setEntity(entityBuilder.build());
-        return supply(req, (res) -> logResponse(req, res))
-                .thenCompose(
-                        res -> {
-                            if (!isOkStatus(res)) {
-                                if (res.getCode() == 409) {
-                                    return queryExistingCredentials(callback)
-                                            .thenCompose(
-                                                    queried -> {
-                                                        if (queried >= 0) {
-                                                            return CompletableFuture
-                                                                    .completedFuture(queried);
-                                                        }
-                                                        credentialTracker.markForDeletion(prevId);
-                                                        return deleteCredentials(prevId)
-                                                                .handle(
-                                                                        (v, t) -> {
-                                                                            if (t != null) {
-                                                                                log.error(
-                                                                                        "Failed to"
-                                                                                            + " delete"
-                                                                                            + " previous"
-                                                                                            + " credentials"
-                                                                                            + " with"
-                                                                                            + " id "
-                                                                                                + prevId,
-                                                                                        t);
-                                                                            }
-                                                                            throw new RegistrationException(
-                                                                                    new IllegalStateException(
-                                                                                            "Credential"
-                                                                                                + " conflict"));
-                                                                        });
-                                                    });
-                                }
-                                credentialTracker.markForDeletion(prevId);
-                            }
-                            String location =
-                                    assertOkStatus(req, res)
-                                            .getFirstHeader(HttpHeaders.LOCATION)
-                                            .getValue();
-                            String id =
-                                    location.substring(
-                                            location.lastIndexOf('/') + 1, location.length());
-                            int credId = Integer.parseInt(id);
-                            credentialTracker.trackCreated(credId);
-                            return CompletableFuture.completedFuture(credId);
-                        })
-                .whenComplete((v, t) -> req.reset())
-                .whenComplete((v, t) -> Arrays.fill(passwordCopy, (byte) 0));
-    }
-
-    public CompletableFuture<Void> deleteCredentials(int id) {
-        if (id < 0) {
-            return CompletableFuture.completedFuture(null);
-        }
-        HttpDelete req = new HttpDelete(baseUri.resolve(CREDENTIALS_API_PATH + "/" + id));
-        log.trace("{}", req);
-        return supply(req, (res) -> logResponse(req, res))
-                .thenApply(res -> assertOkStatus(req, res))
-                .whenComplete((v, t) -> req.reset())
-                .thenApply(res -> null);
     }
 
     public CompletableFuture<Void> deregister(PluginInfo pluginInfo) {
@@ -616,30 +450,94 @@ public class CryostatClient {
         return res;
     }
 
-    @SuppressFBWarnings("UWF_UNWRITTEN_PUBLIC_OR_PROTECTED_FIELD")
-    public static class StoredCredential {
+    static class AgentRegistration {
+        private final String realm;
+        private final URI callback;
+        private final AgentCredential credential;
+        private final Collection<DiscoveryNode> nodes;
+        private final String fillStrategy;
+        private final Map<String, String> context;
 
-        public int id;
-        public String matchExpression;
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(id, matchExpression);
+        AgentRegistration(
+                String realm,
+                URI callback,
+                AgentCredential credential,
+                Collection<DiscoveryNode> nodes,
+                String fillStrategy,
+                Map<String, String> context) {
+            this.realm = realm;
+            this.callback = callback;
+            this.credential = credential;
+            this.nodes = nodes;
+            this.fillStrategy = fillStrategy;
+            this.context = context;
         }
 
+        public String getRealm() {
+            return realm;
+        }
+
+        public URI getCallback() {
+            return callback;
+        }
+
+        public AgentCredential getCredential() {
+            return credential;
+        }
+
+        public Collection<DiscoveryNode> getNodes() {
+            return nodes;
+        }
+
+        public String getFillStrategy() {
+            return fillStrategy;
+        }
+
+        public Map<String, String> getContext() {
+            return context;
+        }
+    }
+
+    static class AgentCredential {
+        private final String matchExpression;
+        private final String username;
+        private final byte[] password;
+
+        AgentCredential(String matchExpression, String username, byte[] password) {
+            this.matchExpression = matchExpression;
+            this.username = username;
+            this.password = password;
+        }
+
+        public String getMatchExpression() {
+            return matchExpression;
+        }
+
+        public String getUsername() {
+            return username;
+        }
+
+        @JsonSerialize(using = PasswordSerializer.class)
+        public byte[] getPassword() {
+            return password;
+        }
+    }
+
+    // writes the password bytes as a JSON string field without constructing an intermediate
+    // String, so the only unmanaged plaintext copies are the serializer's transient buffers
+    static class PasswordSerializer extends JsonSerializer<byte[]> {
         @Override
-        public boolean equals(Object obj) {
-            if (this == obj) {
-                return true;
+        public void serialize(byte[] value, JsonGenerator gen, SerializerProvider serializers)
+                throws IOException {
+            char[] chars = new char[value.length];
+            for (int i = 0; i < value.length; i++) {
+                chars[i] = (char) (value[i] & 0xff);
             }
-            if (obj == null) {
-                return false;
+            try {
+                gen.writeString(chars, 0, chars.length);
+            } finally {
+                Arrays.fill(chars, (char) 0);
             }
-            if (getClass() != obj.getClass()) {
-                return false;
-            }
-            StoredCredential other = (StoredCredential) obj;
-            return id == other.id && Objects.equals(matchExpression, other.matchExpression);
         }
     }
 
