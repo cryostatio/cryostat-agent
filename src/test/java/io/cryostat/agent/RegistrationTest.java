@@ -484,4 +484,52 @@ class RegistrationTest {
         verify(cryostat, never()).register(any(URI.class), any(), anyCollection());
         verify(executor).schedule(any(Runnable.class), anyLong(), eq(TimeUnit.MILLISECONDS));
     }
+
+    @Test
+    void testCooldownExitDoesNotStartDuplicateRegistrationAttempt() {
+        Registration cooldownRegistration =
+                new Registration(
+                        executor,
+                        cryostat,
+                        callbackResolver,
+                        webServer,
+                        appNameResolver,
+                        INSTANCE_ID,
+                        JVM_ID,
+                        APP_NAME,
+                        REALM,
+                        HOSTNAME,
+                        JMX_PORT,
+                        REGISTRATION_RETRY_MS,
+                        REGISTRATION_CHECK_MS,
+                        false,
+                        true,
+                        MAX_BACKOFF_MS,
+                        BACKOFF_MULTIPLIER,
+                        CIRCUIT_BREAKER_THRESHOLD,
+                        CIRCUIT_BREAKER_DURATION,
+                        Duration.ofSeconds(1),
+                        COOLDOWN_JITTER_FACTOR,
+                        RETRY_BACKOFF_JITTER_FACTOR,
+                        MIN_REGISTRATION_INTERVAL,
+                        random);
+
+        when(cryostat.serverHealth())
+                .thenReturn(
+                        CompletableFuture.failedFuture(
+                                new RuntimeException("Server health failed")));
+        when(random.nextDouble()).thenReturn(0.5, 0.5);
+        when(webServer.performCleanup(cooldownRegistration))
+                .thenReturn(CompletableFuture.completedFuture(null));
+
+        cooldownRegistration.tryRegister();
+
+        ArgumentCaptor<Runnable> cooldownExitCaptor = ArgumentCaptor.forClass(Runnable.class);
+        verify(executor)
+                .schedule(cooldownExitCaptor.capture(), anyLong(), eq(TimeUnit.MILLISECONDS));
+        cooldownExitCaptor.getValue().run();
+
+        verify(webServer).exitCooldownMode();
+        verify(cryostat, times(1)).serverHealth();
+    }
 }
