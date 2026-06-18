@@ -492,7 +492,6 @@ public class Registration {
             webServer.exitCooldownMode();
 
             notify(RegistrationEvent.State.UNREGISTERED);
-            tryRegister();
         }
     }
 
