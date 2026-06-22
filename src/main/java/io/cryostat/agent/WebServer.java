@@ -273,12 +273,6 @@ class WebServer {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             try {
-                IOUtils.consume(exchange.getRequestBody());
-            } catch (IOException e) {
-                log.warn("Failed to drain request body", e);
-            }
-
-            try {
                 String mtd = exchange.getRequestMethod();
                 switch (mtd) {
                     case "POST":
@@ -301,6 +295,11 @@ class WebServer {
                 }
                 exchange.getResponseBody().close();
             } finally {
+                try {
+                    IOUtils.consume(exchange.getRequestBody());
+                } catch (IOException e) {
+                    log.warn("Failed to drain request body", e);
+                }
                 exchange.close();
             }
         }
