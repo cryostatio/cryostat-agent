@@ -259,8 +259,9 @@ class WebServer {
 
         @Override
         public void handle(HttpExchange exchange) throws IOException {
-            try (InputStream body = exchange.getRequestBody()) {
-                IOUtils.consume(body);
+            try (InputStream req = exchange.getRequestBody();
+                    OutputStream res = exchange.getResponseBody()) {
+                IOUtils.consume(req);
                 String mtd = exchange.getRequestMethod();
                 switch (mtd) {
                     case "POST":

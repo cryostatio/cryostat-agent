@@ -74,6 +74,7 @@ class EventTypesContext implements RemoteContext {
                     log.warn("Unknown request method {}", mtd);
                     exchange.sendResponseHeaders(
                             HttpStatus.SC_METHOD_NOT_ALLOWED, BODY_LENGTH_NONE);
+                    exchange.getResponseBody().close();
                     break;
             }
         } finally {
