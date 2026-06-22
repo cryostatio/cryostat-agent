@@ -16,10 +16,10 @@
 package io.cryostat.agent.remote;
 
 import java.io.IOException;
+import java.io.InputStream;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
-import org.apache.commons.io.IOUtils;
 import org.slf4j.LoggerFactory;
 
 public interface RemoteContext extends HttpHandler {
@@ -34,8 +34,12 @@ public interface RemoteContext extends HttpHandler {
     }
 
     default void drain(HttpExchange exchange) {
-        try {
-            IOUtils.consume(exchange.getRequestBody());
+        try (InputStream requestBody = exchange.getRequestBody()) {
+            // Read request body to EOF to allow connection reuse
+            byte[] buffer = new byte[8192];
+            while (requestBody.read(buffer) != -1) {
+                // drop
+            }
         } catch (IOException e) {
             LoggerFactory.getLogger(getClass()).trace("Failed to drain request body", e);
         }
