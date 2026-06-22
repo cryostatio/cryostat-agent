@@ -60,6 +60,7 @@ public class SmartTriggersContext implements RemoteContext {
             }
             switch (mtd) {
                 case "GET":
+                    drain(exchange);
                     // Query the currently loaded smart triggers
                     exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
                     try (OutputStream response = exchange.getResponseBody()) {
@@ -80,7 +81,8 @@ public class SmartTriggersContext implements RemoteContext {
                     }
                     break;
                 case "DELETE":
-                    try (InputStream body = exchange.getRequestBody()) {
+                    drain(exchange);
+                    try {
                         // UUID is passed as a path param
                         Matcher m = PATH_ID_PATTERN.matcher(exchange.getRequestURI().getPath());
                         if (!m.matches()) {
@@ -102,12 +104,14 @@ public class SmartTriggersContext implements RemoteContext {
                     }
                     break;
                 default:
+                    drain(exchange);
                     log.warn("Unknown request method {}", mtd);
                     exchange.sendResponseHeaders(
                             HttpStatus.SC_METHOD_NOT_ALLOWED, BODY_LENGTH_NONE);
                     break;
             }
         } finally {
+            exchange.getResponseBody().close();
             exchange.close();
         }
     }
