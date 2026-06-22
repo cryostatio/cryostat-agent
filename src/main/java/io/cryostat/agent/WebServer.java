@@ -100,16 +100,16 @@ class WebServer {
 
         Set<RemoteContext> mergedContexts = new HashSet<>(remoteContexts.get());
         mergedContexts.add(new PingContext(registration));
-        mergedContexts.stream()
-                .filter(RemoteContext::available)
-                .forEach(
-                        rc -> {
-                            HttpContext ctx = this.http.createContext(rc.path(), wrap(rc::handle));
-                            ctx.getFilters().add(0, cooldownFilter);
-                            ctx.setAuthenticator(agentAuthenticator);
-                            ctx.getFilters().add(requestLoggingFilter);
-                            ctx.getFilters().add(compressionFilter);
-                        });
+        for (RemoteContext rc : mergedContexts) {
+            if (!rc.available()) {
+                continue;
+            }
+            HttpContext ctx = this.http.createContext(rc.path(), new SafeHttpHandler(rc, log));
+            ctx.getFilters().add(0, cooldownFilter);
+            ctx.setAuthenticator(agentAuthenticator);
+            ctx.getFilters().add(requestLoggingFilter);
+            ctx.getFilters().add(compressionFilter);
+        }
         this.http.start();
 
         synchronized (stateLock) {
@@ -227,21 +227,31 @@ class WebServer {
         }
     }
 
-    private HttpHandler wrap(HttpHandler handler) {
-        return x -> {
+    private static class SafeHttpHandler implements HttpHandler {
+
+        private final HttpHandler delegate;
+        private final Logger logger;
+
+        SafeHttpHandler(HttpHandler delegate, Logger logger) {
+            this.delegate = Objects.requireNonNull(delegate);
+            this.logger = Objects.requireNonNull(logger);
+        }
+
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
             try {
-                handler.handle(x);
+                delegate.handle(exchange);
             } catch (Exception e) {
-                log.error("Unhandled exception", e);
-                x.sendResponseHeaders(
+                logger.error("Unhandled exception", e);
+                exchange.sendResponseHeaders(
                         HttpStatus.SC_INTERNAL_SERVER_ERROR, RemoteContext.BODY_LENGTH_NONE);
             } finally {
-                IOUtils.consume(x.getRequestBody());
-                IOUtils.close(x.getRequestBody());
-                IOUtils.close(x.getResponseBody());
-                x.close();
+                IOUtils.consume(exchange.getRequestBody());
+                IOUtils.close(exchange.getRequestBody());
+                IOUtils.close(exchange.getResponseBody());
+                exchange.close();
             }
-        };
+        }
     }
 
     private class PingContext implements RemoteContext {
