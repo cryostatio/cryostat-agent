@@ -242,10 +242,14 @@ class WebServer {
                 delegate.handle(exchange);
             } catch (Exception e) {
                 logger.error("Unhandled exception", e);
+                try {
+                    IOUtils.consume(exchange.getRequestBody());
+                } catch (IOException ioe) {
+                    logger.warn("Failed to drain request body", ioe);
+                }
                 exchange.sendResponseHeaders(
                         HttpStatus.SC_INTERNAL_SERVER_ERROR, RemoteContext.BODY_LENGTH_NONE);
             } finally {
-                IOUtils.consume(exchange.getRequestBody());
                 IOUtils.close(exchange.getRequestBody());
                 IOUtils.close(exchange.getResponseBody());
                 exchange.close();
