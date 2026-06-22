@@ -333,22 +333,25 @@ class WebServer {
                             .flatMap(List::stream)
                             .collect(Collectors.toList());
             String negotiatedEncoding = null;
+            OutputStream wrappedStream = null;
+            OutputStream underlyingStream = null;
+
             priority:
             for (String encoding : requestedEncodings) {
                 switch (encoding) {
                     case "deflate":
                         negotiatedEncoding = encoding;
-                        exchange.setStreams(
-                                exchange.getRequestBody(),
-                                new DeflaterOutputStream(exchange.getResponseBody()));
+                        underlyingStream = exchange.getResponseBody();
+                        wrappedStream = new DeflaterOutputStream(underlyingStream);
+                        exchange.setStreams(exchange.getRequestBody(), wrappedStream);
                         break priority;
                         // TODO gzip encoding breaks communication with the server, need to
                         // determine why and re-enable this
                         // case "gzip":
                         // actualEncoding = requestedEncoding;
-                        // exchange.setStreams(
-                        //         exchange.getRequestBody(),
-                        //         new GZIPOutputStream(exchange.getResponseBody()));
+                        // underlyingStream = exchange.getResponseBody();
+                        // wrappedStream = new GZIPOutputStream(underlyingStream);
+                        // exchange.setStreams(exchange.getRequestBody(), wrappedStream);
                         // break priority;
                     default:
                         break;
@@ -360,7 +363,25 @@ class WebServer {
                 log.trace("Using '{}' encoding", negotiatedEncoding);
                 exchange.getResponseHeaders().put("Content-Encoding", List.of(negotiatedEncoding));
             }
-            chain.doFilter(exchange);
+
+            try {
+                chain.doFilter(exchange);
+            } finally {
+                if (wrappedStream != null) {
+                    try {
+                        wrappedStream.close();
+                    } catch (IOException e) {
+                        log.warn("Failed to close wrapped compression stream", e);
+                    }
+                }
+                if (underlyingStream != null) {
+                    try {
+                        underlyingStream.close();
+                    } catch (IOException e) {
+                        log.warn("Failed to close underlying response stream", e);
+                    }
+                }
+            }
         }
 
         @Override
