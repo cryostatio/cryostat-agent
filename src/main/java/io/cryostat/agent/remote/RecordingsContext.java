@@ -82,6 +82,7 @@ class RecordingsContext implements RemoteContext {
             long id = Long.MIN_VALUE;
             switch (mtd) {
                 case "GET":
+                    drain(exchange);
                     id = extractId(exchange);
                     if (id == Long.MIN_VALUE) {
                         handleGetList(exchange);
@@ -101,6 +102,7 @@ class RecordingsContext implements RemoteContext {
                     }
                     break;
                 case "DELETE":
+                    drain(exchange);
                     id = extractId(exchange);
                     if (id >= 0) {
                         handleDelete(exchange, id);
@@ -115,6 +117,7 @@ class RecordingsContext implements RemoteContext {
                     break;
             }
         } finally {
+            exchange.getResponseBody().close();
             exchange.close();
         }
     }
@@ -318,8 +321,6 @@ class RecordingsContext implements RemoteContext {
         } catch (Exception e) {
             log.error("Failed to update recording", e);
             sendHeader(exchange, HttpStatus.SC_INTERNAL_SERVER_ERROR);
-        } finally {
-            exchange.close();
         }
     }
 

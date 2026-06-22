@@ -47,6 +47,7 @@ class EventTemplatesContext implements RemoteContext {
     @Override
     public void handle(HttpExchange exchange) throws IOException {
         try {
+            drain(exchange);
             String mtd = exchange.getRequestMethod();
             switch (mtd) {
                 case "GET":
@@ -70,6 +71,7 @@ class EventTemplatesContext implements RemoteContext {
                     break;
             }
         } finally {
+            exchange.getResponseBody().close();
             exchange.close();
         }
     }
