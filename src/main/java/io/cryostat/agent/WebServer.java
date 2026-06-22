@@ -273,6 +273,7 @@ class WebServer {
                                 HttpStatus.SC_METHOD_NOT_ALLOWED, BODY_LENGTH_NONE);
                         break;
                 }
+                exchange.getResponseBody().close();
             } finally {
                 exchange.close();
             }
