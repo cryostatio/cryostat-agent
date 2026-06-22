@@ -89,7 +89,7 @@ public class SmartTriggersContext implements RemoteContext {
                     }
                     break;
                 case "DELETE":
-                    // UUID is passed as a path param, body not used but must drain 
+                    // UUID is passed as a path param, body not used but must drain
                     try {
                         IOUtils.consume(exchange.getRequestBody());
                     } catch (IOException e) {
