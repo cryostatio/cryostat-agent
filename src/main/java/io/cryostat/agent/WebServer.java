@@ -329,7 +329,7 @@ class WebServer {
         }
     }
 
-    private class ConnectionCloseFilter extends Filter {
+    private static class ConnectionCloseFilter extends Filter {
         @Override
         public void doFilter(HttpExchange exchange, Chain chain) throws IOException {
             exchange.getResponseHeaders().set("Connection", "close");
