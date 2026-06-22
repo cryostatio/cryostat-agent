@@ -226,9 +226,8 @@ class RecordingsContext implements RemoteContext {
     }
 
     private void handleStopOrUpdate(HttpExchange exchange, long recordingId) throws IOException {
-        try {
+        try (InputStream body = exchange.getRequestBody()) {
             boolean shouldStop = false;
-            InputStream body = exchange.getRequestBody();
             JsonNode jsonMap = mapper.readTree(body);
             Iterator<Entry<String, JsonNode>> fields = jsonMap.fields();
 

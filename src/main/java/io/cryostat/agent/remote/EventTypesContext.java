@@ -63,6 +63,7 @@ class EventTypesContext implements RemoteContext {
                         log.error("events serialization failure", e);
                         exchange.sendResponseHeaders(
                                 HttpStatus.SC_INTERNAL_SERVER_ERROR, BODY_LENGTH_NONE);
+                        exchange.getResponseBody().close();
                         break;
                     }
                     exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);

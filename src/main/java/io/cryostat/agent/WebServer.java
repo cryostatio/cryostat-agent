@@ -377,6 +377,8 @@ class WebServer {
                         "Rejecting request during cooldown: {} {}",
                         exchange.getRequestMethod(),
                         exchange.getRequestURI().getPath());
+                IOUtils.consume(exchange.getRequestBody());
+                IOUtils.close(exchange.getRequestBody());
 
                 exchange.getResponseHeaders().add("Retry-After", "60");
                 exchange.sendResponseHeaders(

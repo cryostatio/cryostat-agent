@@ -62,6 +62,9 @@ class MBeanContext implements RemoteContext {
                         }
                     } catch (Exception e) {
                         log.error("mbean serialization failure", e);
+                        exchange.sendResponseHeaders(
+                                HttpStatus.SC_INTERNAL_SERVER_ERROR, BODY_LENGTH_NONE);
+                        exchange.getResponseBody().close();
                     }
                     break;
                 default:
