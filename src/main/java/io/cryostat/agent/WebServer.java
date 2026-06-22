@@ -251,7 +251,6 @@ class WebServer {
                 exchange.sendResponseHeaders(
                         HttpStatus.SC_INTERNAL_SERVER_ERROR, RemoteContext.BODY_LENGTH_NONE);
             } finally {
-                IOUtils.close(exchange.getRequestBody());
                 IOUtils.close(exchange.getResponseBody());
                 exchange.close();
             }
@@ -273,7 +272,8 @@ class WebServer {
 
         @Override
         public void handle(HttpExchange exchange) throws IOException {
-            try (InputStream req = exchange.getRequestBody()) {
+            InputStream req = exchange.getRequestBody();
+            try {
                 String mtd = exchange.getRequestMethod();
                 switch (mtd) {
                     case "POST":
