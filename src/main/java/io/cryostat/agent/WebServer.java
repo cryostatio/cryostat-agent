@@ -251,6 +251,8 @@ class WebServer {
         public void handle(HttpExchange exchange) throws IOException {
             try {
                 drain(exchange);
+                exchange.getResponseHeaders().set("Connection", "close");
+
                 String mtd = exchange.getRequestMethod();
                 switch (mtd) {
                     case "POST":
