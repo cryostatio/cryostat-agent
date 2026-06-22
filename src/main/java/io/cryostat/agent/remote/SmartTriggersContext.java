@@ -29,6 +29,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
 import io.smallrye.config.SmallRyeConfig;
 import jakarta.inject.Inject;
+import org.apache.commons.io.IOUtils;
 import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -55,6 +56,14 @@ public class SmartTriggersContext implements RemoteContext {
     public void handle(HttpExchange exchange) throws IOException {
         try {
             String mtd = exchange.getRequestMethod();
+            if ("GET".equals(mtd)) {
+                try {
+                    IOUtils.consume(exchange.getRequestBody());
+                } catch (IOException e) {
+                    log.warn("Failed to drain request body", e);
+                }
+            }
+
             if (!ensureMethodAccepted(exchange)) {
                 return;
             }
@@ -80,12 +89,19 @@ public class SmartTriggersContext implements RemoteContext {
                     }
                     break;
                 case "DELETE":
-                    try (InputStream body = exchange.getRequestBody()) {
-                        // UUID is passed as a path param
+                    // UUID is passed as a path param, body not used but must drain 
+                    try {
+                        IOUtils.consume(exchange.getRequestBody());
+                    } catch (IOException e) {
+                        log.warn("Failed to drain request body", e);
+                    }
+
+                    try {
                         Matcher m = PATH_ID_PATTERN.matcher(exchange.getRequestURI().getPath());
                         if (!m.matches()) {
                             exchange.sendResponseHeaders(
                                     HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
+                            break;
                         }
                         String uuid = m.group(1);
                         log.trace("Extracted uuid: " + uuid);
@@ -103,6 +119,13 @@ public class SmartTriggersContext implements RemoteContext {
                     break;
                 default:
                     log.warn("Unknown request method {}", mtd);
+                    if (!"GET".equals(mtd) && !"POST".equals(mtd) && !"DELETE".equals(mtd)) {
+                        try {
+                            IOUtils.consume(exchange.getRequestBody());
+                        } catch (IOException e) {
+                            log.warn("Failed to drain request body", e);
+                        }
+                    }
                     exchange.sendResponseHeaders(
                             HttpStatus.SC_METHOD_NOT_ALLOWED, BODY_LENGTH_NONE);
                     exchange.getResponseBody().close();

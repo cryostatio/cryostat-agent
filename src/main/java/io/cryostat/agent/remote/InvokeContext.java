@@ -40,6 +40,7 @@ import io.cryostat.libcryostat.net.CryostatAgentMXBean;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
 import io.smallrye.config.SmallRyeConfig;
+import org.apache.commons.io.IOUtils;
 import org.apache.hc.core5.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -71,9 +72,18 @@ class InvokeContext extends MutatingRemoteContext {
             String mtd = exchange.getRequestMethod();
             switch (mtd) {
                 case "POST":
+                    MBeanInvocationRequest req;
                     try (InputStream body = exchange.getRequestBody()) {
-                        MBeanInvocationRequest req =
-                                mapper.readValue(body, MBeanInvocationRequest.class);
+                        req = mapper.readValue(body, MBeanInvocationRequest.class);
+                    }
+
+                    if (!req.isValid()) {
+                        exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
+                        exchange.getResponseBody().close();
+                        return;
+                    }
+
+                    try {
                         String requestId = "";
                         String filename =
                                 Files.createTempFile(
@@ -82,10 +92,6 @@ class InvokeContext extends MutatingRemoteContext {
                                                         String.class),
                                                 (String) null)
                                         .toString();
-                        if (!req.isValid()) {
-                            exchange.sendResponseHeaders(
-                                    HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
-                        }
 
                         if (req.getOperation().equals("dumpHeap")) {
                             requestId = (String) req.parameters[2];
@@ -129,6 +135,11 @@ class InvokeContext extends MutatingRemoteContext {
                     break;
                 default:
                     log.warn("Unknown request method {}", mtd);
+                    try {
+                        IOUtils.consume(exchange.getRequestBody());
+                    } catch (IOException e) {
+                        log.warn("Failed to drain request body", e);
+                    }
                     exchange.sendResponseHeaders(
                             HttpStatus.SC_METHOD_NOT_ALLOWED, BODY_LENGTH_NONE);
                     break;

@@ -51,6 +51,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import io.smallrye.config.SmallRyeConfig;
+import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
@@ -93,6 +94,15 @@ class AsyncProfilerContext extends MutatingRemoteContext {
     @Override
     public void handle(HttpExchange exchange) throws IOException {
         try {
+            String mtd = exchange.getRequestMethod();
+            if ("GET".equals(mtd) || "DELETE".equals(mtd)) {
+                try {
+                    IOUtils.consume(exchange.getRequestBody());
+                } catch (IOException e) {
+                    log.warn("Failed to drain request body", e);
+                }
+            }
+
             if (!ensureMethodAccepted(exchange)) {
                 return;
             }
@@ -102,7 +112,6 @@ class AsyncProfilerContext extends MutatingRemoteContext {
             if (!ensureProfilerAvailable(exchange)) {
                 return;
             }
-            String mtd = exchange.getRequestMethod();
             String id = "";
             switch (mtd) {
                 case "GET":
@@ -128,6 +137,13 @@ class AsyncProfilerContext extends MutatingRemoteContext {
                     break;
                 default:
                     log.warn("Unknown request method {}", mtd);
+                    if (!"GET".equals(mtd) && !"DELETE".equals(mtd) && !"POST".equals(mtd)) {
+                        try {
+                            IOUtils.consume(exchange.getRequestBody());
+                        } catch (IOException e) {
+                            log.warn("Failed to drain request body", e);
+                        }
+                    }
                     exchange.sendResponseHeaders(
                             HttpStatus.SC_METHOD_NOT_ALLOWED, BODY_LENGTH_NONE);
                     break;

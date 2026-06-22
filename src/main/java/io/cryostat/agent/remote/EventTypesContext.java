@@ -16,7 +16,6 @@
 package io.cryostat.agent.remote;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
@@ -51,8 +50,13 @@ class EventTypesContext implements RemoteContext {
 
     @Override
     public void handle(HttpExchange exchange) throws IOException {
-        try (InputStream body = exchange.getRequestBody()) {
-            IOUtils.consume(body);
+        try {
+            IOUtils.consume(exchange.getRequestBody());
+        } catch (IOException e) {
+            log.warn("Failed to drain request body", e);
+        }
+
+        try {
             String mtd = exchange.getRequestMethod();
             switch (mtd) {
                 case "GET":
