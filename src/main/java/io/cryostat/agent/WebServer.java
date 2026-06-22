@@ -250,6 +250,7 @@ class WebServer {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             try {
+                drain(exchange);
                 String mtd = exchange.getRequestMethod();
                 switch (mtd) {
                     case "POST":
@@ -271,7 +272,6 @@ class WebServer {
                         break;
                 }
             } finally {
-                drain(exchange);
                 exchange.close();
             }
         }
