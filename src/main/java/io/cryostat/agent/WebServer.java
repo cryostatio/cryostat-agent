@@ -17,6 +17,7 @@ package io.cryostat.agent;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -234,6 +235,10 @@ class WebServer {
                 log.error("Unhandled exception", e);
                 x.sendResponseHeaders(
                         HttpStatus.SC_INTERNAL_SERVER_ERROR, RemoteContext.BODY_LENGTH_NONE);
+            } finally {
+                IOUtils.consume(x.getRequestBody());
+                IOUtils.close(x.getRequestBody());
+                IOUtils.close(x.getResponseBody());
                 x.close();
             }
         };
