@@ -128,12 +128,14 @@ class InvokeContext extends MutatingRemoteContext {
                     }
                     break;
                 default:
+                    drain(exchange);
                     log.warn("Unknown request method {}", mtd);
                     exchange.sendResponseHeaders(
                             HttpStatus.SC_METHOD_NOT_ALLOWED, BODY_LENGTH_NONE);
                     break;
             }
         } finally {
+            exchange.getResponseBody().close();
             exchange.close();
         }
     }

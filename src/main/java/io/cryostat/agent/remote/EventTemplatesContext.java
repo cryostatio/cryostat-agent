@@ -65,6 +65,7 @@ class EventTemplatesContext implements RemoteContext {
                     }
                     break;
                 default:
+                    drain(exchange);
                     log.warn("Unknown request method {}", mtd);
                     exchange.sendResponseHeaders(
                             HttpStatus.SC_METHOD_NOT_ALLOWED, BODY_LENGTH_NONE);
