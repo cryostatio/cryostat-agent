@@ -243,11 +243,6 @@ class WebServer {
                 delegate.handle(exchange);
             } catch (Exception e) {
                 logger.error("Unhandled exception", e);
-                try {
-                    IOUtils.consume(exchange.getRequestBody());
-                } catch (IOException ioe) {
-                    logger.warn("Failed to drain request body", ioe);
-                }
                 exchange.sendResponseHeaders(
                         HttpStatus.SC_INTERNAL_SERVER_ERROR, RemoteContext.BODY_LENGTH_NONE);
             } finally {
@@ -273,32 +268,27 @@ class WebServer {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             InputStream req = exchange.getRequestBody();
-            try {
-                String mtd = exchange.getRequestMethod();
-                switch (mtd) {
-                    case "POST":
-                        synchronized (WebServer.this.credentials) {
-                            exchange.sendResponseHeaders(
-                                    HttpStatus.SC_NO_CONTENT, BODY_LENGTH_NONE);
-                            this.registration
-                                    .get()
-                                    .notify(Registration.RegistrationEvent.State.REFRESHING);
-                        }
-                        break;
-                    case "GET":
+            String mtd = exchange.getRequestMethod();
+            switch (mtd) {
+                case "POST":
+                    synchronized (WebServer.this.credentials) {
                         exchange.sendResponseHeaders(HttpStatus.SC_NO_CONTENT, BODY_LENGTH_NONE);
-                        break;
-                    default:
-                        log.warn("Unknown request method {}", mtd);
-                        exchange.sendResponseHeaders(
-                                HttpStatus.SC_METHOD_NOT_ALLOWED, BODY_LENGTH_NONE);
-                        break;
-                }
-                exchange.getResponseBody().close();
-                IOUtils.consume(req);
-            } finally {
-                exchange.close();
+                        this.registration
+                                .get()
+                                .notify(Registration.RegistrationEvent.State.REFRESHING);
+                    }
+                    break;
+                case "GET":
+                    exchange.sendResponseHeaders(HttpStatus.SC_NO_CONTENT, BODY_LENGTH_NONE);
+                    break;
+                default:
+                    log.warn("Unknown request method {}", mtd);
+                    exchange.sendResponseHeaders(
+                            HttpStatus.SC_METHOD_NOT_ALLOWED, BODY_LENGTH_NONE);
+                    break;
             }
+            exchange.getResponseBody().close();
+            IOUtils.consume(req);
         }
     }
 
