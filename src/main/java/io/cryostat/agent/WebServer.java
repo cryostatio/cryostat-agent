@@ -58,6 +58,7 @@ class WebServer {
     private final AgentAuthenticator agentAuthenticator;
     private final RequestLoggingFilter requestLoggingFilter;
     private final CooldownFilter cooldownFilter;
+    private final ConnectionCloseFilter connectionCloseFilter;
 
     private volatile ServerState serverState = ServerState.STOPPED;
     private final Object stateLock = new Object();
@@ -86,6 +87,7 @@ class WebServer {
         this.agentAuthenticator = new AgentAuthenticator();
         this.requestLoggingFilter = new RequestLoggingFilter();
         this.cooldownFilter = new CooldownFilter();
+        this.connectionCloseFilter = new ConnectionCloseFilter();
     }
 
     void start() {
@@ -103,6 +105,7 @@ class WebServer {
                             ctx.getFilters().add(0, cooldownFilter);
                             ctx.setAuthenticator(agentAuthenticator);
                             ctx.getFilters().add(requestLoggingFilter);
+                            ctx.getFilters().add(connectionCloseFilter);
                         });
         this.http.start();
 
@@ -251,8 +254,6 @@ class WebServer {
         public void handle(HttpExchange exchange) throws IOException {
             try {
                 drain(exchange);
-                exchange.getResponseHeaders().set("Connection", "close");
-
                 String mtd = exchange.getRequestMethod();
                 switch (mtd) {
                     case "POST":
@@ -325,6 +326,19 @@ class WebServer {
         @Override
         public String description() {
             return "cooldownFilter";
+        }
+    }
+
+    private class ConnectionCloseFilter extends Filter {
+        @Override
+        public void doFilter(HttpExchange exchange, Chain chain) throws IOException {
+            exchange.getResponseHeaders().set("Connection", "close");
+            chain.doFilter(exchange);
+        }
+
+        @Override
+        public String description() {
+            return "connectionClose";
         }
     }
 
