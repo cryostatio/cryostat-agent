@@ -174,12 +174,14 @@ public abstract class MainModule {
             SecureRandom random,
             Lazy<Set<RemoteContext>> remoteContexts,
             HttpServer http,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_HTTP_KEEP_ALIVE_ENABLED) boolean keepAlive,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_CREDENTIALS_PASS_HASH_FUNCTION)
                     MessageDigest digest,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_CREDENTIALS_USER) String user,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_CREDENTIALS_PASS_LENGTH) int passLength,
             Lazy<Registration> registration) {
-        return new WebServer(random, remoteContexts, http, digest, user, passLength, registration);
+        return new WebServer(
+                random, remoteContexts, http, keepAlive, digest, user, passLength, registration);
     }
 
     private static Optional<CharBuffer> readPass(

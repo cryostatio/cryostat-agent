@@ -48,6 +48,7 @@ class WebServer {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
+    private final boolean keepAlive;
     private final Lazy<Set<RemoteContext>> remoteContexts;
     private final Credentials credentials;
     private final Lazy<Registration> registration;
@@ -75,19 +76,21 @@ class WebServer {
             SecureRandom random,
             Lazy<Set<RemoteContext>> remoteContexts,
             HttpServer http,
+            boolean keepAlive,
             MessageDigest digest,
             String user,
             int passLength,
             Lazy<Registration> registration) {
         this.remoteContexts = remoteContexts;
         this.http = http;
+        this.keepAlive = keepAlive;
         this.credentials = new Credentials(random, digest, user, passLength);
         this.registration = registration;
 
         this.agentAuthenticator = new AgentAuthenticator();
         this.requestLoggingFilter = new RequestLoggingFilter();
         this.cooldownFilter = new CooldownFilter();
-        this.connectionCloseFilter = new ConnectionCloseFilter();
+        this.connectionCloseFilter = new ConnectionCloseFilter(keepAlive);
     }
 
     void start() {
@@ -330,9 +333,18 @@ class WebServer {
     }
 
     private static class ConnectionCloseFilter extends Filter {
+
+        private final boolean keepAlive;
+
+        ConnectionCloseFilter(boolean keepAlive) {
+            this.keepAlive = keepAlive;
+        }
+
         @Override
         public void doFilter(HttpExchange exchange, Chain chain) throws IOException {
-            exchange.getResponseHeaders().set("Connection", "close");
+            if (!keepAlive) {
+                exchange.getResponseHeaders().set("Connection", "close");
+            }
             chain.doFilter(exchange);
         }
 

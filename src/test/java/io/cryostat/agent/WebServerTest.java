@@ -16,8 +16,6 @@
 package io.cryostat.agent;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
 
 import java.net.URI;
 import java.security.MessageDigest;
@@ -52,6 +50,7 @@ class WebServerTest {
                         new SecureRandom(),
                         remoteContexts,
                         httpServer,
+                        false,
                         MessageDigest.getInstance("SHA-256"),
                         "testuser",
                         16,
