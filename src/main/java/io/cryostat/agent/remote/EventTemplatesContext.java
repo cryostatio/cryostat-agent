@@ -68,6 +68,12 @@ class EventTemplatesContext implements RemoteContext {
                         }
                     } catch (Exception e) {
                         log.error("events serialization failure", e);
+                        try {
+                            exchange.sendResponseHeaders(
+                                    HttpStatus.SC_INTERNAL_SERVER_ERROR, BODY_LENGTH_NONE);
+                        } catch (IOException ioe) {
+                            log.error("Failed to send error response", ioe);
+                        }
                     }
                     break;
                 default:

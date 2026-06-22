@@ -150,15 +150,22 @@ class RecordingsContext implements RemoteContext {
     }
 
     private void handleGetList(HttpExchange exchange) {
-        try (OutputStream response = exchange.getResponseBody()) {
+        try {
             List<SerializableRecordingDescriptor> recordings =
                     flightRecorder.getRecordings().stream()
                             .map(SerializableRecordingDescriptor::new)
                             .collect(Collectors.toList());
             exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
-            mapper.writeValue(response, recordings);
+            try (OutputStream response = exchange.getResponseBody()) {
+                mapper.writeValue(response, recordings);
+            }
         } catch (Exception e) {
             log.error("recordings serialization failure", e);
+            try {
+                exchange.sendResponseHeaders(HttpStatus.SC_INTERNAL_SERVER_ERROR, BODY_LENGTH_NONE);
+            } catch (IOException ioe) {
+                log.error("Failed to send error response", ioe);
+            }
         }
     }
 
