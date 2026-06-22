@@ -118,6 +118,7 @@ class RecordingsContext implements RemoteContext {
                     break;
             }
         } finally {
+            exchange.getRequestBody().close();
             exchange.getResponseBody().close();
             exchange.close();
         }
