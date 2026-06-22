@@ -16,6 +16,7 @@
 package io.cryostat.agent;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -272,7 +273,7 @@ class WebServer {
 
         @Override
         public void handle(HttpExchange exchange) throws IOException {
-            try {
+            try (InputStream req = exchange.getRequestBody()) {
                 String mtd = exchange.getRequestMethod();
                 switch (mtd) {
                     case "POST":
@@ -294,12 +295,8 @@ class WebServer {
                         break;
                 }
                 exchange.getResponseBody().close();
+                IOUtils.consume(req);
             } finally {
-                try {
-                    IOUtils.consume(exchange.getRequestBody());
-                } catch (IOException e) {
-                    log.warn("Failed to drain request body", e);
-                }
                 exchange.close();
             }
         }
