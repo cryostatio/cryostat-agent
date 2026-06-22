@@ -153,6 +153,16 @@ public abstract class ConfigModule {
 
     public static final String CRYOSTAT_AGENT_WEBSERVER_HOST = "cryostat.agent.webserver.host";
     public static final String CRYOSTAT_AGENT_WEBSERVER_PORT = "cryostat.agent.webserver.port";
+
+    public static final String CRYSOTAT_AGENT_WEBSERVER_HTTP_MAX_REQUEST_TIME_MS =
+            "cryostat.agent.webserver.http.max-request-time-ms";
+    public static final String CRYSOTAT_AGENT_WEBSERVER_HTTP_MAX_RESPONSE_TIME_MS =
+            "cryostat.agent.webserver.http.max-response-time-ms";
+    public static final String CRYSOTAT_AGENT_WEBSERVER_HTTP_MAX_CONNECTIONS =
+            "cryostat.agent.webserver.http.max-connections";
+    public static final String CRYSOTAT_AGENT_WEBSERVER_HTTP_MAX_IDLE_CONNECTIONS =
+            "cryostat.agent.webserver.http.max-idle-connections";
+
     public static final String CRYOSTAT_AGENT_WEBSERVER_TLS_VERSION =
             "cryostat.agent.webserver.tls.version";
     public static final String CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_PASS =
@@ -741,6 +751,34 @@ public abstract class ConfigModule {
                                 return 36720;
                             }
                         });
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYSOTAT_AGENT_WEBSERVER_HTTP_MAX_REQUEST_TIME_MS)
+    public static int provideCryostatAgentWebServerHttpMaxRequestTimeMs(SmallRyeConfig config) {
+        return config.getValue(CRYSOTAT_AGENT_WEBSERVER_HTTP_MAX_REQUEST_TIME_MS, int.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYSOTAT_AGENT_WEBSERVER_HTTP_MAX_RESPONSE_TIME_MS)
+    public static int provideCryostatAgentWebServerHttpMaxResponseTimeMs(SmallRyeConfig config) {
+        return config.getValue(CRYSOTAT_AGENT_WEBSERVER_HTTP_MAX_RESPONSE_TIME_MS, int.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYSOTAT_AGENT_WEBSERVER_HTTP_MAX_CONNECTIONS)
+    public static int provideCryostatAgentWebServerHttpMaxConnections(SmallRyeConfig config) {
+        return config.getValue(CRYSOTAT_AGENT_WEBSERVER_HTTP_MAX_CONNECTIONS, int.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYSOTAT_AGENT_WEBSERVER_HTTP_MAX_IDLE_CONNECTIONS)
+    public static int provideCryostatAgentWebServerHttpMaxIdleConnections(SmallRyeConfig config) {
+        return config.getValue(CRYSOTAT_AGENT_WEBSERVER_HTTP_MAX_IDLE_CONNECTIONS, int.class);
     }
 
     @Provides

@@ -759,8 +759,21 @@ public abstract class MainModule {
             ScheduledExecutorService executor,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_HOST) String host,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_PORT) int port,
+            @Named(ConfigModule.CRYSOTAT_AGENT_WEBSERVER_HTTP_MAX_REQUEST_TIME_MS)
+                    int maxRequestTimeMs,
+            @Named(ConfigModule.CRYSOTAT_AGENT_WEBSERVER_HTTP_MAX_RESPONSE_TIME_MS)
+                    int maxResponseTimeMs,
+            @Named(ConfigModule.CRYSOTAT_AGENT_WEBSERVER_HTTP_MAX_CONNECTIONS) int maxConnections,
+            @Named(ConfigModule.CRYSOTAT_AGENT_WEBSERVER_HTTP_MAX_IDLE_CONNECTIONS)
+                    int maxIdleConnections,
             @Named(HTTP_SERVER_SSL_CTX) Optional<SSLContext> sslContext) {
         try {
+            System.setProperty("sun.net.httpserver.maxReqTime", Integer.toString(maxRequestTimeMs));
+            System.setProperty(
+                    "sun.net.httpserver.maxRspTime", Integer.toString(maxResponseTimeMs));
+            System.setProperty("jdk.httpserver.maxConnections", Integer.toString(maxConnections));
+            System.setProperty(
+                    "jdk.httpserver.maxIdleConnections", Integer.toString(maxIdleConnections));
             HttpServer http;
             if (sslContext.isEmpty()) {
                 http = HttpServer.create(new InetSocketAddress(host, port), 0);
