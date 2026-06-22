@@ -47,6 +47,7 @@ class MBeanContext implements RemoteContext {
     @Override
     public void handle(HttpExchange exchange) throws IOException {
         try {
+            drain(exchange);
             String mtd = exchange.getRequestMethod();
             switch (mtd) {
                 case "GET":
@@ -68,6 +69,7 @@ class MBeanContext implements RemoteContext {
                     break;
             }
         } finally {
+            exchange.getResponseBody().close();
             exchange.close();
         }
     }
