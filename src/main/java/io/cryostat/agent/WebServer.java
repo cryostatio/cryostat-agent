@@ -271,6 +271,7 @@ class WebServer {
                         break;
                 }
             } finally {
+                drain(exchange);
                 exchange.close();
             }
         }
