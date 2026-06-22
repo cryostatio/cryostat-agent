@@ -16,6 +16,7 @@
 package io.cryostat.agent;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -40,6 +41,7 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 import dagger.Lazy;
+import org.apache.commons.io.IOUtils;
 import org.apache.hc.core5.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -252,7 +254,8 @@ class WebServer {
 
         @Override
         public void handle(HttpExchange exchange) throws IOException {
-            try {
+            try (InputStream body = exchange.getRequestBody()) {
+                IOUtils.consume(body);
                 String mtd = exchange.getRequestMethod();
                 switch (mtd) {
                     case "POST":

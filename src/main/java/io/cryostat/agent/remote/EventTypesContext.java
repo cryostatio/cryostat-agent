@@ -16,6 +16,7 @@
 package io.cryostat.agent.remote;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
@@ -28,6 +29,7 @@ import com.sun.net.httpserver.HttpExchange;
 import jdk.jfr.EventType;
 import jdk.jfr.FlightRecorder;
 import jdk.jfr.SettingDescriptor;
+import org.apache.commons.io.IOUtils;
 import org.apache.hc.core5.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -49,7 +51,8 @@ class EventTypesContext implements RemoteContext {
 
     @Override
     public void handle(HttpExchange exchange) throws IOException {
-        try {
+        try (InputStream body = exchange.getRequestBody()) {
+            IOUtils.consume(body);
             String mtd = exchange.getRequestMethod();
             switch (mtd) {
                 case "GET":
