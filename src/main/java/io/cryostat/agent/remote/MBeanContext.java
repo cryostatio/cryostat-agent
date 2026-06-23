@@ -54,9 +54,8 @@ class MBeanContext implements RemoteContext {
                         MBeanInfo info = new MBeanInfo();
                         MBeanMetrics metrics = info.getMBeanMetrics();
                         exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
-                        try (OutputStream response = exchange.getResponseBody()) {
-                            mapper.writeValue(response, metrics);
-                        }
+                        OutputStream response = exchange.getResponseBody();
+                        mapper.writeValue(response, metrics);
                     } catch (Exception e) {
                         log.error("mbean serialization failure", e);
                     }

@@ -112,9 +112,8 @@ class InvokeContext extends MutatingRemoteContext {
 
                         if (Objects.nonNull(response)) {
                             exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
-                            try (OutputStream responseStream = exchange.getResponseBody()) {
-                                mapper.writeValue(responseStream, response);
-                            }
+                            OutputStream responseStream = exchange.getResponseBody();
+                            mapper.writeValue(responseStream, response);
                         } else {
                             exchange.sendResponseHeaders(HttpStatus.SC_ACCEPTED, BODY_LENGTH_NONE);
                         }

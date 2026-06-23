@@ -63,9 +63,8 @@ class EventTypesContext implements RemoteContext {
                         break;
                     }
                     exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
-                    try (OutputStream response = exchange.getResponseBody()) {
-                        mapper.writeValue(response, events);
-                    }
+                    OutputStream response = exchange.getResponseBody();
+                    mapper.writeValue(response, events);
                     break;
                 default:
                     log.warn("Unknown request method {}", mtd);

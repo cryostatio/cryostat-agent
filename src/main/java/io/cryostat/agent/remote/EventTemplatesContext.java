@@ -56,9 +56,8 @@ class EventTemplatesContext implements RemoteContext {
                                         .map(Configuration::getContents)
                                         .collect(Collectors.toList());
                         exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
-                        try (OutputStream response = exchange.getResponseBody()) {
-                            mapper.writeValue(response, xmlTexts);
-                        }
+                        OutputStream response = exchange.getResponseBody();
+                        mapper.writeValue(response, xmlTexts);
                     } catch (Exception e) {
                         log.error("events serialization failure", e);
                     }

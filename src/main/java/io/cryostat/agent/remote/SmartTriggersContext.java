@@ -62,18 +62,16 @@ public class SmartTriggersContext implements RemoteContext {
                 case "GET":
                     // Query the currently loaded smart triggers
                     exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
-                    try (OutputStream response = exchange.getResponseBody()) {
-                        mapper.writeValue(response, evaluator.getDefinitions());
-                    }
+                    OutputStream response = exchange.getResponseBody();
+                    mapper.writeValue(response, evaluator.getDefinitions());
                     break;
                 case "POST":
                     try (InputStream body = exchange.getRequestBody()) {
                         SmartTriggerRequest req = mapper.readValue(body, SmartTriggerRequest.class);
                         List<String> respUUID = evaluator.append(req.definitions);
                         exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
-                        try (OutputStream responseStream = exchange.getResponseBody()) {
-                            mapper.writeValue(responseStream, respUUID);
-                        }
+                        OutputStream responseStream = exchange.getResponseBody();
+                        mapper.writeValue(responseStream, respUUID);
                     } catch (Exception e) {
                         log.warn("Smart trigger serialization failure", e);
                         exchange.sendResponseHeaders(HttpStatus.SC_BAD_GATEWAY, BODY_LENGTH_NONE);
