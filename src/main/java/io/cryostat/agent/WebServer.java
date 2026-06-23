@@ -37,7 +37,6 @@ import com.sun.net.httpserver.BasicAuthenticator;
 import com.sun.net.httpserver.Filter;
 import com.sun.net.httpserver.HttpContext;
 import com.sun.net.httpserver.HttpExchange;
-import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 import dagger.Lazy;
 import org.apache.hc.core5.http.HttpStatus;
@@ -227,17 +226,36 @@ class WebServer {
         }
     }
 
-    private HttpHandler wrap(HttpHandler handler) {
-        return x -> {
-            try {
-                handler.handle(x);
+    private RemoteContext wrap(RemoteContext rc) {
+        return new SafeRemoteContext(rc);
+    }
+
+    private static class SafeRemoteContext implements RemoteContext {
+        private final Logger log;
+        private final RemoteContext delegate;
+
+        SafeRemoteContext(RemoteContext delegate) {
+            this.delegate = Objects.requireNonNull(delegate);
+            this.log = LoggerFactory.getLogger(delegate.getClass());
+        }
+
+        @Override
+        public String path() {
+            return delegate.path();
+        }
+
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            try (exchange) {
+                delegate.handle(exchange);
+                drain(exchange);
             } catch (Exception e) {
                 log.error("Unhandled exception", e);
-                x.sendResponseHeaders(
+                drain(exchange);
+                exchange.sendResponseHeaders(
                         HttpStatus.SC_INTERNAL_SERVER_ERROR, RemoteContext.BODY_LENGTH_NONE);
-                x.close();
             }
-        };
+        }
     }
 
     private class PingContext implements RemoteContext {
@@ -255,7 +273,8 @@ class WebServer {
 
         @Override
         public void handle(HttpExchange exchange) throws IOException {
-            try {
+            try (exchange) {
+                drain(exchange);
                 String mtd = exchange.getRequestMethod();
                 switch (mtd) {
                     case "POST":
@@ -276,9 +295,6 @@ class WebServer {
                                 HttpStatus.SC_METHOD_NOT_ALLOWED, BODY_LENGTH_NONE);
                         break;
                 }
-            } finally {
-                drain(exchange);
-                exchange.close();
             }
         }
     }

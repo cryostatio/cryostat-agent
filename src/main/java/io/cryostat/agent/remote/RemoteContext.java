@@ -16,6 +16,7 @@
 package io.cryostat.agent.remote;
 
 import java.io.IOException;
+import java.util.Objects;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
@@ -34,9 +35,8 @@ public interface RemoteContext extends HttpHandler {
     }
 
     default void drain(HttpExchange exchange) {
+        Objects.requireNonNull(exchange);
         try {
-            // Consume request body to EOF to allow connection reuse
-            // Do NOT close the stream here - let the finally block handle it
             IOUtils.consume(exchange.getRequestBody());
         } catch (IOException e) {
             LoggerFactory.getLogger(getClass()).trace("Failed to drain request body", e);
