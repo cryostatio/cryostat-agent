@@ -37,7 +37,7 @@ jobs:
       with:
         java-version: '11'
         distribution: 'temurin'
-    - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+    - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
         path: ~/.m2
         key: ${{ runner.os }}-build-${{ hashFiles('**/pom.xml') }}
