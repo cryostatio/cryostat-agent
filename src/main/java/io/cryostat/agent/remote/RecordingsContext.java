@@ -74,49 +74,43 @@ class RecordingsContext implements RemoteContext {
 
     @Override
     public void handle(HttpExchange exchange) throws IOException {
-        try {
-            if (!ensureMethodAccepted(exchange)) {
-                return;
-            }
-            String mtd = exchange.getRequestMethod();
-            long id = Long.MIN_VALUE;
-            switch (mtd) {
-                case "GET":
-                    id = extractId(exchange);
-                    if (id == Long.MIN_VALUE) {
-                        handleGetList(exchange);
-                    } else {
-                        handleGetRecording(exchange, id);
-                    }
-                    break;
-                case "POST":
-                    handleStartRecordingOrSnapshot(exchange);
-                    break;
-                case "PATCH":
-                    id = extractId(exchange);
-                    if (id >= 0) {
-                        handleStopOrUpdate(exchange, id);
-                    } else {
-                        exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
-                    }
-                    break;
-                case "DELETE":
-                    id = extractId(exchange);
-                    if (id >= 0) {
-                        handleDelete(exchange, id);
-                    } else {
-                        exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
-                    }
-                    break;
-                default:
-                    log.warn("Unknown request method {}", mtd);
-                    exchange.sendResponseHeaders(
-                            HttpStatus.SC_METHOD_NOT_ALLOWED, BODY_LENGTH_NONE);
-                    break;
-            }
-        } finally {
-            drain(exchange);
-            exchange.close();
+        if (!ensureMethodAccepted(exchange)) {
+            return;
+        }
+        String mtd = exchange.getRequestMethod();
+        long id = Long.MIN_VALUE;
+        switch (mtd) {
+            case "GET":
+                id = extractId(exchange);
+                if (id == Long.MIN_VALUE) {
+                    handleGetList(exchange);
+                } else {
+                    handleGetRecording(exchange, id);
+                }
+                break;
+            case "POST":
+                handleStartRecordingOrSnapshot(exchange);
+                break;
+            case "PATCH":
+                id = extractId(exchange);
+                if (id >= 0) {
+                    handleStopOrUpdate(exchange, id);
+                } else {
+                    exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
+                }
+                break;
+            case "DELETE":
+                id = extractId(exchange);
+                if (id >= 0) {
+                    handleDelete(exchange, id);
+                } else {
+                    exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
+                }
+                break;
+            default:
+                log.warn("Unknown request method {}", mtd);
+                exchange.sendResponseHeaders(HttpStatus.SC_METHOD_NOT_ALLOWED, BODY_LENGTH_NONE);
+                break;
         }
     }
 

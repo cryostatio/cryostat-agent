@@ -53,61 +53,53 @@ public class SmartTriggersContext implements RemoteContext {
 
     @Override
     public void handle(HttpExchange exchange) throws IOException {
-        try {
-            String mtd = exchange.getRequestMethod();
-            if (!ensureMethodAccepted(exchange)) {
-                return;
-            }
-            switch (mtd) {
-                case "GET":
-                    // Query the currently loaded smart triggers
+        String mtd = exchange.getRequestMethod();
+        if (!ensureMethodAccepted(exchange)) {
+            return;
+        }
+        switch (mtd) {
+            case "GET":
+                // Query the currently loaded smart triggers
+                exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
+                OutputStream response = exchange.getResponseBody();
+                mapper.writeValue(response, evaluator.getDefinitions());
+                break;
+            case "POST":
+                try (InputStream body = exchange.getRequestBody()) {
+                    SmartTriggerRequest req = mapper.readValue(body, SmartTriggerRequest.class);
+                    List<String> respUUID = evaluator.append(req.definitions);
                     exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
-                    OutputStream response = exchange.getResponseBody();
-                    mapper.writeValue(response, evaluator.getDefinitions());
-                    break;
-                case "POST":
-                    try (InputStream body = exchange.getRequestBody()) {
-                        SmartTriggerRequest req = mapper.readValue(body, SmartTriggerRequest.class);
-                        List<String> respUUID = evaluator.append(req.definitions);
-                        exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
-                        OutputStream responseStream = exchange.getResponseBody();
-                        mapper.writeValue(responseStream, respUUID);
-                    } catch (Exception e) {
-                        log.warn("Smart trigger serialization failure", e);
-                        exchange.sendResponseHeaders(HttpStatus.SC_BAD_GATEWAY, BODY_LENGTH_NONE);
+                    OutputStream responseStream = exchange.getResponseBody();
+                    mapper.writeValue(responseStream, respUUID);
+                } catch (Exception e) {
+                    log.warn("Smart trigger serialization failure", e);
+                    exchange.sendResponseHeaders(HttpStatus.SC_BAD_GATEWAY, BODY_LENGTH_NONE);
+                }
+                break;
+            case "DELETE":
+                try {
+                    // UUID is passed as a path param
+                    Matcher m = PATH_ID_PATTERN.matcher(exchange.getRequestURI().getPath());
+                    if (!m.matches()) {
+                        exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
                     }
-                    break;
-                case "DELETE":
-                    try {
-                        // UUID is passed as a path param
-                        Matcher m = PATH_ID_PATTERN.matcher(exchange.getRequestURI().getPath());
-                        if (!m.matches()) {
-                            exchange.sendResponseHeaders(
-                                    HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
-                        }
-                        String uuid = m.group(1);
-                        log.trace("Extracted uuid: " + uuid);
-                        boolean resp = evaluator.remove(uuid);
-                        if (!resp) {
-                            exchange.sendResponseHeaders(
-                                    HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
-                        } else {
-                            exchange.sendResponseHeaders(HttpStatus.SC_ACCEPTED, BODY_LENGTH_NONE);
-                        }
-                    } catch (Exception e) {
-                        log.warn("Smart trigger serialization failure", e);
-                        exchange.sendResponseHeaders(HttpStatus.SC_BAD_GATEWAY, BODY_LENGTH_NONE);
+                    String uuid = m.group(1);
+                    log.trace("Extracted uuid: " + uuid);
+                    boolean resp = evaluator.remove(uuid);
+                    if (!resp) {
+                        exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
+                    } else {
+                        exchange.sendResponseHeaders(HttpStatus.SC_ACCEPTED, BODY_LENGTH_NONE);
                     }
-                    break;
-                default:
-                    log.warn("Unknown request method {}", mtd);
-                    exchange.sendResponseHeaders(
-                            HttpStatus.SC_METHOD_NOT_ALLOWED, BODY_LENGTH_NONE);
-                    break;
-            }
-        } finally {
-            drain(exchange);
-            exchange.close();
+                } catch (Exception e) {
+                    log.warn("Smart trigger serialization failure", e);
+                    exchange.sendResponseHeaders(HttpStatus.SC_BAD_GATEWAY, BODY_LENGTH_NONE);
+                }
+                break;
+            default:
+                log.warn("Unknown request method {}", mtd);
+                exchange.sendResponseHeaders(HttpStatus.SC_METHOD_NOT_ALLOWED, BODY_LENGTH_NONE);
+                break;
         }
     }
 
