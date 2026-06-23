@@ -246,7 +246,7 @@ class WebServer {
 
         @Override
         public void handle(HttpExchange exchange) throws IOException {
-            try (exchange) {
+            try {
                 delegate.handle(exchange);
                 drain(exchange);
             } catch (Exception e) {
@@ -254,6 +254,8 @@ class WebServer {
                 drain(exchange);
                 exchange.sendResponseHeaders(
                         HttpStatus.SC_INTERNAL_SERVER_ERROR, RemoteContext.BODY_LENGTH_NONE);
+            } finally {
+                exchange.close();
             }
         }
     }
