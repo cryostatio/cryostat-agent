@@ -103,7 +103,7 @@ class WebServer {
                 .filter(RemoteContext::available)
                 .forEach(
                         rc -> {
-                            HttpContext ctx = this.http.createContext(rc.path(), wrap(rc::handle));
+                            HttpContext ctx = this.http.createContext(rc.path(), wrap(rc));
                             ctx.getFilters().add(0, cooldownFilter);
                             ctx.setAuthenticator(agentAuthenticator);
                             ctx.getFilters().add(requestLoggingFilter);
