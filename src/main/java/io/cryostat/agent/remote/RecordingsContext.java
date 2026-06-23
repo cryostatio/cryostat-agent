@@ -82,7 +82,6 @@ class RecordingsContext implements RemoteContext {
             long id = Long.MIN_VALUE;
             switch (mtd) {
                 case "GET":
-                    drain(exchange);
                     id = extractId(exchange);
                     if (id == Long.MIN_VALUE) {
                         handleGetList(exchange);
@@ -102,7 +101,6 @@ class RecordingsContext implements RemoteContext {
                     }
                     break;
                 case "DELETE":
-                    drain(exchange);
                     id = extractId(exchange);
                     if (id >= 0) {
                         handleDelete(exchange, id);
@@ -111,15 +109,13 @@ class RecordingsContext implements RemoteContext {
                     }
                     break;
                 default:
-                    drain(exchange);
                     log.warn("Unknown request method {}", mtd);
                     exchange.sendResponseHeaders(
                             HttpStatus.SC_METHOD_NOT_ALLOWED, BODY_LENGTH_NONE);
                     break;
             }
         } finally {
-            exchange.getRequestBody().close();
-            exchange.getResponseBody().close();
+            drain(exchange);
             exchange.close();
         }
     }

@@ -106,7 +106,6 @@ class AsyncProfilerContext extends MutatingRemoteContext {
             String id = "";
             switch (mtd) {
                 case "GET":
-                    drain(exchange);
                     id = extractId(exchange);
                     if (StringUtils.isBlank(id)) {
                         handleList(exchange);
@@ -120,7 +119,6 @@ class AsyncProfilerContext extends MutatingRemoteContext {
                     handleStart(exchange);
                     break;
                 case "DELETE":
-                    drain(exchange);
                     id = extractId(exchange);
                     if (StringUtils.isBlank(id) || "status".equals(id)) {
                         sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
@@ -129,15 +127,13 @@ class AsyncProfilerContext extends MutatingRemoteContext {
                     handleDelete(exchange, id);
                     break;
                 default:
-                    drain(exchange);
                     log.warn("Unknown request method {}", mtd);
                     exchange.sendResponseHeaders(
                             HttpStatus.SC_METHOD_NOT_ALLOWED, BODY_LENGTH_NONE);
                     break;
             }
         } finally {
-            exchange.getRequestBody().close();
-            exchange.getResponseBody().close();
+            drain(exchange);
             exchange.close();
         }
     }

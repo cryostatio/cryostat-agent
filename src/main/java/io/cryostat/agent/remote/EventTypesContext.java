@@ -50,7 +50,6 @@ class EventTypesContext implements RemoteContext {
     @Override
     public void handle(HttpExchange exchange) throws IOException {
         try {
-            drain(exchange);
             String mtd = exchange.getRequestMethod();
             switch (mtd) {
                 case "GET":
@@ -69,15 +68,13 @@ class EventTypesContext implements RemoteContext {
                     }
                     break;
                 default:
-                    drain(exchange);
                     log.warn("Unknown request method {}", mtd);
                     exchange.sendResponseHeaders(
                             HttpStatus.SC_METHOD_NOT_ALLOWED, BODY_LENGTH_NONE);
                     break;
             }
         } finally {
-            exchange.getRequestBody().close();
-            exchange.getResponseBody().close();
+            drain(exchange);
             exchange.close();
         }
     }
