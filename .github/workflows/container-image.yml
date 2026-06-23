@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ github.repository_owner == 'cryostatio' }}
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
       with:
         submodules: true
         fetch-depth: 0
@@ -33,11 +33,11 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y qemu-user-static
-    - uses: actions/setup-java@v5
+    - uses: actions/setup-java@ad2b38190b15e4d6bdf0c97fb4fca8412226d287 # v5
       with:
         java-version: '11'
         distribution: 'temurin'
-    - uses: actions/cache@v5
+    - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
       with:
         path: ~/.m2
         key: ${{ runner.os }}-build-${{ hashFiles('**/pom.xml') }}
@@ -49,7 +49,7 @@ jobs:
       run: echo "DATE_TAG=$(date -uI)" >> "$GITHUB_ENV"
     - name: Build container images and manifest
       id: buildah-build
-      uses: redhat-actions/buildah-build@v2
+      uses: redhat-actions/buildah-build@7a95fa7ee0f02d552a32753e7414641a04307056 # v2
       with:
         image: ${{ env.CI_IMG }}
         archs: amd64, arm64
@@ -58,7 +58,7 @@ jobs:
           src/main/container/Dockerfile
     - name: Push to quay.io
       id: push-to-quay
-      uses: redhat-actions/push-to-registry@v2
+      uses: redhat-actions/push-to-registry@5ed88d269cf581ea9ef6dd6806d01562096bee9c # v2
       with:
         image: cryostat-agent-init
         tags: ${{ steps.buildah-build.outputs.tags }}
