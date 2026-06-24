@@ -133,6 +133,7 @@ class AsyncProfilerContext extends MutatingRemoteContext {
                     break;
             }
         } finally {
+            drain(exchange);
             exchange.close();
         }
     }
@@ -208,12 +209,13 @@ class AsyncProfilerContext extends MutatingRemoteContext {
     }
 
     private void handleStatus(HttpExchange exchange) {
-        try (OutputStream response = exchange.getResponseBody()) {
+        try {
             Map<String, Object> status = new HashMap<>();
             status.put("status", getProfilerStatus());
             status.put("availableEvents", getAvailableEvents());
             status.put("currentProfile", this.currentProfile);
             exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
+            OutputStream response = exchange.getResponseBody();
             mapper.writeValue(response, status);
         } catch (Exception e) {
             log.error("status serialization failure", e);
@@ -255,7 +257,7 @@ class AsyncProfilerContext extends MutatingRemoteContext {
     }
 
     private void handleList(HttpExchange exchange) {
-        try (OutputStream response = exchange.getResponseBody()) {
+        try {
             List<AsyncProfile> profiles =
                     Files.list(repository)
                             .map(
@@ -285,6 +287,7 @@ class AsyncProfilerContext extends MutatingRemoteContext {
                             .collect(Collectors.toList());
             profiles.sort(Comparator.<AsyncProfile>comparingLong(p -> p.startTime).reversed());
             exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
+            OutputStream response = exchange.getResponseBody();
             mapper.writeValue(response, profiles);
         } catch (Exception e) {
             log.error("profiles serialization failure", e);
@@ -343,9 +346,8 @@ class AsyncProfilerContext extends MutatingRemoteContext {
                     String.format(
                             "start,jfr,%s,timeout=%d,file=%s", events, durationSeconds, profile));
             exchange.sendResponseHeaders(HttpStatus.SC_CREATED, BODY_LENGTH_UNKNOWN);
-            try (OutputStream response = exchange.getResponseBody()) {
-                mapper.writeValue(response, id);
-            }
+            OutputStream response = exchange.getResponseBody();
+            mapper.writeValue(response, id);
         } catch (IOException e) {
             log.error("I/O failure", e);
             sendHeader(exchange, HttpStatus.SC_INTERNAL_SERVER_ERROR);

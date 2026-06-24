@@ -74,48 +74,43 @@ class RecordingsContext implements RemoteContext {
 
     @Override
     public void handle(HttpExchange exchange) throws IOException {
-        try {
-            if (!ensureMethodAccepted(exchange)) {
-                return;
-            }
-            String mtd = exchange.getRequestMethod();
-            long id = Long.MIN_VALUE;
-            switch (mtd) {
-                case "GET":
-                    id = extractId(exchange);
-                    if (id == Long.MIN_VALUE) {
-                        handleGetList(exchange);
-                    } else {
-                        handleGetRecording(exchange, id);
-                    }
-                    break;
-                case "POST":
-                    handleStartRecordingOrSnapshot(exchange);
-                    break;
-                case "PATCH":
-                    id = extractId(exchange);
-                    if (id >= 0) {
-                        handleStopOrUpdate(exchange, id);
-                    } else {
-                        exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
-                    }
-                    break;
-                case "DELETE":
-                    id = extractId(exchange);
-                    if (id >= 0) {
-                        handleDelete(exchange, id);
-                    } else {
-                        exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
-                    }
-                    break;
-                default:
-                    log.warn("Unknown request method {}", mtd);
-                    exchange.sendResponseHeaders(
-                            HttpStatus.SC_METHOD_NOT_ALLOWED, BODY_LENGTH_NONE);
-                    break;
-            }
-        } finally {
-            exchange.close();
+        if (!ensureMethodAccepted(exchange)) {
+            return;
+        }
+        String mtd = exchange.getRequestMethod();
+        long id = Long.MIN_VALUE;
+        switch (mtd) {
+            case "GET":
+                id = extractId(exchange);
+                if (id == Long.MIN_VALUE) {
+                    handleGetList(exchange);
+                } else {
+                    handleGetRecording(exchange, id);
+                }
+                break;
+            case "POST":
+                handleStartRecordingOrSnapshot(exchange);
+                break;
+            case "PATCH":
+                id = extractId(exchange);
+                if (id >= 0) {
+                    handleStopOrUpdate(exchange, id);
+                } else {
+                    exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
+                }
+                break;
+            case "DELETE":
+                id = extractId(exchange);
+                if (id >= 0) {
+                    handleDelete(exchange, id);
+                } else {
+                    exchange.sendResponseHeaders(HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
+                }
+                break;
+            default:
+                log.warn("Unknown request method {}", mtd);
+                exchange.sendResponseHeaders(HttpStatus.SC_METHOD_NOT_ALLOWED, BODY_LENGTH_NONE);
+                break;
         }
     }
 
@@ -128,12 +123,13 @@ class RecordingsContext implements RemoteContext {
     }
 
     private void handleGetList(HttpExchange exchange) {
-        try (OutputStream response = exchange.getResponseBody()) {
+        try {
             List<SerializableRecordingDescriptor> recordings =
                     flightRecorder.getRecordings().stream()
                             .map(SerializableRecordingDescriptor::new)
                             .collect(Collectors.toList());
             exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
+            OutputStream response = exchange.getResponseBody();
             mapper.writeValue(response, recordings);
         } catch (Exception e) {
             log.error("recordings serialization failure", e);
@@ -147,14 +143,14 @@ class RecordingsContext implements RemoteContext {
                         r -> {
                             Recording copy = r.copy(true);
                             try (InputStream stream = copy.getStream(null, null);
-                                    BufferedInputStream bis = new BufferedInputStream(stream);
-                                    OutputStream response = exchange.getResponseBody()) {
+                                    BufferedInputStream bis = new BufferedInputStream(stream)) {
                                 if (stream == null) {
                                     exchange.sendResponseHeaders(
                                             HttpStatus.SC_NO_CONTENT, BODY_LENGTH_NONE);
                                 } else {
                                     exchange.sendResponseHeaders(
                                             HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
+                                    OutputStream response = exchange.getResponseBody();
                                     bis.transferTo(response);
                                 }
                             } catch (IOException ioe) {
@@ -195,9 +191,8 @@ class RecordingsContext implements RemoteContext {
                         return;
                     }
                     exchange.sendResponseHeaders(HttpStatus.SC_CREATED, BODY_LENGTH_UNKNOWN);
-                    try (OutputStream response = exchange.getResponseBody()) {
-                        mapper.writeValue(response, snapshot);
-                    }
+                    OutputStream response = exchange.getResponseBody();
+                    mapper.writeValue(response, snapshot);
                 } catch (IOException e) {
                     log.error("Failed to start snapshot", e);
                     exchange.sendResponseHeaders(
@@ -212,9 +207,8 @@ class RecordingsContext implements RemoteContext {
             }
             SerializableRecordingDescriptor recording = startRecording(req);
             exchange.sendResponseHeaders(HttpStatus.SC_CREATED, BODY_LENGTH_UNKNOWN);
-            try (OutputStream response = exchange.getResponseBody()) {
-                mapper.writeValue(response, recording);
-            }
+            OutputStream response = exchange.getResponseBody();
+            mapper.writeValue(response, recording);
         } catch (IOException e) {
             log.error("Failed to start recording", e);
             exchange.sendResponseHeaders(HttpStatus.SC_INTERNAL_SERVER_ERROR, BODY_LENGTH_NONE);
@@ -302,24 +296,21 @@ class RecordingsContext implements RemoteContext {
                 }
             }
 
-            try (OutputStream response = exchange.getResponseBody()) {
-                if (response == null) {
-                    sendHeader(exchange, HttpStatus.SC_NO_CONTENT);
-                } else {
-                    exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
-                    mapper.writeValue(
-                            response,
-                            flightRecorder
-                                    .getRecording(recordingId)
-                                    .map(SerializableRecordingDescriptor::new)
-                                    .get());
-                }
+            OutputStream response = exchange.getResponseBody();
+            if (response == null) {
+                sendHeader(exchange, HttpStatus.SC_NO_CONTENT);
+            } else {
+                exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
+                mapper.writeValue(
+                        response,
+                        flightRecorder
+                                .getRecording(recordingId)
+                                .map(SerializableRecordingDescriptor::new)
+                                .get());
             }
         } catch (Exception e) {
             log.error("Failed to update recording", e);
             sendHeader(exchange, HttpStatus.SC_INTERNAL_SERVER_ERROR);
-        } finally {
-            exchange.close();
         }
     }
 

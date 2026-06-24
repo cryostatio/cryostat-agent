@@ -23,13 +23,10 @@ import java.security.SecureRandom;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
-import java.util.zip.DeflaterOutputStream;
 
 import io.cryostat.agent.remote.RemoteContext;
 
@@ -37,7 +34,6 @@ import com.sun.net.httpserver.BasicAuthenticator;
 import com.sun.net.httpserver.Filter;
 import com.sun.net.httpserver.HttpContext;
 import com.sun.net.httpserver.HttpExchange;
-import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 import dagger.Lazy;
 import org.apache.hc.core5.http.HttpStatus;
@@ -48,6 +44,7 @@ class WebServer {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
+    private final boolean keepAlive;
     private final Lazy<Set<RemoteContext>> remoteContexts;
     private final Credentials credentials;
     private final Lazy<Registration> registration;
@@ -57,8 +54,8 @@ class WebServer {
 
     private final AgentAuthenticator agentAuthenticator;
     private final RequestLoggingFilter requestLoggingFilter;
-    private final CompressionFilter compressionFilter;
     private final CooldownFilter cooldownFilter;
+    private final ConnectionCloseFilter connectionCloseFilter;
 
     private volatile ServerState serverState = ServerState.STOPPED;
     private final Object stateLock = new Object();
@@ -75,19 +72,21 @@ class WebServer {
             SecureRandom random,
             Lazy<Set<RemoteContext>> remoteContexts,
             HttpServer http,
+            boolean keepAlive,
             MessageDigest digest,
             String user,
             int passLength,
             Lazy<Registration> registration) {
         this.remoteContexts = remoteContexts;
         this.http = http;
+        this.keepAlive = keepAlive;
         this.credentials = new Credentials(random, digest, user, passLength);
         this.registration = registration;
 
         this.agentAuthenticator = new AgentAuthenticator();
         this.requestLoggingFilter = new RequestLoggingFilter();
-        this.compressionFilter = new CompressionFilter();
         this.cooldownFilter = new CooldownFilter();
+        this.connectionCloseFilter = new ConnectionCloseFilter(keepAlive);
     }
 
     void start() {
@@ -101,11 +100,11 @@ class WebServer {
                 .filter(RemoteContext::available)
                 .forEach(
                         rc -> {
-                            HttpContext ctx = this.http.createContext(rc.path(), wrap(rc::handle));
+                            HttpContext ctx = this.http.createContext(rc.path(), wrap(rc));
                             ctx.getFilters().add(0, cooldownFilter);
                             ctx.setAuthenticator(agentAuthenticator);
                             ctx.getFilters().add(requestLoggingFilter);
-                            ctx.getFilters().add(compressionFilter);
+                            ctx.getFilters().add(connectionCloseFilter);
                         });
         this.http.start();
 
@@ -224,17 +223,40 @@ class WebServer {
         }
     }
 
-    private HttpHandler wrap(HttpHandler handler) {
-        return x -> {
+    private RemoteContext wrap(RemoteContext rc) {
+        return new SafeRemoteContext(rc);
+    }
+
+    private static class SafeRemoteContext implements RemoteContext {
+        private final Logger log;
+        private final RemoteContext delegate;
+
+        SafeRemoteContext(RemoteContext delegate) {
+            this.delegate = Objects.requireNonNull(delegate);
+            this.log = LoggerFactory.getLogger(delegate.getClass());
+        }
+
+        @Override
+        public String path() {
+            return delegate.path();
+        }
+
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
             try {
-                handler.handle(x);
+                delegate.handle(exchange);
+                drain(exchange);
             } catch (Exception e) {
                 log.error("Unhandled exception", e);
-                x.sendResponseHeaders(
-                        HttpStatus.SC_INTERNAL_SERVER_ERROR, RemoteContext.BODY_LENGTH_NONE);
-                x.close();
+                try {
+                    drain(exchange);
+                    exchange.sendResponseHeaders(
+                            HttpStatus.SC_INTERNAL_SERVER_ERROR, RemoteContext.BODY_LENGTH_NONE);
+                } catch (Exception e2) {
+                    log.error("Failed to send error response", e2);
+                }
             }
-        };
+        }
     }
 
     private class PingContext implements RemoteContext {
@@ -252,29 +274,24 @@ class WebServer {
 
         @Override
         public void handle(HttpExchange exchange) throws IOException {
-            try {
-                String mtd = exchange.getRequestMethod();
-                switch (mtd) {
-                    case "POST":
-                        synchronized (WebServer.this.credentials) {
-                            exchange.sendResponseHeaders(
-                                    HttpStatus.SC_NO_CONTENT, BODY_LENGTH_NONE);
-                            this.registration
-                                    .get()
-                                    .notify(Registration.RegistrationEvent.State.REFRESHING);
-                        }
-                        break;
-                    case "GET":
+            String mtd = exchange.getRequestMethod();
+            switch (mtd) {
+                case "POST":
+                    synchronized (WebServer.this.credentials) {
                         exchange.sendResponseHeaders(HttpStatus.SC_NO_CONTENT, BODY_LENGTH_NONE);
-                        break;
-                    default:
-                        log.warn("Unknown request method {}", mtd);
-                        exchange.sendResponseHeaders(
-                                HttpStatus.SC_METHOD_NOT_ALLOWED, BODY_LENGTH_NONE);
-                        break;
-                }
-            } finally {
-                exchange.close();
+                        this.registration
+                                .get()
+                                .notify(Registration.RegistrationEvent.State.REFRESHING);
+                    }
+                    break;
+                case "GET":
+                    exchange.sendResponseHeaders(HttpStatus.SC_NO_CONTENT, BODY_LENGTH_NONE);
+                    break;
+                default:
+                    log.warn("Unknown request method {}", mtd);
+                    exchange.sendResponseHeaders(
+                            HttpStatus.SC_METHOD_NOT_ALLOWED, BODY_LENGTH_NONE);
+                    break;
             }
         }
     }
@@ -302,54 +319,6 @@ class WebServer {
         }
     }
 
-    private class CompressionFilter extends Filter {
-
-        @Override
-        public void doFilter(HttpExchange exchange, Chain chain) throws IOException {
-            List<String> requestedEncodings =
-                    exchange.getRequestHeaders().getOrDefault("Accept-Encoding", List.of()).stream()
-                            .map(raw -> raw.replaceAll("\\s", ""))
-                            .map(raw -> raw.split(","))
-                            .map(Arrays::asList)
-                            .flatMap(List::stream)
-                            .collect(Collectors.toList());
-            String negotiatedEncoding = null;
-            priority:
-            for (String encoding : requestedEncodings) {
-                switch (encoding) {
-                    case "deflate":
-                        negotiatedEncoding = encoding;
-                        exchange.setStreams(
-                                exchange.getRequestBody(),
-                                new DeflaterOutputStream(exchange.getResponseBody()));
-                        break priority;
-                        // TODO gzip encoding breaks communication with the server, need to
-                        // determine why and re-enable this
-                        // case "gzip":
-                        // actualEncoding = requestedEncoding;
-                        // exchange.setStreams(
-                        //         exchange.getRequestBody(),
-                        //         new GZIPOutputStream(exchange.getResponseBody()));
-                        // break priority;
-                    default:
-                        break;
-                }
-            }
-            if (negotiatedEncoding == null) {
-                log.trace("Using no encoding");
-            } else {
-                log.trace("Using '{}' encoding", negotiatedEncoding);
-                exchange.getResponseHeaders().put("Content-Encoding", List.of(negotiatedEncoding));
-            }
-            chain.doFilter(exchange);
-        }
-
-        @Override
-        public String description() {
-            return "responseCompression";
-        }
-    }
-
     private class CooldownFilter extends Filter {
         @Override
         public void doFilter(HttpExchange exchange, Chain chain) throws IOException {
@@ -372,6 +341,28 @@ class WebServer {
         @Override
         public String description() {
             return "cooldownFilter";
+        }
+    }
+
+    private static class ConnectionCloseFilter extends Filter {
+
+        private final boolean keepAlive;
+
+        ConnectionCloseFilter(boolean keepAlive) {
+            this.keepAlive = keepAlive;
+        }
+
+        @Override
+        public void doFilter(HttpExchange exchange, Chain chain) throws IOException {
+            if (!keepAlive) {
+                exchange.getResponseHeaders().set("Connection", "close");
+            }
+            chain.doFilter(exchange);
+        }
+
+        @Override
+        public String description() {
+            return "connectionClose";
         }
     }
 
