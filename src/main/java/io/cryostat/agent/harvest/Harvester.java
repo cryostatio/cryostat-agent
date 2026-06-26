@@ -376,7 +376,11 @@ public class Harvester implements FlightRecorderListener {
             }
             log.trace("Dumping {}({}) to {}", recording.getName(), recording.getId(), exitPath);
             return client.upload(
-                            pushType, sownRecording, maxFiles, additionalLabels(recording), exitPath)
+                            pushType,
+                            sownRecording,
+                            maxFiles,
+                            additionalLabels(recording),
+                            exitPath)
                     .thenRun(
                             () -> {
                                 try {
@@ -409,9 +413,7 @@ public class Harvester implements FlightRecorderListener {
             map.put(AUTOANALYZE_LABEL, String.valueOf(true));
         }
         long startTime =
-                recording.getStartTime() != null
-                        ? recording.getStartTime().toEpochMilli()
-                        : 0L;
+                recording.getStartTime() != null ? recording.getStartTime().toEpochMilli() : 0L;
         Duration dur = recording.getDuration();
         long duration;
         if (dur != null && dur.toMillis() != 0) {
