@@ -375,7 +375,8 @@ public class Harvester implements FlightRecorderListener {
                         new IllegalStateException("No source recording data"));
             }
             log.trace("Dumping {}({}) to {}", recording.getName(), recording.getId(), exitPath);
-            return client.upload(pushType, sownRecording, maxFiles, additionalLabels(), exitPath)
+            return client.upload(
+                            pushType, sownRecording, maxFiles, additionalLabels(recording), exitPath)
                     .thenRun(
                             () -> {
                                 try {
@@ -395,14 +396,34 @@ public class Harvester implements FlightRecorderListener {
     private Future<Void> uploadRecording(TemplatedRecording tr) throws IOException {
         Path exitPath = exitPaths.get(tr);
         return client.upload(
-                PushType.ON_STOP, Optional.of(tr), maxFiles, additionalLabels(), exitPath);
+                PushType.ON_STOP,
+                Optional.of(tr),
+                maxFiles,
+                additionalLabels(tr.getRecording()),
+                exitPath);
     }
 
-    private Map<String, String> additionalLabels() {
+    Map<String, String> additionalLabels(Recording recording) {
         var map = new HashMap<String, String>();
         if (autoanalyze) {
             map.put(AUTOANALYZE_LABEL, String.valueOf(true));
         }
+        long startTime =
+                recording.getStartTime() != null
+                        ? recording.getStartTime().toEpochMilli()
+                        : 0L;
+        Duration dur = recording.getDuration();
+        long duration;
+        if (dur != null && dur.toMillis() != 0) {
+            duration = dur.toMillis();
+        } else if (recording.getMaxAge() != null) {
+            duration = recording.getMaxAge().toMillis();
+        } else {
+            duration = 0L;
+        }
+        map.put("startTime", String.valueOf(startTime));
+        map.put("duration", String.valueOf(duration));
+        map.put("sourceRecordingId", String.valueOf(recording.getId()));
         return map;
     }
 
