@@ -26,6 +26,7 @@ import org.hamcrest.Matchers;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledIfEnvironmentVariable;
 
 class AgentDynamicAttachIT {
 
@@ -45,49 +46,56 @@ class AgentDynamicAttachIT {
     }
 
     @Test
+    @DisabledIfEnvironmentVariable(named = "JAVA_PACKAGE_TYPE", matches = "jre")
     void testAgentDynamicAttachToSeparateProcess() throws Exception {
-        String jarPath = ProcessTestHelper.getAgentShadedJarPath();
+        StringBuilder dummyStdout = new StringBuilder();
+        StringBuilder dummyStderr = new StringBuilder();
+        try {
+            String jarPath = ProcessTestHelper.getAgentShadedJarPath();
 
-        dummyApp = ProcessTestHelper.startDummyApp();
+            dummyApp = ProcessTestHelper.startDummyApp();
 
-        StringBuilder dummyOutput = new StringBuilder();
-        StringBuilder dummyStderrBuilder = new StringBuilder();
+            Thread stdoutThread =
+                    ProcessTestHelper.captureStream(dummyApp.getInputStream(), dummyStdout);
+            Thread stderrThread =
+                    ProcessTestHelper.captureStream(dummyApp.getErrorStream(), dummyStderr);
 
-        Thread stdoutThread =
-                ProcessTestHelper.captureStream(dummyApp.getInputStream(), dummyOutput);
-        Thread stderrThread =
-                ProcessTestHelper.captureStream(dummyApp.getErrorStream(), dummyStderrBuilder);
+            boolean dummyReady =
+                    ProcessTestHelper.waitForOutput(dummyStdout, "Dummy app started", 50, 100);
+            Assertions.assertTrue(dummyReady, "Dummy app should start and print PID");
 
-        boolean dummyReady =
-                ProcessTestHelper.waitForOutput(dummyOutput, "Dummy app started", 50, 100);
-        Assertions.assertTrue(dummyReady, "Dummy app should start and print PID");
+            Map<String, String> properties = new HashMap<>();
+            properties.put("cryostat.agent.baseuri", "http://localhost:8080");
+            agentLauncher =
+                    ProcessTestHelper.startAgentProcess(jarPath, dummyApp.pid(), properties);
 
-        Map<String, String> properties = new HashMap<>();
-        properties.put("cryostat.agent.baseuri", "http://localhost:8080");
-        agentLauncher = ProcessTestHelper.startAgentProcess(jarPath, dummyApp.pid(), properties);
+            boolean agentExited = agentLauncher.waitFor(10, TimeUnit.SECONDS);
+            int agentExitCode = agentExited ? agentLauncher.exitValue() : -1;
 
-        boolean agentExited = agentLauncher.waitFor(10, TimeUnit.SECONDS);
-        int agentExitCode = agentExited ? agentLauncher.exitValue() : -1;
+            boolean agentFailed =
+                    ProcessTestHelper.waitForOutput(dummyStdout, "Agent startup failure", 50, 100);
+            Assertions.assertTrue(
+                    agentFailed, "Agent should fail to start without Cryostat server");
 
-        boolean agentFailed =
-                ProcessTestHelper.waitForOutput(dummyOutput, "Agent startup failure", 50, 100);
-        Assertions.assertTrue(agentFailed, "Agent should fail to start without Cryostat server");
+            dummyApp.destroy();
+            dummyApp.waitFor(2, TimeUnit.SECONDS);
+            stderrThread.join(1000);
+            stdoutThread.join(1000);
 
-        dummyApp.destroy();
-        dummyApp.waitFor(2, TimeUnit.SECONDS);
-        stderrThread.join(1000);
-        stdoutThread.join(1000);
+            // The agent should fail to fully start due to missing Cryostat config
+            MatcherAssert.assertThat(
+                    dummyStdout.toString(), Matchers.containsString("Agent startup failure"));
 
-        // The agent should fail to fully start due to missing Cryostat config
-        MatcherAssert.assertThat(
-                dummyOutput.toString(), Matchers.containsString("Agent startup failure"));
+            // but it should have logged its startup messages
+            MatcherAssert.assertThat(
+                    dummyStdout.toString(),
+                    Matchers.containsString(
+                            "DEBUG io.cryostat.agent.Agent - Cryostat Agent version"));
 
-        // but it should have logged its startup messages
-        MatcherAssert.assertThat(
-                dummyOutput.toString(),
-                Matchers.containsString("DEBUG io.cryostat.agent.Agent - Cryostat Agent version"));
-
-        // The agent launcher should exit successfully after injection
-        MatcherAssert.assertThat(agentExitCode, Matchers.is(0));
+            // The agent launcher should exit successfully after injection
+            MatcherAssert.assertThat(agentExitCode, Matchers.is(0));
+        } finally {
+            ProcessTestHelper.printStreams(getClass(), dummyStdout, dummyStderr);
+        }
     }
 }

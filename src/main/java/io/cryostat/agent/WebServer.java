@@ -323,14 +323,14 @@ class WebServer {
                                 exchange.getRequestBody(),
                                 new DeflaterOutputStream(exchange.getResponseBody()));
                         break priority;
-                        // TODO gzip encoding breaks communication with the server, need to
-                        // determine why and re-enable this
-                        // case "gzip":
-                        // actualEncoding = requestedEncoding;
-                        // exchange.setStreams(
-                        //         exchange.getRequestBody(),
-                        //         new GZIPOutputStream(exchange.getResponseBody()));
-                        // break priority;
+                    // TODO gzip encoding breaks communication with the server, need to
+                    // determine why and re-enable this
+                    // case "gzip":
+                    // actualEncoding = requestedEncoding;
+                    // exchange.setStreams(
+                    //         exchange.getRequestBody(),
+                    //         new GZIPOutputStream(exchange.getResponseBody()));
+                    // break priority;
                     default:
                         break;
                 }
