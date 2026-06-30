@@ -23,14 +23,11 @@ import java.security.SecureRandom;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
-import java.util.zip.DeflaterOutputStream;
 
 import io.cryostat.agent.remote.RemoteContext;
 
@@ -60,7 +57,6 @@ class WebServer {
 
     private final AgentAuthenticator agentAuthenticator;
     private final RequestLoggingFilter requestLoggingFilter;
-    private final CompressionFilter compressionFilter;
     private final CooldownFilter cooldownFilter;
 
     private volatile ServerState serverState = ServerState.STOPPED;
@@ -91,7 +87,6 @@ class WebServer {
 
         this.agentAuthenticator = new AgentAuthenticator();
         this.requestLoggingFilter = new RequestLoggingFilter();
-        this.compressionFilter = new CompressionFilter();
         this.cooldownFilter = new CooldownFilter();
     }
 
@@ -110,7 +105,6 @@ class WebServer {
                             ctx.getFilters().add(0, cooldownFilter);
                             ctx.setAuthenticator(agentAuthenticator);
                             ctx.getFilters().add(requestLoggingFilter);
-                            ctx.getFilters().add(compressionFilter);
                         });
         this.http.start();
 
@@ -336,54 +330,6 @@ class WebServer {
         @Override
         public String description() {
             return "requestLog";
-        }
-    }
-
-    private class CompressionFilter extends Filter {
-
-        @Override
-        public void doFilter(HttpExchange exchange, Chain chain) throws IOException {
-            List<String> requestedEncodings =
-                    exchange.getRequestHeaders().getOrDefault("Accept-Encoding", List.of()).stream()
-                            .map(raw -> raw.replaceAll("\\s", ""))
-                            .map(raw -> raw.split(","))
-                            .map(Arrays::asList)
-                            .flatMap(List::stream)
-                            .collect(Collectors.toList());
-            String negotiatedEncoding = null;
-            priority:
-            for (String encoding : requestedEncodings) {
-                switch (encoding) {
-                    case "deflate":
-                        negotiatedEncoding = encoding;
-                        exchange.setStreams(
-                                exchange.getRequestBody(),
-                                new DeflaterOutputStream(exchange.getResponseBody()));
-                        break priority;
-                        // TODO gzip encoding breaks communication with the server, need to
-                        // determine why and re-enable this
-                        // case "gzip":
-                        // actualEncoding = requestedEncoding;
-                        // exchange.setStreams(
-                        //         exchange.getRequestBody(),
-                        //         new GZIPOutputStream(exchange.getResponseBody()));
-                        // break priority;
-                    default:
-                        break;
-                }
-            }
-            if (negotiatedEncoding == null) {
-                log.trace("Using no encoding");
-            } else {
-                log.trace("Using '{}' encoding", negotiatedEncoding);
-                exchange.getResponseHeaders().put("Content-Encoding", List.of(negotiatedEncoding));
-            }
-            chain.doFilter(exchange);
-        }
-
-        @Override
-        public String description() {
-            return "responseCompression";
         }
     }
 
