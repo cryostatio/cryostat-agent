@@ -72,17 +72,20 @@ class AsyncProfilerContext extends MutatingRemoteContext {
     private final ScheduledExecutorService scheduler;
     private final Logger log = LoggerFactory.getLogger(getClass());
     private volatile StartProfileRequest currentProfile = null;
+    private final String jvmId;
 
     @Inject
     AsyncProfilerContext(
             SmallRyeConfig config,
             ObjectMapper mapper,
             ScheduledExecutorService scheduler,
+            @Named("JVM_ID") String jvmId,
             @Named(ConfigModule.CRYOSTAT_AGENT_ASYNC_PROFILER_REPOSITORY_PATH) Path repository) {
         super(config);
         this.mapper = mapper;
         this.scheduler = scheduler;
         this.repository = repository;
+        this.jvmId = jvmId;
     }
 
     @Override
@@ -271,11 +274,12 @@ class AsyncProfilerContext extends MutatingRemoteContext {
                                             BasicFileAttributes bfa =
                                                     Files.readAttributes(
                                                             p, BasicFileAttributes.class);
-                                            return new AsyncProfile(name, bfa);
+                                            return new AsyncProfile(name, jvmId, bfa);
                                         } catch (IOException ioe) {
                                             log.error("failed to read file attributes", ioe);
                                             return new AsyncProfile(
                                                     name,
+                                                    jvmId,
                                                     Instant.EPOCH.toEpochMilli(),
                                                     Instant.EPOCH.toEpochMilli(),
                                                     0);
@@ -399,20 +403,23 @@ class AsyncProfilerContext extends MutatingRemoteContext {
     @SuppressFBWarnings("URF_UNREAD_PUBLIC_OR_PROTECTED_FIELD")
     static class AsyncProfile {
         public String id;
+        public String jvmId;
         public long startTime;
         public long duration;
         public long size;
 
-        AsyncProfile(String id, long startTime, long duration, long size) {
+        AsyncProfile(String id, String jvmId, long startTime, long duration, long size) {
             this.id = id;
+            this.jvmId = jvmId;
             this.startTime = startTime;
             this.duration = duration;
             this.size = size;
         }
 
-        AsyncProfile(String id, BasicFileAttributes bfa) {
+        AsyncProfile(String id, String jvmId, BasicFileAttributes bfa) {
             this(
                     id,
+                    jvmId,
                     bfa.creationTime().toInstant().toEpochMilli(),
                     bfa.lastModifiedTime().toInstant().toEpochMilli()
                             - bfa.creationTime().toInstant().toEpochMilli(),
