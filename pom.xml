@@ -59,6 +59,8 @@
   <maven.compiler.target>${java.version}</maven.compiler.target>
   <maven.compiler.source>${java.version}</maven.compiler.source>
 
+  <skipUnitTests>false</skipUnitTests>
+
   <io.reactiverse.plugin.version>1.0.27</io.reactiverse.plugin.version>
   <org.apache.maven.plugins.jar.version>3.5.0</org.apache.maven.plugins.jar.version>
   <org.apache.maven.plugins.shade.version>3.6.2</org.apache.maven.plugins.shade.version>
@@ -97,7 +99,7 @@
   <org.mockito.version>5.23.0</org.mockito.version>
   <org.jacoco.maven.plugin.version>0.8.15</org.jacoco.maven.plugin.version>
   <com.diffplug.spotless.maven.plugin.version>2.46.1</com.diffplug.spotless.maven.plugin.version>
-  <com.google.googlejavaformat.version>1.17.0</com.google.googlejavaformat.version>
+  <com.google.googlejavaformat.version>1.35.0</com.google.googlejavaformat.version>
   <org.jsoup.version>1.15.3</org.jsoup.version>
 
   <maven-source-plugin.version>3.4.0</maven-source-plugin.version>
@@ -474,6 +476,14 @@
           </importOrder>
           <removeUnusedImports/>
         </java>
+      </configuration>
+    </plugin>
+    <plugin>
+      <groupId>org.apache.maven.plugins</groupId>
+      <artifactId>maven-surefire-plugin</artifactId>
+      <version>${org.apache.maven.plugins.surefire.version}</version>
+      <configuration>
+        <skipTests>${skipUnitTests}</skipTests>
       </configuration>
     </plugin>
     <plugin>

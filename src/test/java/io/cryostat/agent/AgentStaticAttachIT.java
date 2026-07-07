@@ -41,87 +41,94 @@ class AgentStaticAttachIT {
 
     @Test
     void testAgentStaticAttachWithSystemProperties() throws Exception {
-        String jarPath = ProcessTestHelper.getAgentShadedJarPath();
+        StringBuilder dummyStdout = new StringBuilder();
+        StringBuilder dummyStderr = new StringBuilder();
+        try {
+            String jarPath = ProcessTestHelper.getAgentShadedJarPath();
 
-        Map<String, String> properties = new HashMap<>();
-        properties.put("cryostat.agent.baseuri", "http://localhost:8081");
-        properties.put("cryostat.agent.webclient.tls.required", "false");
-        properties.put("cryostat.agent.callback", "http://localhost:8081/");
+            Map<String, String> properties = new HashMap<>();
+            properties.put("cryostat.agent.baseuri", "http://localhost:8081");
+            properties.put("cryostat.agent.webclient.tls.required", "false");
+            properties.put("cryostat.agent.callback", "http://localhost:8081/");
 
-        dummyAppWithAgent =
-                ProcessTestHelper.startDummyAppWithAgentSystemProperties(jarPath, properties);
+            dummyAppWithAgent =
+                    ProcessTestHelper.startDummyAppWithAgentSystemProperties(jarPath, properties);
 
-        StringBuilder dummyOutput = new StringBuilder();
-        StringBuilder dummyStderrBuilder = new StringBuilder();
+            Thread stdoutThread =
+                    ProcessTestHelper.captureStream(
+                            dummyAppWithAgent.getInputStream(), dummyStdout);
+            Thread stderrThread =
+                    ProcessTestHelper.captureStream(
+                            dummyAppWithAgent.getErrorStream(), dummyStderr);
 
-        Thread stdoutThread =
-                ProcessTestHelper.captureStream(dummyAppWithAgent.getInputStream(), dummyOutput);
-        Thread stderrThread =
-                ProcessTestHelper.captureStream(
-                        dummyAppWithAgent.getErrorStream(), dummyStderrBuilder);
+            boolean dummyReady =
+                    ProcessTestHelper.waitForOutput(dummyStdout, "Dummy app started", 50, 100);
+            Assertions.assertTrue(dummyReady, "Dummy app should start and print PID");
 
-        boolean dummyReady =
-                ProcessTestHelper.waitForOutput(dummyOutput, "Dummy app started", 50, 100);
-        Assertions.assertTrue(dummyReady, "Dummy app should start and print PID");
+            boolean registrationFailed =
+                    ProcessTestHelper.waitForOutput(dummyStdout, "Registration failure", 100, 100);
 
-        boolean registrationFailed =
-                ProcessTestHelper.waitForOutput(dummyOutput, "Registration failure", 100, 100);
+            dummyAppWithAgent.destroy();
+            dummyAppWithAgent.waitFor(2, TimeUnit.SECONDS);
+            stderrThread.join(1000);
+            stdoutThread.join(1000);
 
-        dummyAppWithAgent.destroy();
-        dummyAppWithAgent.waitFor(2, TimeUnit.SECONDS);
-        stderrThread.join(1000);
-        stdoutThread.join(1000);
+            Assertions.assertTrue(
+                    registrationFailed, "Agent should fail to register without Cryostat server");
 
-        Assertions.assertTrue(
-                registrationFailed, "Agent should fail to register without Cryostat server");
+            MatcherAssert.assertThat(
+                    dummyStderr.toString(), Matchers.not(Matchers.containsString("dynamically")));
 
-        MatcherAssert.assertThat(
-                dummyStderrBuilder.toString(),
-                Matchers.not(Matchers.containsString("dynamically")));
-
-        MatcherAssert.assertThat(
-                dummyOutput.toString(), Matchers.containsString("http://localhost:8081"));
+            MatcherAssert.assertThat(
+                    dummyStdout.toString(), Matchers.containsString("http://localhost:8081"));
+        } finally {
+            ProcessTestHelper.printStreams(getClass(), dummyStdout, dummyStderr);
+        }
     }
 
     @Test
     void testAgentStaticAttachWithAgentArguments() throws Exception {
-        String jarPath = ProcessTestHelper.getAgentShadedJarPath();
+        StringBuilder dummyStdout = new StringBuilder();
+        StringBuilder dummyStderr = new StringBuilder();
+        try {
+            String jarPath = ProcessTestHelper.getAgentShadedJarPath();
 
-        Map<String, String> properties = new HashMap<>();
-        properties.put("cryostat.agent.baseuri", "http://localhost:8082");
-        properties.put("cryostat.agent.webclient.tls.required", "false");
-        properties.put("cryostat.agent.callback", "http://localhost:8082/");
+            Map<String, String> properties = new HashMap<>();
+            properties.put("cryostat.agent.baseuri", "http://localhost:8082");
+            properties.put("cryostat.agent.webclient.tls.required", "false");
+            properties.put("cryostat.agent.callback", "http://localhost:8082/");
 
-        dummyAppWithAgent = ProcessTestHelper.startDummyAppWithAgentArguments(jarPath, properties);
+            dummyAppWithAgent =
+                    ProcessTestHelper.startDummyAppWithAgentArguments(jarPath, properties);
 
-        StringBuilder dummyOutput = new StringBuilder();
-        StringBuilder dummyStderrBuilder = new StringBuilder();
+            Thread stdoutThread =
+                    ProcessTestHelper.captureStream(
+                            dummyAppWithAgent.getInputStream(), dummyStdout);
+            Thread stderrThread =
+                    ProcessTestHelper.captureStream(
+                            dummyAppWithAgent.getErrorStream(), dummyStderr);
 
-        Thread stdoutThread =
-                ProcessTestHelper.captureStream(dummyAppWithAgent.getInputStream(), dummyOutput);
-        Thread stderrThread =
-                ProcessTestHelper.captureStream(
-                        dummyAppWithAgent.getErrorStream(), dummyStderrBuilder);
+            boolean dummyReady =
+                    ProcessTestHelper.waitForOutput(dummyStdout, "Dummy app started", 50, 100);
+            Assertions.assertTrue(dummyReady, "Dummy app should start and print PID");
 
-        boolean dummyReady =
-                ProcessTestHelper.waitForOutput(dummyOutput, "Dummy app started", 50, 100);
-        Assertions.assertTrue(dummyReady, "Dummy app should start and print PID");
+            boolean registrationFailed =
+                    ProcessTestHelper.waitForOutput(dummyStdout, "Registration failure", 100, 100);
+            Assertions.assertTrue(
+                    registrationFailed, "Agent should fail to register without Cryostat server");
 
-        boolean registrationFailed =
-                ProcessTestHelper.waitForOutput(dummyOutput, "Registration failure", 100, 100);
-        Assertions.assertTrue(
-                registrationFailed, "Agent should fail to register without Cryostat server");
+            dummyAppWithAgent.destroy();
+            dummyAppWithAgent.waitFor(2, TimeUnit.SECONDS);
+            stderrThread.join(1000);
+            stdoutThread.join(1000);
 
-        dummyAppWithAgent.destroy();
-        dummyAppWithAgent.waitFor(2, TimeUnit.SECONDS);
-        stderrThread.join(1000);
-        stdoutThread.join(1000);
+            MatcherAssert.assertThat(
+                    dummyStderr.toString(), Matchers.not(Matchers.containsString("dynamically")));
 
-        MatcherAssert.assertThat(
-                dummyStderrBuilder.toString(),
-                Matchers.not(Matchers.containsString("dynamically")));
-
-        MatcherAssert.assertThat(
-                dummyOutput.toString(), Matchers.containsString("http://localhost:8082"));
+            MatcherAssert.assertThat(
+                    dummyStdout.toString(), Matchers.containsString("http://localhost:8082"));
+        } finally {
+            ProcessTestHelper.printStreams(getClass(), dummyStdout, dummyStderr);
+        }
     }
 }
