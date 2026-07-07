@@ -41,7 +41,7 @@ jobs:
       with:
         path: ~/.m2
         key: ${{ runner.os }}-build-${{ hashFiles('**/pom.xml') }}
-    - run: mvn -B -U -Psnapshots clean install
+    - run: mvn -Dspotless.skip -B -U -Psnapshots clean install
     - id: get-agent-version
       run: |
         echo "agent-version=$(mvn -Psnapshots -q -DforceStdout help:evaluate -Dexpression=project.version)" >> $GITHUB_OUTPUT
