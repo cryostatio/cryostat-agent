@@ -20,6 +20,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -379,7 +380,7 @@ public class Harvester implements FlightRecorderListener {
                             pushType,
                             sownRecording,
                             maxFiles,
-                            additionalLabels(recording),
+                            additionalLabels(recording, true),
                             exitPath)
                     .thenRun(
                             () -> {
@@ -403,25 +404,39 @@ public class Harvester implements FlightRecorderListener {
                 PushType.ON_STOP,
                 Optional.of(tr),
                 maxFiles,
-                additionalLabels(tr.getRecording()),
+                additionalLabels(tr.getRecording(), false),
                 exitPath);
     }
 
-    Map<String, String> additionalLabels(Recording recording) {
+    Map<String, String> additionalLabels(Recording recording, boolean isSnapshot) {
         var map = new HashMap<String, String>();
         if (autoanalyze) {
             map.put(AUTOANALYZE_LABEL, String.valueOf(true));
         }
-        long startTime =
-                recording.getStartTime() != null ? recording.getStartTime().toEpochMilli() : 0L;
-        Duration dur = recording.getDuration();
+        long startTime;
         long duration;
-        if (dur != null && dur.toMillis() != 0) {
-            duration = dur.toMillis();
-        } else if (recording.getMaxAge() != null) {
-            duration = recording.getMaxAge().toMillis();
+        if (isSnapshot) {
+            Duration maxAge = recording.getMaxAge();
+            if (maxAge != null && maxAge.toMillis() > 0) {
+                duration = maxAge.toMillis();
+                startTime = Instant.now().toEpochMilli() - duration;
+            } else {
+                log.warn("Snapshot recording has no maxAge set; duration label will be 0");
+                duration = 0L;
+                startTime = 0L;
+            }
         } else {
-            duration = 0L;
+            Duration dur = recording.getDuration();
+            if (dur != null && dur.toMillis() != 0) {
+                duration = dur.toMillis();
+            } else if (recording.getMaxAge() != null && recording.getMaxAge().toMillis() > 0) {
+                duration = recording.getMaxAge().toMillis();
+            } else {
+                log.warn("Recording has no duration or maxAge set; duration label will be 0");
+                duration = 0L;
+            }
+            startTime =
+                    recording.getStartTime() != null ? recording.getStartTime().toEpochMilli() : 0L;
         }
         map.put("startTime", String.valueOf(startTime));
         map.put("duration", String.valueOf(duration));

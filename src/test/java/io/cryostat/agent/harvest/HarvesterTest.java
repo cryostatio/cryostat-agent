@@ -16,6 +16,7 @@
 package io.cryostat.agent.harvest;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Duration;
 import java.util.Map;
@@ -73,12 +74,55 @@ class HarvesterTest {
     }
 
     @Test
-    void testAdditionalLabelsWithStartedRecording() {
+    void testAdditionalLabelsSnapshotWithMaxAge() {
         recording = new Recording();
         recording.setMaxAge(Duration.ofSeconds(30));
         recording.start();
 
-        Map<String, String> labels = harvester.additionalLabels(recording);
+        long beforeMs = System.currentTimeMillis();
+        Map<String, String> labels = harvester.additionalLabels(recording, true);
+        long afterMs = System.currentTimeMillis();
+
+        long startTime = Long.parseLong(labels.get("startTime"));
+        assertEquals(String.valueOf(30_000L), labels.get("duration"));
+        assertTrue(
+                startTime >= beforeMs - 30_000L && startTime <= afterMs - 30_000L,
+                "startTime should be approximately now - maxAge");
+        assertEquals(String.valueOf(recording.getId()), labels.get("sourceRecordingId"));
+    }
+
+    @Test
+    void testAdditionalLabelsSnapshotNoMaxAge() {
+        recording = new Recording();
+
+        Map<String, String> labels = harvester.additionalLabels(recording, true);
+
+        assertEquals("0", labels.get("startTime"));
+        assertEquals("0", labels.get("duration"));
+        assertEquals(String.valueOf(recording.getId()), labels.get("sourceRecordingId"));
+    }
+
+    @Test
+    void testAdditionalLabelsNormalRecordingWithFixedDuration() {
+        recording = new Recording();
+        recording.setDuration(Duration.ofSeconds(10));
+        recording.start();
+
+        Map<String, String> labels = harvester.additionalLabels(recording, false);
+
+        long startTime = recording.getStartTime().toEpochMilli();
+        assertEquals(String.valueOf(startTime), labels.get("startTime"));
+        assertEquals(String.valueOf(10_000L), labels.get("duration"));
+        assertEquals(String.valueOf(recording.getId()), labels.get("sourceRecordingId"));
+    }
+
+    @Test
+    void testAdditionalLabelsNormalRecordingWithMaxAge() {
+        recording = new Recording();
+        recording.setMaxAge(Duration.ofSeconds(30));
+        recording.start();
+
+        Map<String, String> labels = harvester.additionalLabels(recording, false);
 
         long startTime = recording.getStartTime().toEpochMilli();
         assertEquals(String.valueOf(startTime), labels.get("startTime"));
@@ -87,22 +131,10 @@ class HarvesterTest {
     }
 
     @Test
-    void testAdditionalLabelsWithFixedDurationRecording() {
-        recording = new Recording();
-        recording.setDuration(Duration.ofSeconds(10));
-        recording.start();
-
-        Map<String, String> labels = harvester.additionalLabels(recording);
-
-        assertEquals(String.valueOf(10_000L), labels.get("duration"));
-        assertEquals(String.valueOf(recording.getId()), labels.get("sourceRecordingId"));
-    }
-
-    @Test
-    void testAdditionalLabelsNullDurationAndNullMaxAge() {
+    void testAdditionalLabelsNormalRecordingNoMaxAgeNoDuration() {
         recording = new Recording();
 
-        Map<String, String> labels = harvester.additionalLabels(recording);
+        Map<String, String> labels = harvester.additionalLabels(recording, false);
 
         assertEquals("0", labels.get("startTime"));
         assertEquals("0", labels.get("duration"));
@@ -129,7 +161,7 @@ class HarvesterTest {
 
         recording = new Recording();
 
-        Map<String, String> labels = autoanalyzeHarvester.additionalLabels(recording);
+        Map<String, String> labels = autoanalyzeHarvester.additionalLabels(recording, false);
 
         assertEquals("true", labels.get("autoanalyze"));
         assertEquals("0", labels.get("startTime"));
