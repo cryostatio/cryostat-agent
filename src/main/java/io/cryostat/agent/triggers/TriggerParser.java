@@ -32,6 +32,8 @@ import java.util.stream.Collectors;
 import io.cryostat.agent.FlightRecorderHelper;
 import io.cryostat.libcryostat.triggers.SmartTrigger;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,15 +44,21 @@ public class TriggerParser {
             "\\[(.*(&&)*|(\\|\\|)*)\\]~([\\w\\-]+)(?:\\.jfc)?";
     private static final Pattern EXPRESSION_PATTERN = Pattern.compile(EXPRESSION_PATTERN_STRING);
     private final FlightRecorderHelper flightRecorderHelper;
+    private ObjectMapper mapper;
     private final Optional<Path> triggerPath;
     private final Logger log = LoggerFactory.getLogger(getClass());
 
-    public TriggerParser(FlightRecorderHelper flightRecorderHelper, Optional<Path> triggerPath) {
+    @SuppressFBWarnings("EI_EXPOSE_REP2")
+    public TriggerParser(
+            FlightRecorderHelper flightRecorderHelper,
+            Optional<Path> triggerPath,
+            ObjectMapper mapper) {
         this.flightRecorderHelper = flightRecorderHelper;
         this.triggerPath = triggerPath;
+        this.mapper = mapper;
     }
 
-    public List<SmartTrigger> parseFromFiles() {
+    public List<SmartTrigger> parseFromFiles(boolean jsonFormat) {
         if (triggerPath.isEmpty()) {
             return Collections.emptyList();
         }
@@ -64,10 +72,24 @@ public class TriggerParser {
             return Files.walk(triggerPath.get())
                     .filter(Files::isRegularFile)
                     .filter(Files::isReadable)
-                    .flatMap(path -> createFromFile(path).stream())
+                    .flatMap(
+                            path ->
+                                    jsonFormat
+                                            ? parseJsonFromFiles(path).stream()
+                                            : createFromFile(path).stream())
                     .collect(Collectors.toList());
         } catch (IOException e) {
             log.error(e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
+    private List<SmartTrigger> parseJsonFromFiles(Path path) {
+        try {
+            String triggerDefinitions = Files.readString(path);
+            return parseFromJson(triggerDefinitions);
+        } catch (IOException ioe) {
+            log.error(ioe.getMessage());
             return Collections.emptyList();
         }
     }
@@ -133,5 +155,24 @@ public class TriggerParser {
             }
         }
         return true;
+    }
+
+    public List<SmartTrigger> parseFromJson(String req) {
+        try {
+            SmartTriggerReq[] reqs = mapper.readValue(req, SmartTriggerReq[].class);
+            var returnVal = new ArrayList<SmartTrigger>();
+            for (SmartTriggerReq r : reqs) {
+                returnVal.add(
+                        new SmartTrigger(
+                                UUID.randomUUID().toString(),
+                                r.constructExprFromParams(),
+                                r.getRecordingTemplate()));
+            }
+            return returnVal;
+        } catch (Exception e) {
+            log.warn("Exception thrown while parsing triggers");
+            log.warn(e.toString());
+            return Collections.emptyList();
+        }
     }
 }

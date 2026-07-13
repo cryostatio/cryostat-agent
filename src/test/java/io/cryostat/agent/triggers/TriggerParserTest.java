@@ -29,6 +29,7 @@ import io.cryostat.agent.FlightRecorderHelper;
 import io.cryostat.libcryostat.triggers.SmartTrigger;
 import io.cryostat.libcryostat.triggers.SmartTrigger.TriggerState;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.hamcrest.MatcherAssert;
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.AfterEach;
@@ -48,13 +49,14 @@ class TriggerParserTest {
 
     @Mock FlightRecorderHelper helper;
     @Mock Path triggerPath;
+    @Mock ObjectMapper mapper;
     MockedStatic<Files> filesMock;
 
     TriggerParser parser;
 
     @BeforeEach
     void setup() {
-        this.parser = new TriggerParser(helper, Optional.of(triggerPath));
+        this.parser = new TriggerParser(helper, Optional.of(triggerPath), mapper);
         this.filesMock = Mockito.mockStatic(Files.class);
     }
 
@@ -88,7 +90,7 @@ class TriggerParserTest {
 
         Mockito.when(helper.isValidTemplate(Mockito.anyString())).thenReturn(true);
 
-        List<SmartTrigger> out = parser.parseFromFiles();
+        List<SmartTrigger> out = parser.parseFromFiles(false);
 
         MatcherAssert.assertThat(out, Matchers.hasSize(1));
         SmartTrigger trigger = out.get(0);
