@@ -49,7 +49,7 @@ class TriggerParserTest {
 
     @Mock FlightRecorderHelper helper;
     @Mock Path triggerPath;
-    @Mock ObjectMapper mapper;
+    private final ObjectMapper mapper = new ObjectMapper();
     MockedStatic<Files> filesMock;
 
     TriggerParser parser;
@@ -285,6 +285,79 @@ class TriggerParserTest {
         assertEquals(false, parser.isValid("foo"));
         assertEquals(false, parser.isValid("foo~bar"));
         assertEquals(true, parser.isValid("[ProcessCpuLoad>0.2]~profile"));
+    }
+
+    @Test
+    void testParseJson() {
+        Mockito.when(helper.isValidTemplate(Mockito.anyString())).thenReturn(true);
+        String in =
+                "[{"
+                        + "\"condition\" : \"ProcessCpuLoad>0.2\","
+                        + "\"durationExpr\" : \"30s\","
+                        + "\"recordingTemplate\" : \"default.jfc\""
+                        + "}]";
+        List<SmartTrigger> out = parser.parseFromJson(in);
+        MatcherAssert.assertThat(out, Matchers.hasSize(1));
+
+        var trigger = out.get(0);
+        MatcherAssert.assertThat(
+                trigger.getExpression(),
+                Matchers.equalTo("ProcessCpuLoad>0.2;TargetDuration>duration(\"30s\")"));
+        MatcherAssert.assertThat(
+                trigger.getRecordingTemplateName(), Matchers.equalTo("default.jfc"));
+        MatcherAssert.assertThat(
+                trigger.getDurationConstraint(),
+                Matchers.equalTo("TargetDuration>duration(\"30s\")"));
+        MatcherAssert.assertThat(
+                trigger.getTriggerCondition(), Matchers.equalTo("ProcessCpuLoad>0.2"));
+        MatcherAssert.assertThat(trigger.getState(), Matchers.equalTo(TriggerState.NEW));
+        MatcherAssert.assertThat(
+                trigger.getTargetDuration(), Matchers.equalTo(Duration.ofSeconds(30)));
+        MatcherAssert.assertThat(
+                trigger.getTimeConditionFirstMet().getTime(), Matchers.equalTo(0L));
+    }
+
+    @Test
+    void testEmptyJsonFieldsFailToParse() {
+        String in =
+                "[{"
+                        + "\"condition\" : \"\","
+                        + "\"durationExpr\" : \"30s\","
+                        + "\"recordingTemplate\" : \"default.jfc\""
+                        + "}]";
+        List<SmartTrigger> out = parser.parseFromJson(in);
+        MatcherAssert.assertThat(out, Matchers.hasSize(0));
+
+        in =
+                "[{"
+                        + "\"condition\" : \"ProcessCpuLoad>0.1\","
+                        + "\"durationExpr\" : \"\","
+                        + "\"recordingTemplate\" : \"default.jfc\""
+                        + "}]";
+        out = parser.parseFromJson(in);
+        MatcherAssert.assertThat(out, Matchers.hasSize(0));
+
+        in =
+                "[{"
+                        + "\"condition\" : \"ProcessCpuLoad>0.1\","
+                        + "\"durationExpr\" : \"30s\","
+                        + "\"recordingTemplate\" : \"\""
+                        + "}]";
+        out = parser.parseFromJson(in);
+        MatcherAssert.assertThat(out, Matchers.hasSize(0));
+    }
+
+    @Test
+    void testFailsToParseInvalidTemplateFromJson() {
+        Mockito.when(helper.isValidTemplate(Mockito.anyString())).thenReturn(false);
+        String in =
+                "[{"
+                        + "\"condition\" : \"ProcessCpuLoad>0.2\","
+                        + "\"durationExpr\" : \"30s\","
+                        + "\"recordingTemplate\" : \"foo\""
+                        + "}]";
+        List<SmartTrigger> out = parser.parseFromJson(in);
+        MatcherAssert.assertThat(out, Matchers.hasSize(0));
     }
 
     static List<List<String>> emptyCases() {

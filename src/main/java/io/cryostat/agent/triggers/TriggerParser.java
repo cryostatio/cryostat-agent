@@ -162,11 +162,28 @@ public class TriggerParser {
             SmartTriggerReq[] reqs = mapper.readValue(req, SmartTriggerReq[].class);
             var returnVal = new ArrayList<SmartTrigger>();
             for (SmartTriggerReq r : reqs) {
-                returnVal.add(
-                        new SmartTrigger(
-                                UUID.randomUUID().toString(),
-                                r.constructExprFromParams(),
-                                r.getRecordingTemplate()));
+                // Null/non-provided fields will already be caught by the
+                // ObjectMapper, check their values are valid
+                System.out.println(
+                        "Parsed values: "
+                                + r.getCondition()
+                                + ", "
+                                + r.getDurationExpr()
+                                + ", "
+                                + r.getRecordingTemplate());
+                if (!isValid(r.getCondition(), r.getDurationExpr(), r.getRecordingTemplate())) {
+                    // Log and skip invalid triggers
+                    continue;
+                }
+                try {
+                    returnVal.add(
+                            new SmartTrigger(
+                                    UUID.randomUUID().toString(),
+                                    r.constructExprFromParams(),
+                                    r.getRecordingTemplate()));
+                } catch (DateTimeParseException dtpe) {
+                    log.error("Failed to parse trigger duration constraint", dtpe);
+                }
             }
             return returnVal;
         } catch (Exception e) {
@@ -174,5 +191,22 @@ public class TriggerParser {
             log.warn(e.toString());
             return Collections.emptyList();
         }
+    }
+
+    public boolean isValid(String condition, String duration, String template) {
+        if (condition.isBlank()) {
+            log.warn("Trigger condition was blank. Skipping Trigger.");
+            return false;
+        } else if (duration.isBlank()) {
+            log.warn("Trigger duration was blank. Skipping Trigger.");
+            return false;
+        } else if (template.isBlank()) {
+            log.warn("Template was blank. Skipping Trigger.");
+            return false;
+        } else if (!flightRecorderHelper.isValidTemplate(template)) {
+            log.warn("Template was invalid. Skipping Trigger.");
+            return false;
+        }
+        return true;
     }
 }

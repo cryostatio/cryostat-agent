@@ -66,11 +66,7 @@ public class SmartTriggerReq {
     // to users, we can construct the expression to evaulate
     // from a simple set of properties.
     public String constructExprFromParams() {
-        return "["
-                + this.condition
-                + constructDurationExprFromRequest()
-                + "]~"
-                + this.recordingTemplate;
+        return this.condition + ";" + constructDurationExprFromRequest();
     }
 
     private String constructDurationExprFromRequest() {
