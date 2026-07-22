@@ -161,6 +161,31 @@ class GcLogContextTest {
     }
 
     @Test
+    void testGetReturns204WhenLogFileDoesNotExist() throws Exception {
+        Path logFile = tempDir.resolve("missing.log");
+        gcLogging.onVmLogInvoked(new Object[] {new String[] {"what=gc output=" + logFile}});
+        when(exchange.getRequestMethod()).thenReturn("GET");
+        when(exchange.getRequestURI()).thenReturn(URI.create("/gc-log/"));
+
+        ctx.handle(exchange);
+
+        verify(exchange).sendResponseHeaders(204, RemoteContext.BODY_LENGTH_NONE);
+    }
+
+    @Test
+    void testGetReturns204WhenLogFileIsEmpty() throws Exception {
+        Path logFile = tempDir.resolve("empty.log");
+        Files.write(logFile, new byte[0]);
+        gcLogging.onVmLogInvoked(new Object[] {new String[] {"what=gc output=" + logFile}});
+        when(exchange.getRequestMethod()).thenReturn("GET");
+        when(exchange.getRequestURI()).thenReturn(URI.create("/gc-log/"));
+
+        ctx.handle(exchange);
+
+        verify(exchange).sendResponseHeaders(204, RemoteContext.BODY_LENGTH_NONE);
+    }
+
+    @Test
     void testGetReturns405ForNonGetMethod() throws Exception {
         when(exchange.getRequestMethod()).thenReturn("POST");
 

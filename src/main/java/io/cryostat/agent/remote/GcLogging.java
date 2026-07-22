@@ -15,6 +15,7 @@
  */
 package io.cryostat.agent.remote;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.management.ManagementFactory;
@@ -125,7 +126,11 @@ public class GcLogging {
         gcLogPath = nextPath;
         if (!Files.exists(currentPath)) {
             log.warn("GC log file not found after redirect: {}", currentPath);
-            throw new IllegalStateException("GC log file missing after redirect: " + currentPath);
+            return new ByteArrayInputStream(new byte[0]);
+        }
+        if (Files.size(currentPath) == 0L) {
+            Files.deleteIfExists(currentPath);
+            return new ByteArrayInputStream(new byte[0]);
         }
         return DeletingInputStream.of(currentPath);
     }
