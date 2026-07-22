@@ -277,6 +277,8 @@ public abstract class ConfigModule {
     public static final String CRYOSTAT_AGENT_WEBCLIENT_CONNECTION_POOL_MAX_PER_ROUTE =
             "cryostat.agent.webclient.connection-pool.max-per-route";
 
+    public static final String CRYOSTAT_AGENT_GC_LOG_ENABLED = "cryostat.agent.gc-log.enabled";
+
     @Provides
     @Singleton
     public static SmallRyeConfig provideConfig() {

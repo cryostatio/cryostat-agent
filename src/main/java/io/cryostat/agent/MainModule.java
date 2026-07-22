@@ -76,6 +76,7 @@ import javax.net.ssl.X509TrustManager;
 import io.cryostat.agent.ConfigModule.BytePass;
 import io.cryostat.agent.ConfigModule.CallbackCandidate;
 import io.cryostat.agent.harvest.HarvestModule;
+import io.cryostat.agent.remote.GcLogging;
 import io.cryostat.agent.remote.RemoteContext;
 import io.cryostat.agent.remote.RemoteModule;
 import io.cryostat.agent.triggers.TriggerModule;
@@ -789,6 +790,12 @@ public abstract class MainModule {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    @Provides
+    @Singleton
+    public static GcLogging provideGcLogging() {
+        return new GcLogging();
     }
 
     @Provides

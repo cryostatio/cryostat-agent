@@ -21,6 +21,7 @@ import java.io.OutputStream;
 import java.lang.management.ManagementFactory;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.Collection;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -48,16 +49,23 @@ class InvokeContext extends MutatingRemoteContext {
 
     private static final String DUMP_THREADS = "threadPrint";
     private static final String DUMP_THREADS_TO_FIlE = "threadDumpToFile";
+    static final String VM_LOG = "vmLog";
     private final Logger log = LoggerFactory.getLogger(getClass());
     private final ObjectMapper mapper;
 
     private CryostatClient client;
+    private GcLogging gcLogging;
 
     @Inject
-    InvokeContext(ObjectMapper mapper, SmallRyeConfig config, CryostatClient client) {
+    InvokeContext(
+            ObjectMapper mapper,
+            SmallRyeConfig config,
+            CryostatClient client,
+            GcLogging gcLogging) {
         super(config);
         this.mapper = mapper;
         this.client = client;
+        this.gcLogging = gcLogging;
     }
 
     @Override
@@ -75,25 +83,55 @@ class InvokeContext extends MutatingRemoteContext {
                         MBeanInvocationRequest req =
                                 mapper.readValue(body, MBeanInvocationRequest.class);
                         String requestId = "";
-                        String filename =
-                                Files.createTempFile(
-                                                config.getValue(
-                                                        ConfigModule.CRYOSTAT_AGENT_APP_NAME,
-                                                        String.class),
-                                                (String) null)
-                                        .toString();
+
                         if (!req.isValid()) {
                             exchange.sendResponseHeaders(
                                     HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
                         }
 
+                        String heapDumpFilename = null;
                         if (req.getOperation().equals("dumpHeap")) {
+                            heapDumpFilename =
+                                    Files.createTempFile(
+                                                    config.getValue(
+                                                            ConfigModule.CRYOSTAT_AGENT_APP_NAME,
+                                                            String.class),
+                                                    (String) null)
+                                            .toString();
+
                             requestId = (String) req.parameters[2];
-                            filename += "-" + UUID.randomUUID().toString() + ".hprof";
-                            req.parameters[0] = filename;
+                            heapDumpFilename += "-" + UUID.randomUUID().toString() + ".hprof";
+                            req.parameters[0] = heapDumpFilename;
                             // Job ID is passed along in parameters[2]
                             Object[] parameters = {req.parameters[0], req.parameters[1]};
                             req.parameters = parameters;
+                        } else if (VM_LOG.equals(req.getOperation())
+                                && req.parameters != null
+                                && req.parameters.length > 0) {
+                            // Normalise the parameter array first (JSON deserialises as a
+                            // Collection when the type is Object[]).
+                            if (req.parameters[0] instanceof Collection) {
+                                @SuppressWarnings("unchecked")
+                                Collection<String> col = (Collection<String>) req.parameters[0];
+                                req.parameters[0] = col.toArray(new String[0]);
+                            }
+                            // The agent owns the GC log file path. Strip any output= the
+                            // caller sent and inject one that points to a fresh tempfile so
+                            // that GcLogContext always has a known path to read back.
+                            String vmLogArgs;
+                            if (req.parameters[0] instanceof String[]) {
+                                String[] strArr = (String[]) req.parameters[0];
+                                vmLogArgs = strArr.length > 0 ? strArr[0] : "";
+                            } else {
+                                vmLogArgs = String.valueOf(req.parameters[0]);
+                            }
+                            if (!vmLogArgs.contains("disable=true")) {
+                                vmLogArgs = vmLogArgs.replaceAll("(?:^|\\s)output=\\S+", "").trim();
+                                String gcLogFile =
+                                        Files.createTempFile("cryostat-gc-", ".log").toString();
+                                vmLogArgs = vmLogArgs + " output=" + gcLogFile;
+                                req.parameters[0] = new String[] {vmLogArgs};
+                            }
                         }
 
                         MBeanServer server = ManagementFactory.getPlatformMBeanServer();
@@ -107,7 +145,13 @@ class InvokeContext extends MutatingRemoteContext {
                         if (req.getOperation().equals("dumpHeap")) {
                             // Send the request Id back with the heap dump so the server
                             // can match it with the open requests.
-                            client.pushHeapDump(Paths.get(filename), requestId);
+                            if (heapDumpFilename == null
+                                    || !Files.exists(Paths.get(heapDumpFilename))) {
+                                throw new IllegalStateException();
+                            }
+                            client.pushHeapDump(Paths.get(heapDumpFilename), requestId);
+                        } else if (VM_LOG.equals(req.getOperation())) {
+                            gcLogging.onVmLogInvoked(req.parameters);
                         }
 
                         if (Objects.nonNull(response)) {
@@ -162,7 +206,8 @@ class InvokeContext extends MutatingRemoteContext {
             }
             if (DIAGNOSTIC_COMMAND_BEAN_NAME.equals(beanName)
                     && (DUMP_THREADS.equals(this.operation)
-                            || DUMP_THREADS_TO_FIlE.equals(this.operation))) {
+                            || DUMP_THREADS_TO_FIlE.equals(this.operation)
+                            || VM_LOG.equals(this.operation))) {
                 return true;
             }
             if (JMC_AGENT_BEAN_NAME.equals(beanName)) {
