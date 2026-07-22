@@ -18,6 +18,7 @@ package io.cryostat.agent.remote;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -97,13 +98,13 @@ class GcLogContext implements RemoteContext {
             exchange.sendResponseHeaders(HttpStatus.SC_CONFLICT, BODY_LENGTH_NONE);
             return;
         }
+        if (!Files.exists(gcLogging.gcLogPath) || Files.size(gcLogging.gcLogPath) == 0L) {
+            exchange.sendResponseHeaders(HttpStatus.SC_NO_CONTENT, BODY_LENGTH_NONE);
+            return;
+        }
         InputStream stream;
         try {
             stream = gcLogging.collectAndRedirect();
-        } catch (IllegalStateException e) {
-            log.warn("GC log not available: {}", e.getMessage());
-            exchange.sendResponseHeaders(HttpStatus.SC_CONFLICT, BODY_LENGTH_NONE);
-            return;
         } catch (Exception e) {
             log.error("Failed to collect GC log", e);
             exchange.sendResponseHeaders(HttpStatus.SC_INTERNAL_SERVER_ERROR, BODY_LENGTH_NONE);
