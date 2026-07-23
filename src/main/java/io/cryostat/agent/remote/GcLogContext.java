@@ -19,8 +19,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.Files;
-import java.util.HashMap;
-import java.util.Map;
 
 import javax.inject.Inject;
 
@@ -81,33 +79,24 @@ class GcLogContext implements RemoteContext {
     }
 
     private void handleStatus(HttpExchange exchange) throws IOException {
-        Map<String, Object> status = new HashMap<>();
-        status.put("enabled", gcLogging.loggingEnabled);
-        status.put("what", gcLogging.what);
-        status.put("decorators", gcLogging.decorators);
-        status.put(
-                "logFilePath", gcLogging.gcLogPath != null ? gcLogging.gcLogPath.toString() : null);
-        status.put(
-                "hasLog",
-                gcLogging.gcLogPath != null
-                        && !gcLogging.isStreamOutput()
-                        && Files.exists(gcLogging.gcLogPath));
+        GcLogging.State state = gcLogging.queryState();
         exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
         try (OutputStream response = exchange.getResponseBody()) {
-            mapper.writeValue(response, status);
+            mapper.writeValue(response, state);
         }
     }
 
     private void handleGet(HttpExchange exchange) throws IOException {
-        if (!gcLogging.loggingEnabled || gcLogging.gcLogPath == null) {
+        GcLogging.State state = gcLogging.queryState();
+        if (!state.enabled || state.logFilePath == null) {
             exchange.sendResponseHeaders(HttpStatus.SC_CONFLICT, BODY_LENGTH_NONE);
             return;
         }
-        if (gcLogging.isStreamOutput()) {
+        if (state.isStreamOutput()) {
             exchange.sendResponseHeaders(HttpStatus.SC_NO_CONTENT, BODY_LENGTH_NONE);
             return;
         }
-        if (!Files.exists(gcLogging.gcLogPath) || Files.size(gcLogging.gcLogPath) == 0L) {
+        if (!Files.exists(state.logFilePath) || Files.size(state.logFilePath) == 0L) {
             exchange.sendResponseHeaders(HttpStatus.SC_NO_CONTENT, BODY_LENGTH_NONE);
             return;
         }

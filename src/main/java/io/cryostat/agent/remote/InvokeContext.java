@@ -54,18 +54,12 @@ class InvokeContext extends MutatingRemoteContext {
     private final ObjectMapper mapper;
 
     private CryostatClient client;
-    private GcLogging gcLogging;
 
     @Inject
-    InvokeContext(
-            ObjectMapper mapper,
-            SmallRyeConfig config,
-            CryostatClient client,
-            GcLogging gcLogging) {
+    InvokeContext(ObjectMapper mapper, SmallRyeConfig config, CryostatClient client) {
         super(config);
         this.mapper = mapper;
         this.client = client;
-        this.gcLogging = gcLogging;
     }
 
     @Override
@@ -150,8 +144,6 @@ class InvokeContext extends MutatingRemoteContext {
                                 throw new IllegalStateException();
                             }
                             client.pushHeapDump(Paths.get(heapDumpFilename), requestId);
-                        } else if (VM_LOG.equals(req.getOperation())) {
-                            gcLogging.onVmLogInvoked(req.parameters);
                         }
 
                         if (Objects.nonNull(response)) {
