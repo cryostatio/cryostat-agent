@@ -83,6 +83,7 @@ class GcLogContext implements RemoteContext {
     private void handleStatus(HttpExchange exchange) throws IOException {
         Map<String, Object> status = new HashMap<>();
         status.put("enabled", gcLogging.loggingEnabled);
+        status.put("what", gcLogging.what);
         status.put("decorators", gcLogging.decorators);
         status.put(
                 "hasLog",
