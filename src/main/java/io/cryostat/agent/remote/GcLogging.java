@@ -38,15 +38,14 @@ import javax.management.MalformedObjectNameException;
 import javax.management.ObjectName;
 import javax.management.ReflectionException;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class GcLogging {
 
-    private static final Pattern OUTPUT_PATTERN = Pattern.compile("(?:^|\\s)output=([^\\s]+)");
-    private static final Pattern DECORATORS_PATTERN =
-            Pattern.compile("(?:^|\\s)decorators=([^\\s]+)");
-    private static final Pattern WHAT_PATTERN = Pattern.compile("(?:^|\\s)what=([^\\s]+)");
     private static final Pattern VM_LOG_LIST_FILE_PATTERN =
             Pattern.compile("^\\s*#\\d+: file=(\\S+) (\\S+) (\\S+)");
     private static final Pattern VM_LOG_LIST_NONFILE_PATTERN =
@@ -57,14 +56,40 @@ public class GcLogging {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
-    volatile Path gcLogPath = null;
-    volatile boolean loggingEnabled = false;
-    volatile String decorators = "time,level";
-    volatile String what = "gc";
-
     public GcLogging() {}
 
-    public void loadInitialState() {
+    /** Immutable snapshot of the JVM unified logging configuration for GC output. */
+    static class State {
+        public final boolean enabled;
+
+        @JsonSerialize(using = ToStringSerializer.class)
+        public final Path logFilePath;
+
+        public final String what;
+        public final String decorators;
+
+        State(boolean loggingEnabled, Path gcLogPath, String what, String decorators) {
+            this.enabled = loggingEnabled;
+            this.logFilePath = gcLogPath;
+            this.what = what;
+            this.decorators = decorators;
+        }
+
+        static State disabled() {
+            return new State(false, null, "gc", "time,level");
+        }
+
+        @JsonIgnore
+        boolean isStreamOutput() {
+            return DEV_STDOUT.equals(logFilePath) || DEV_STDERR.equals(logFilePath);
+        }
+    }
+
+    /**
+     * Queries the JVM's unified logging configuration via {@code vmLog list} and returns the
+     * current GC logging state. Always reflects the live JVM configuration.
+     */
+    public State queryState() {
         MBeanServer server = ManagementFactory.getPlatformMBeanServer();
         String output;
         try {
@@ -79,13 +104,13 @@ public class GcLogging {
                 | MBeanException
                 | MalformedObjectNameException
                 | ReflectionException e) {
-            log.debug("Could not query vmLog list to determine initial GC log state", e);
-            return;
+            log.debug("Could not query vmLog list to determine GC log state", e);
+            return State.disabled();
         }
-        applyVmLogListOutput(output);
+        return parseVmLogListOutput(output);
     }
 
-    void applyVmLogListOutput(String output) {
+    State parseVmLogListOutput(String output) {
         String lastFileLine = null;
         String lastActiveNonFileLine = null;
         for (String line : output.split("\n")) {
@@ -101,100 +126,38 @@ public class GcLogging {
         if (lastFileLine != null) {
             Matcher m = VM_LOG_LIST_FILE_PATTERN.matcher(lastFileLine);
             if (!m.find()) {
-                return;
+                return State.disabled();
             }
-            gcLogPath = Paths.get(m.group(1));
-            what = m.group(2);
-            decorators = m.group(3);
-            loggingEnabled = true;
-            log.debug(
-                    "Initialized GC logging state from vmLog list: path={}, what={}, decorators={}",
-                    gcLogPath,
-                    what,
-                    decorators);
+            return new State(true, Paths.get(m.group(1)), m.group(2), m.group(3));
         } else if (lastActiveNonFileLine != null) {
             Matcher m = VM_LOG_LIST_NONFILE_PATTERN.matcher(lastActiveNonFileLine);
             if (!m.find()) {
-                return;
+                return State.disabled();
             }
-            gcLogPath = "stdout".equals(m.group(1)) ? DEV_STDOUT : DEV_STDERR;
-            what = m.group(2);
-            decorators = m.group(3);
-            loggingEnabled = true;
-            log.debug(
-                    "Initialized GC logging state from vmLog list (stream output): path={},"
-                            + " what={}, decorators={}",
-                    gcLogPath,
-                    what,
-                    decorators);
-        } else {
-            log.debug("No active VM log output found in vmLog list output");
+            Path streamPath = "stdout".equals(m.group(1)) ? DEV_STDOUT : DEV_STDERR;
+            return new State(true, streamPath, m.group(2), m.group(3));
         }
-    }
-
-    public void onVmLogInvoked(Object[] parameters) {
-        if (parameters == null || parameters.length == 0) {
-            return;
-        }
-        String args;
-        if (parameters[0] instanceof String[]) {
-            String[] strArr = (String[]) parameters[0];
-            if (strArr.length == 0) {
-                return;
-            }
-            args = strArr[0];
-        } else {
-            args = String.valueOf(parameters[0]);
-        }
-        if (args.contains("disable=true")) {
-            loggingEnabled = false;
-            gcLogPath = null;
-            decorators = "time,level";
-            what = "gc";
-            log.debug("GC logging disabled");
-            return;
-        }
-        Matcher outputMatcher = OUTPUT_PATTERN.matcher(args);
-        if (outputMatcher.find()) {
-            gcLogPath = Paths.get(outputMatcher.group(1));
-            loggingEnabled = true;
-            Matcher decoratorsMatcher = DECORATORS_PATTERN.matcher(args);
-            if (decoratorsMatcher.find()) {
-                decorators = decoratorsMatcher.group(1);
-            }
-            Matcher whatMatcher = WHAT_PATTERN.matcher(args);
-            if (whatMatcher.find()) {
-                what = whatMatcher.group(1);
-            }
-            log.debug(
-                    "GC logging enabled, path={}, what={}, decorators={}",
-                    gcLogPath,
-                    what,
-                    decorators);
-        }
-    }
-
-    boolean isStreamOutput() {
-        return DEV_STDOUT.equals(gcLogPath) || DEV_STDERR.equals(gcLogPath);
+        return State.disabled();
     }
 
     /**
-     * Redirects JVM GC logging to a fresh temp file, closing the current log at {@code
-     * currentPath}. Returns an {@link InputStream} over the closed log content. The caller is
-     * responsible for closing the stream.
+     * Redirects JVM GC logging to a fresh temp file, closing the current log. Returns an {@link
+     * InputStream} over the closed log content. The caller is responsible for closing the stream.
      */
     public InputStream collectAndRedirect() throws Exception {
-        if (!loggingEnabled || gcLogPath == null) {
+        State state = queryState();
+        if (!state.enabled || state.logFilePath == null) {
             throw new IllegalStateException("GC logging is not active");
         }
-        if (isStreamOutput()) {
+        if (state.isStreamOutput()) {
             return new ByteArrayInputStream(new byte[0]);
         }
-        Path currentPath = gcLogPath;
+        Path currentPath = state.logFilePath;
         Path nextPath = Files.createTempFile("cryostat-gc-", ".log");
         Files.delete(nextPath);
         MBeanServer server = ManagementFactory.getPlatformMBeanServer();
-        String redirectArg = "what=" + what + " decorators=" + decorators + " output=" + nextPath;
+        String redirectArg =
+                "what=" + state.what + " decorators=" + state.decorators + " output=" + nextPath;
         try {
             server.invoke(
                     ObjectName.getInstance("com.sun.management:type=DiagnosticCommand"),
@@ -211,7 +174,6 @@ public class GcLogging {
             }
             throw new Exception("VM.log redirect failed", e);
         }
-        gcLogPath = nextPath;
         List<Path> collectedPaths = collectLogPaths(currentPath);
         if (collectedPaths.isEmpty()) {
             log.warn("GC log file not found after redirect: {}", currentPath);

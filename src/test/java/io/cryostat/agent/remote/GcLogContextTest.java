@@ -54,9 +54,13 @@ class GcLogContextTest {
         lenient()
                 .when(config.getValue(ConfigModule.CRYOSTAT_AGENT_GC_LOG_ENABLED, boolean.class))
                 .thenReturn(true);
-        gcLogging = new GcLogging();
+        gcLogging = spy(new GcLogging());
         ctx = new GcLogContext(mapper, config, gcLogging);
     }
+
+    // -------------------------------------------------------------------------
+    // GcLogContext.available / path
+    // -------------------------------------------------------------------------
 
     @Test
     void testAvailableReturnsConfigValue() {
@@ -75,48 +79,14 @@ class GcLogContextTest {
         assertEquals("/gc-log/", ctx.path());
     }
 
-    @Test
-    void testOnVmLogInvokedEnablesLogging() {
-        Path logFile = tempDir.resolve("gc.log");
-        gcLogging.onVmLogInvoked(
-                new Object[] {new String[] {"what=gc decorators=time,level output=" + logFile}});
-        assertTrue(gcLogging.loggingEnabled);
-        assertEquals(logFile, gcLogging.gcLogPath);
-        assertEquals("time,level", gcLogging.decorators);
-    }
-
-    @Test
-    void testOnVmLogInvokedDisablesLogging() {
-        Path logFile = tempDir.resolve("gc.log");
-        gcLogging.onVmLogInvoked(new Object[] {new String[] {"what=gc output=" + logFile}});
-        assertTrue(gcLogging.loggingEnabled);
-
-        gcLogging.onVmLogInvoked(new Object[] {new String[] {"disable=true"}});
-        assertFalse(gcLogging.loggingEnabled);
-        assertNull(gcLogging.gcLogPath);
-        assertEquals("time,level", gcLogging.decorators);
-    }
-
-    @Test
-    void testOnVmLogInvokedWithNullParameters() {
-        gcLogging.onVmLogInvoked(null);
-        assertFalse(gcLogging.loggingEnabled);
-    }
-
-    @Test
-    void testOnVmLogInvokedWithEmptyParameters() {
-        gcLogging.onVmLogInvoked(new Object[0]);
-        assertFalse(gcLogging.loggingEnabled);
-    }
-
-    @Test
-    void testOnVmLogInvokedWithEmptyStringArray() {
-        gcLogging.onVmLogInvoked(new Object[] {new String[0]});
-        assertFalse(gcLogging.loggingEnabled);
-    }
+    // -------------------------------------------------------------------------
+    // Status endpoint
+    // -------------------------------------------------------------------------
 
     @Test
     void testStatusWhenDisabled() throws Exception {
+        doReturn(GcLogging.State.disabled()).when(gcLogging).queryState();
+
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         when(exchange.getRequestMethod()).thenReturn("GET");
         when(exchange.getRequestURI()).thenReturn(URI.create("/gc-log/status"));
@@ -127,7 +97,6 @@ class GcLogContextTest {
         verify(exchange).sendResponseHeaders(200, RemoteContext.BODY_LENGTH_UNKNOWN);
         JsonNode node = mapper.readTree(baos.toByteArray());
         assertFalse(node.get("enabled").asBoolean());
-        assertFalse(node.get("hasLog").asBoolean());
         assertTrue(node.get("logFilePath").isNull());
     }
 
@@ -135,8 +104,7 @@ class GcLogContextTest {
     void testStatusWhenEnabledWithExistingFile() throws Exception {
         Path logFile = tempDir.resolve("gc.log");
         Files.writeString(logFile, "GC log content");
-        gcLogging.onVmLogInvoked(
-                new Object[] {new String[] {"what=gc decorators=uptime output=" + logFile}});
+        doReturn(new GcLogging.State(true, logFile, "gc", "uptime")).when(gcLogging).queryState();
 
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         when(exchange.getRequestMethod()).thenReturn("GET");
@@ -148,15 +116,17 @@ class GcLogContextTest {
         verify(exchange).sendResponseHeaders(200, RemoteContext.BODY_LENGTH_UNKNOWN);
         JsonNode node = mapper.readTree(baos.toByteArray());
         assertTrue(node.get("enabled").asBoolean());
-        assertTrue(node.get("hasLog").asBoolean());
         assertEquals("uptime", node.get("decorators").asText());
         assertEquals(logFile.toString(), node.get("logFilePath").asText());
     }
 
     @Test
     void testStatusWhenLoggingToStdout() throws Exception {
-        gcLogging.applyVmLogListOutput(
-                "Log output configuration:\n" + " #0: stdout all=warning uptime,level,tags\n");
+        doReturn(
+                        new GcLogging.State(
+                                true, GcLogging.DEV_STDOUT, "all=warning", "uptime,level,tags"))
+                .when(gcLogging)
+                .queryState();
 
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         when(exchange.getRequestMethod()).thenReturn("GET");
@@ -168,12 +138,16 @@ class GcLogContextTest {
         verify(exchange).sendResponseHeaders(200, RemoteContext.BODY_LENGTH_UNKNOWN);
         JsonNode node = mapper.readTree(baos.toByteArray());
         assertTrue(node.get("enabled").asBoolean());
-        assertFalse(node.get("hasLog").asBoolean());
         assertEquals(GcLogging.DEV_STDOUT.toString(), node.get("logFilePath").asText());
     }
 
+    // -------------------------------------------------------------------------
+    // GET (log download) endpoint
+    // -------------------------------------------------------------------------
+
     @Test
     void testGetReturns409WhenNotEnabled() throws Exception {
+        doReturn(GcLogging.State.disabled()).when(gcLogging).queryState();
         when(exchange.getRequestMethod()).thenReturn("GET");
         when(exchange.getRequestURI()).thenReturn(URI.create("/gc-log/"));
 
@@ -185,7 +159,9 @@ class GcLogContextTest {
     @Test
     void testGetReturns204WhenLogFileDoesNotExist() throws Exception {
         Path logFile = tempDir.resolve("missing.log");
-        gcLogging.onVmLogInvoked(new Object[] {new String[] {"what=gc output=" + logFile}});
+        doReturn(new GcLogging.State(true, logFile, "gc", "time,level"))
+                .when(gcLogging)
+                .queryState();
         when(exchange.getRequestMethod()).thenReturn("GET");
         when(exchange.getRequestURI()).thenReturn(URI.create("/gc-log/"));
 
@@ -198,7 +174,9 @@ class GcLogContextTest {
     void testGetReturns204WhenLogFileIsEmpty() throws Exception {
         Path logFile = tempDir.resolve("empty.log");
         Files.write(logFile, new byte[0]);
-        gcLogging.onVmLogInvoked(new Object[] {new String[] {"what=gc output=" + logFile}});
+        doReturn(new GcLogging.State(true, logFile, "gc", "time,level"))
+                .when(gcLogging)
+                .queryState();
         when(exchange.getRequestMethod()).thenReturn("GET");
         when(exchange.getRequestURI()).thenReturn(URI.create("/gc-log/"));
 
@@ -209,8 +187,11 @@ class GcLogContextTest {
 
     @Test
     void testGetReturns204WhenLoggingToStdout() throws Exception {
-        gcLogging.applyVmLogListOutput(
-                "Log output configuration:\n" + " #0: stdout all=warning uptime,level,tags\n");
+        doReturn(
+                        new GcLogging.State(
+                                true, GcLogging.DEV_STDOUT, "all=warning", "uptime,level,tags"))
+                .when(gcLogging)
+                .queryState();
         when(exchange.getRequestMethod()).thenReturn("GET");
         when(exchange.getRequestURI()).thenReturn(URI.create("/gc-log/"));
 
@@ -228,14 +209,137 @@ class GcLogContextTest {
         verify(exchange).sendResponseHeaders(405, RemoteContext.BODY_LENGTH_NONE);
     }
 
+    // -------------------------------------------------------------------------
+    // GcLogging.parseVmLogListOutput
+    // -------------------------------------------------------------------------
+
     @Test
-    void testOnVmLogInvokedWithoutDecorators() {
-        Path logFile = tempDir.resolve("gc.log");
-        gcLogging.onVmLogInvoked(new Object[] {new String[] {"what=gc output=" + logFile}});
-        assertTrue(gcLogging.loggingEnabled);
-        assertEquals(logFile, gcLogging.gcLogPath);
-        assertEquals("time,level", gcLogging.decorators);
+    void testParseVmLogListOutputSetsStateFromLastFileEntry() {
+        String output =
+                "Available log levels: off, trace, debug, info, warning, error\n"
+                        + "Log output configuration:\n"
+                        + " #0: stdout all=warning uptime,level,tags (reconfigured)\n"
+                        + " #1: stderr all=off uptime,level,tags\n"
+                        + " #2: file=/tmp/gc.log all=off,gc=info time,level,tags"
+                        + " filecount=5,filesize=20480K,async=false\n"
+                        + " #3: file=/tmp/cryostat-gc-12768272396475621478.log all=off,gc=info"
+                        + " time,level filecount=5,filesize=20480K,async=false (reconfigured)\n";
+        GcLogging.State state = gcLogging.parseVmLogListOutput(output);
+        assertTrue(state.enabled);
+        assertEquals(
+                java.nio.file.Paths.get("/tmp/cryostat-gc-12768272396475621478.log"),
+                state.logFilePath);
+        assertEquals("all=off,gc=info", state.what);
+        assertEquals("time,level", state.decorators);
     }
+
+    @Test
+    void testParseVmLogListOutputAllOffNonFileEntriesReturnDisabled() {
+        String output =
+                "Log output configuration:\n"
+                        + " #0: stdout all=off uptime,level,tags\n"
+                        + " #1: stderr all=off uptime,level,tags\n";
+        GcLogging.State state = gcLogging.parseVmLogListOutput(output);
+        assertFalse(state.enabled);
+        assertNull(state.logFilePath);
+    }
+
+    @Test
+    void testParseVmLogListOutputActiveStdoutSetsDevStdoutPath() {
+        String output =
+                "Log output configuration:\n"
+                        + " #0: stdout all=warning uptime,level,tags\n"
+                        + " #1: stderr all=off uptime,level,tags\n";
+        GcLogging.State state = gcLogging.parseVmLogListOutput(output);
+        assertTrue(state.enabled);
+        assertEquals(GcLogging.DEV_STDOUT, state.logFilePath);
+        assertEquals("all=warning", state.what);
+        assertEquals("uptime,level,tags", state.decorators);
+    }
+
+    @Test
+    void testParseVmLogListOutputActiveStderrSetsDevStderrPath() {
+        String output =
+                "Log output configuration:\n"
+                        + " #0: stdout all=off uptime,level,tags\n"
+                        + " #1: stderr all=warning uptime,level\n";
+        GcLogging.State state = gcLogging.parseVmLogListOutput(output);
+        assertTrue(state.enabled);
+        assertEquals(GcLogging.DEV_STDERR, state.logFilePath);
+        assertEquals("all=warning", state.what);
+        assertEquals("uptime,level", state.decorators);
+    }
+
+    @Test
+    void testParseVmLogListOutputFileEntryTakesPrecedenceOverActiveStdout() {
+        String output =
+                "Log output configuration:\n"
+                        + " #0: stdout all=warning uptime,level,tags\n"
+                        + " #2: file=/tmp/gc.log all=off,gc=info time,level"
+                        + " filecount=5,filesize=20480K,async=false\n";
+        GcLogging.State state = gcLogging.parseVmLogListOutput(output);
+        assertTrue(state.enabled);
+        assertEquals(java.nio.file.Paths.get("/tmp/gc.log"), state.logFilePath);
+        assertEquals("all=off,gc=info", state.what);
+        assertEquals("time,level", state.decorators);
+    }
+
+    @Test
+    void testParseVmLogListOutputUsesLastFileEntryWhenMultiplePresent() {
+        String output =
+                "Log output configuration:\n"
+                        + " #0: stdout all=warning uptime,level,tags\n"
+                        + " #2: file=/tmp/gc.log all=off,gc=info uptime,level"
+                        + " filecount=5,filesize=20480K,async=false\n"
+                        + " #3: file=/tmp/cryostat-gc-latest.log all=off,gc=debug time"
+                        + " filecount=5,filesize=20480K,async=false\n";
+        GcLogging.State state = gcLogging.parseVmLogListOutput(output);
+        assertTrue(state.enabled);
+        assertEquals(java.nio.file.Paths.get("/tmp/cryostat-gc-latest.log"), state.logFilePath);
+        assertEquals("all=off,gc=debug", state.what);
+        assertEquals("time", state.decorators);
+    }
+
+    @Test
+    void testParseVmLogListOutputEmptyOutputReturnsDisabled() {
+        GcLogging.State state = gcLogging.parseVmLogListOutput("");
+        assertFalse(state.enabled);
+        assertNull(state.logFilePath);
+        assertEquals("time,level", state.decorators);
+        assertEquals("gc", state.what);
+    }
+
+    // -------------------------------------------------------------------------
+    // GcLogging.collectAndRedirect (stream-output guard)
+    // -------------------------------------------------------------------------
+
+    @Test
+    void testCollectAndRedirectReturnsEmptyStreamForStdout() throws Exception {
+        doReturn(
+                        new GcLogging.State(
+                                true, GcLogging.DEV_STDOUT, "all=warning", "uptime,level,tags"))
+                .when(gcLogging)
+                .queryState();
+        try (InputStream stream = gcLogging.collectAndRedirect()) {
+            assertEquals(0, stream.readAllBytes().length);
+        }
+    }
+
+    @Test
+    void testCollectAndRedirectReturnsEmptyStreamForStderr() throws Exception {
+        doReturn(
+                        new GcLogging.State(
+                                true, GcLogging.DEV_STDERR, "all=warning", "uptime,level,tags"))
+                .when(gcLogging)
+                .queryState();
+        try (InputStream stream = gcLogging.collectAndRedirect()) {
+            assertEquals(0, stream.readAllBytes().length);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // GcLogging.openCollectedLogs / collectLogPaths
+    // -------------------------------------------------------------------------
 
     @Test
     void testCollectAndRedirectConcatenatesRotatedLogsAndDeletesThem() throws Exception {
@@ -248,7 +352,6 @@ class GcLogContextTest {
         Files.setLastModifiedTime(logFile, java.nio.file.attribute.FileTime.fromMillis(30L));
         Files.setLastModifiedTime(rotatedOne, java.nio.file.attribute.FileTime.fromMillis(10L));
         Files.setLastModifiedTime(rotatedTwo, java.nio.file.attribute.FileTime.fromMillis(20L));
-        gcLogging.onVmLogInvoked(new Object[] {new String[] {"what=gc output=" + logFile}});
 
         try (InputStream stream = gcLogging.openCollectedLogs(gcLogging.collectLogPaths(logFile))) {
             assertEquals("rotated-onerotated-twocurrent", new String(stream.readAllBytes()));
@@ -276,119 +379,5 @@ class GcLogContextTest {
         assertIterableEquals(
                 java.util.List.of(rotatedOlder, rotatedNewer, logFile),
                 gcLogging.collectLogPaths(logFile));
-    }
-
-    @Test
-    void testApplyVmLogListOutputSetsStateFromLastFileEntry() {
-        String output =
-                "Available log levels: off, trace, debug, info, warning, error\n"
-                        + "Log output configuration:\n"
-                        + " #0: stdout all=warning uptime,level,tags (reconfigured)\n"
-                        + " #1: stderr all=off uptime,level,tags\n"
-                        + " #2: file=/tmp/gc.log all=off,gc=info time,level,tags"
-                        + " filecount=5,filesize=20480K,async=false\n"
-                        + " #3: file=/tmp/cryostat-gc-12768272396475621478.log all=off,gc=info"
-                        + " time,level filecount=5,filesize=20480K,async=false (reconfigured)\n";
-        gcLogging.applyVmLogListOutput(output);
-        assertTrue(gcLogging.loggingEnabled);
-        assertEquals(
-                java.nio.file.Paths.get("/tmp/cryostat-gc-12768272396475621478.log"),
-                gcLogging.gcLogPath);
-        assertEquals("all=off,gc=info", gcLogging.what);
-        assertEquals("time,level", gcLogging.decorators);
-    }
-
-    @Test
-    void testApplyVmLogListOutputAllOffNonFileEntriesDoNotEnableLogging() {
-        String output =
-                "Log output configuration:\n"
-                        + " #0: stdout all=off uptime,level,tags\n"
-                        + " #1: stderr all=off uptime,level,tags\n";
-        gcLogging.applyVmLogListOutput(output);
-        assertFalse(gcLogging.loggingEnabled);
-        assertNull(gcLogging.gcLogPath);
-    }
-
-    @Test
-    void testApplyVmLogListOutputActiveStdoutSetsDevStdoutPath() {
-        String output =
-                "Log output configuration:\n"
-                        + " #0: stdout all=warning uptime,level,tags\n"
-                        + " #1: stderr all=off uptime,level,tags\n";
-        gcLogging.applyVmLogListOutput(output);
-        assertTrue(gcLogging.loggingEnabled);
-        assertEquals(GcLogging.DEV_STDOUT, gcLogging.gcLogPath);
-        assertEquals("all=warning", gcLogging.what);
-        assertEquals("uptime,level,tags", gcLogging.decorators);
-    }
-
-    @Test
-    void testApplyVmLogListOutputActiveStderrSetsDevStderrPath() {
-        String output =
-                "Log output configuration:\n"
-                        + " #0: stdout all=off uptime,level,tags\n"
-                        + " #1: stderr all=warning uptime,level\n";
-        gcLogging.applyVmLogListOutput(output);
-        assertTrue(gcLogging.loggingEnabled);
-        assertEquals(GcLogging.DEV_STDERR, gcLogging.gcLogPath);
-        assertEquals("all=warning", gcLogging.what);
-        assertEquals("uptime,level", gcLogging.decorators);
-    }
-
-    @Test
-    void testCollectAndRedirectReturnsEmptyStreamForStdout() throws Exception {
-        gcLogging.applyVmLogListOutput(
-                "Log output configuration:\n" + " #0: stdout all=warning uptime,level,tags\n");
-        try (InputStream stream = gcLogging.collectAndRedirect()) {
-            assertEquals(0, stream.readAllBytes().length);
-        }
-    }
-
-    @Test
-    void testCollectAndRedirectReturnsEmptyStreamForStderr() throws Exception {
-        gcLogging.applyVmLogListOutput(
-                "Log output configuration:\n" + " #0: stderr all=warning uptime,level,tags\n");
-        try (InputStream stream = gcLogging.collectAndRedirect()) {
-            assertEquals(0, stream.readAllBytes().length);
-        }
-    }
-
-    @Test
-    void testApplyVmLogListOutputFileEntryTakesPrecedenceOverActiveStdout() {
-        String output =
-                "Log output configuration:\n"
-                        + " #0: stdout all=warning uptime,level,tags\n"
-                        + " #2: file=/tmp/gc.log all=off,gc=info time,level"
-                        + " filecount=5,filesize=20480K,async=false\n";
-        gcLogging.applyVmLogListOutput(output);
-        assertTrue(gcLogging.loggingEnabled);
-        assertEquals(java.nio.file.Paths.get("/tmp/gc.log"), gcLogging.gcLogPath);
-        assertEquals("all=off,gc=info", gcLogging.what);
-        assertEquals("time,level", gcLogging.decorators);
-    }
-
-    @Test
-    void testApplyVmLogListOutputUsesLastFileEntryWhenMultiplePresent() {
-        String output =
-                "Log output configuration:\n"
-                        + " #0: stdout all=warning uptime,level,tags\n"
-                        + " #2: file=/tmp/gc.log all=off,gc=info uptime,level"
-                        + " filecount=5,filesize=20480K,async=false\n"
-                        + " #3: file=/tmp/cryostat-gc-latest.log all=off,gc=debug time"
-                        + " filecount=5,filesize=20480K,async=false\n";
-        gcLogging.applyVmLogListOutput(output);
-        assertTrue(gcLogging.loggingEnabled);
-        assertEquals(java.nio.file.Paths.get("/tmp/cryostat-gc-latest.log"), gcLogging.gcLogPath);
-        assertEquals("all=off,gc=debug", gcLogging.what);
-        assertEquals("time", gcLogging.decorators);
-    }
-
-    @Test
-    void testApplyVmLogListOutputEmptyOutputDoesNotChangeState() {
-        gcLogging.applyVmLogListOutput("");
-        assertFalse(gcLogging.loggingEnabled);
-        assertNull(gcLogging.gcLogPath);
-        assertEquals("time,level", gcLogging.decorators);
-        assertEquals("gc", gcLogging.what);
     }
 }
