@@ -23,6 +23,8 @@ import java.io.InputStream;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
+import java.time.Instant;
 
 import io.cryostat.agent.ConfigModule;
 
@@ -339,39 +341,45 @@ class GcLogContextTest {
     @Test
     void testOpenCollectedLogsConcatenatesRotatedLogsOldestFirst() throws Exception {
         Path logFile = tempDir.resolve("gc.log");
-        Path rotatedIndex0 = tempDir.resolve("gc.log.0");
-        Path rotatedIndex1 = tempDir.resolve("gc.log.1");
-        Path rotatedIndex2 = tempDir.resolve("gc.log.2");
+        Path rotatedOldest = tempDir.resolve("gc.log.2");
+        Path rotatedMiddle = tempDir.resolve("gc.log.0");
+        Path rotatedNewest = tempDir.resolve("gc.log.1");
         Files.writeString(logFile, "current");
-        Files.writeString(rotatedIndex0, "newest-sealed");
-        Files.writeString(rotatedIndex1, "middle");
-        Files.writeString(rotatedIndex2, "oldest");
+        Files.writeString(rotatedOldest, "oldest");
+        Files.setLastModifiedTime(rotatedOldest, FileTime.from(Instant.ofEpochSecond(1000)));
+        Files.writeString(rotatedMiddle, "middle");
+        Files.setLastModifiedTime(rotatedMiddle, FileTime.from(Instant.ofEpochSecond(2000)));
+        Files.writeString(rotatedNewest, "newest-sealed");
+        Files.setLastModifiedTime(rotatedNewest, FileTime.from(Instant.ofEpochSecond(3000)));
 
         try (InputStream stream = gcLogging.openCollectedLogs(gcLogging.collectLogPaths(logFile))) {
             assertEquals("oldestmiddlenewest-sealed", new String(stream.readAllBytes()));
         }
 
-        assertTrue(Files.exists(rotatedIndex0));
-        assertTrue(Files.exists(rotatedIndex1));
-        assertTrue(Files.exists(rotatedIndex2));
+        assertTrue(Files.exists(rotatedOldest));
+        assertTrue(Files.exists(rotatedMiddle));
+        assertTrue(Files.exists(rotatedNewest));
         assertTrue(Files.exists(logFile));
     }
 
     @Test
-    void testCollectLogPathsExcludesCurrentPathAndOrdersByRotationIndex() throws Exception {
+    void testCollectLogPathsExcludesCurrentPathAndOrdersByModificationTime() throws Exception {
         Path logFile = tempDir.resolve("gc.log");
-        Path index0 = tempDir.resolve("gc.log.0");
-        Path index3 = tempDir.resolve("gc.log.3");
-        Path index9 = tempDir.resolve("gc.log.9");
+        Path fileA = tempDir.resolve("gc.log.0");
+        Path fileB = tempDir.resolve("gc.log.3");
+        Path fileC = tempDir.resolve("gc.log.9");
         Path ignored = tempDir.resolve("other.log.1");
         Files.writeString(logFile, "current");
-        Files.writeString(index0, "newest-sealed");
-        Files.writeString(index3, "middle");
-        Files.writeString(index9, "oldest");
+        Files.writeString(fileA, "newest-sealed");
+        Files.setLastModifiedTime(fileA, FileTime.from(Instant.ofEpochSecond(3000)));
+        Files.writeString(fileB, "middle");
+        Files.setLastModifiedTime(fileB, FileTime.from(Instant.ofEpochSecond(2000)));
+        Files.writeString(fileC, "oldest");
+        Files.setLastModifiedTime(fileC, FileTime.from(Instant.ofEpochSecond(1000)));
         Files.writeString(ignored, "ignored");
 
         assertIterableEquals(
-                java.util.List.of(index9, index3, index0), gcLogging.collectLogPaths(logFile));
+                java.util.List.of(fileC, fileB, fileA), gcLogging.collectLogPaths(logFile));
     }
 
     @Test

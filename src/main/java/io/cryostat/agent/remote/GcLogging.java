@@ -24,6 +24,7 @@ import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -259,11 +260,19 @@ public class GcLogging {
 
     /**
      * Returns all rotated sibling log files of {@code currentPath} sorted in oldest-first
-     * chronological order. The JVM unified logging rotation scheme names files with a numeric
-     * suffix: {@code gc.log.0} holds the most recently closed content, {@code gc.log.1} is older,
-     * {@code gc.log.2} older still, and so on. Correct concatenation order is therefore descending
-     * by suffix index (highest index = oldest). The file at {@code currentPath} itself is always
-     * excluded by path identity: it is the active write target and must never be read.
+     * chronological order, using filesystem modification time as the ordering key.
+     *
+     * <p>The JVM unified logging rotation scheme uses a fixed-size ring buffer of numbered files
+     * (e.g. {@code gc.log.0}, {@code gc.log.1}, …). The numeric suffix encodes the ring-buffer
+     * slot, not the age: after the ring wraps, a low-numbered file can be newer than a
+     * high-numbered one. Modification time is the only reliable indicator of which file was sealed
+     * most recently. Files are returned oldest-modified-first so that concatenating them produces a
+     * log with monotonically increasing timestamps.
+     *
+     * <p>The file at {@code currentPath} itself is excluded by path identity. It is the active
+     * write target and is not read here; the sole exception is when {@code filecount=1}, in which
+     * case the caller ({@link #collectAfterRotate()}) passes it directly, accepting the risk of
+     * torn line reads.
      */
     List<Path> collectLogPaths(Path currentPath) throws IOException {
         List<Path> paths = new ArrayList<>();
@@ -280,7 +289,15 @@ public class GcLogging {
                 paths.add(path);
             }
         }
-        paths.sort(Comparator.comparingInt(this::rotationIndex).reversed());
+        paths.sort(
+                Comparator.comparing(
+                        p -> {
+                            try {
+                                return Files.getLastModifiedTime((Path) p);
+                            } catch (IOException e) {
+                                return FileTime.fromMillis(0);
+                            }
+                        }));
         return paths;
     }
 
@@ -290,29 +307,5 @@ public class GcLogging {
                 && candidateFileName != null
                 && Files.isRegularFile(candidate)
                 && candidateFileName.toString().startsWith(fileName + ".");
-    }
-
-    /**
-     * Returns the numeric rotation index encoded in a rotated log file's name suffix (e.g. {@code
-     * gc.log.3} → {@code 3}). Returns {@code -1} for any file whose suffix is not a non-negative
-     * integer so that such files sort before all indexed files when the comparator is reversed.
-     */
-    private int rotationIndex(Path path) {
-        Path fileNamePath = path.getFileName();
-        if (fileNamePath == null) {
-            return -1;
-        }
-        String name = fileNamePath.toString();
-        int dot = name.lastIndexOf('.');
-        if (dot < 0 || dot == name.length() - 1) {
-            return -1;
-        }
-        String suffix = name.substring(dot + 1);
-        try {
-            int index = Integer.parseInt(suffix);
-            return index >= 0 ? index : -1;
-        } catch (NumberFormatException e) {
-            return -1;
-        }
     }
 }
