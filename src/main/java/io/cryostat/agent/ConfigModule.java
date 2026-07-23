@@ -1210,7 +1210,16 @@ public abstract class ConfigModule {
     @Singleton
     @Named(CRYOSTAT_AGENT_GC_LOG_OUTPUT)
     public static String provideGcLogOutput(SmallRyeConfig config) {
-        return config.getValue(CRYOSTAT_AGENT_GC_LOG_OUTPUT, String.class);
+        return config.getOptionalValue(CRYOSTAT_AGENT_GC_LOG_OUTPUT, String.class)
+                .filter(s -> !s.isBlank())
+                .orElseGet(
+                        () -> {
+                            try {
+                                return Files.createTempFile("cryostat-gc-", ".log").toString();
+                            } catch (IOException ioe) {
+                                throw new IllegalStateException(ioe);
+                            }
+                        });
     }
 
     @Provides
