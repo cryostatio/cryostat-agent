@@ -19,6 +19,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -201,5 +202,46 @@ class GcLogContextTest {
         assertTrue(gcLogging.loggingEnabled);
         assertEquals(logFile, gcLogging.gcLogPath);
         assertEquals("time,level", gcLogging.decorators);
+    }
+
+    @Test
+    void testCollectAndRedirectConcatenatesRotatedLogsAndDeletesThem() throws Exception {
+        Path logFile = tempDir.resolve("gc.log");
+        Path rotatedOne = tempDir.resolve("gc.log.1");
+        Path rotatedTwo = tempDir.resolve("gc.log.2");
+        Files.writeString(logFile, "current");
+        Files.writeString(rotatedOne, "rotated-one");
+        Files.writeString(rotatedTwo, "rotated-two");
+        Files.setLastModifiedTime(logFile, java.nio.file.attribute.FileTime.fromMillis(30L));
+        Files.setLastModifiedTime(rotatedOne, java.nio.file.attribute.FileTime.fromMillis(10L));
+        Files.setLastModifiedTime(rotatedTwo, java.nio.file.attribute.FileTime.fromMillis(20L));
+        gcLogging.onVmLogInvoked(new Object[] {new String[] {"what=gc output=" + logFile}});
+
+        try (InputStream stream = gcLogging.openCollectedLogs(gcLogging.collectLogPaths(logFile))) {
+            assertEquals("rotated-onerotated-twocurrent", new String(stream.readAllBytes()));
+        }
+
+        assertFalse(Files.exists(logFile));
+        assertFalse(Files.exists(rotatedOne));
+        assertFalse(Files.exists(rotatedTwo));
+    }
+
+    @Test
+    void testCollectLogPathsUsesPrefixAndLastModifiedOrdering() throws Exception {
+        Path logFile = tempDir.resolve("gc.log");
+        Path rotatedOlder = tempDir.resolve("gc.log.9");
+        Path rotatedNewer = tempDir.resolve("gc.log.current");
+        Path ignored = tempDir.resolve("other.log.1");
+        Files.writeString(logFile, "current");
+        Files.writeString(rotatedOlder, "older");
+        Files.writeString(rotatedNewer, "newer");
+        Files.writeString(ignored, "ignored");
+        Files.setLastModifiedTime(logFile, java.nio.file.attribute.FileTime.fromMillis(30L));
+        Files.setLastModifiedTime(rotatedOlder, java.nio.file.attribute.FileTime.fromMillis(10L));
+        Files.setLastModifiedTime(rotatedNewer, java.nio.file.attribute.FileTime.fromMillis(20L));
+
+        assertIterableEquals(
+                java.util.List.of(rotatedOlder, rotatedNewer, logFile),
+                gcLogging.collectLogPaths(logFile));
     }
 }
