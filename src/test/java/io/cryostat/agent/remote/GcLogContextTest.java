@@ -104,7 +104,9 @@ class GcLogContextTest {
     void testStatusWhenEnabledWithExistingFile() throws Exception {
         Path logFile = tempDir.resolve("gc.log");
         Files.writeString(logFile, "GC log content");
-        doReturn(new GcLogging.State(true, logFile, "gc", "uptime")).when(gcLogging).queryState();
+        doReturn(new GcLogging.State(true, logFile, "gc", "uptime", ""))
+                .when(gcLogging)
+                .queryState();
 
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         when(exchange.getRequestMethod()).thenReturn("GET");
@@ -124,7 +126,7 @@ class GcLogContextTest {
     void testStatusWhenLoggingToStdout() throws Exception {
         doReturn(
                         new GcLogging.State(
-                                true, GcLogging.DEV_STDOUT, "all=warning", "uptime,level,tags"))
+                                true, GcLogging.DEV_STDOUT, "all=warning", "uptime,level,tags", ""))
                 .when(gcLogging)
                 .queryState();
 
@@ -157,39 +159,30 @@ class GcLogContextTest {
     }
 
     @Test
-    void testGetReturns204WhenLogFileDoesNotExist() throws Exception {
-        Path logFile = tempDir.resolve("missing.log");
-        doReturn(new GcLogging.State(true, logFile, "gc", "time,level"))
+    void testGetReturns200WithEmptyBodyWhenNoRotatedFiles() throws Exception {
+        Path logFile = tempDir.resolve("gc.log");
+        doReturn(new GcLogging.State(true, logFile, "gc", "time,level", ""))
                 .when(gcLogging)
                 .queryState();
+        doReturn(new java.io.ByteArrayInputStream(new byte[0]))
+                .when(gcLogging)
+                .collectAfterRotate();
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
         when(exchange.getRequestMethod()).thenReturn("GET");
         when(exchange.getRequestURI()).thenReturn(URI.create("/gc-log/"));
+        when(exchange.getResponseBody()).thenReturn(baos);
 
         ctx.handle(exchange);
 
-        verify(exchange).sendResponseHeaders(204, RemoteContext.BODY_LENGTH_NONE);
-    }
-
-    @Test
-    void testGetReturns204WhenLogFileIsEmpty() throws Exception {
-        Path logFile = tempDir.resolve("empty.log");
-        Files.write(logFile, new byte[0]);
-        doReturn(new GcLogging.State(true, logFile, "gc", "time,level"))
-                .when(gcLogging)
-                .queryState();
-        when(exchange.getRequestMethod()).thenReturn("GET");
-        when(exchange.getRequestURI()).thenReturn(URI.create("/gc-log/"));
-
-        ctx.handle(exchange);
-
-        verify(exchange).sendResponseHeaders(204, RemoteContext.BODY_LENGTH_NONE);
+        verify(exchange).sendResponseHeaders(200, RemoteContext.BODY_LENGTH_UNKNOWN);
+        assertEquals(0, baos.size());
     }
 
     @Test
     void testGetReturns204WhenLoggingToStdout() throws Exception {
         doReturn(
                         new GcLogging.State(
-                                true, GcLogging.DEV_STDOUT, "all=warning", "uptime,level,tags"))
+                                true, GcLogging.DEV_STDOUT, "all=warning", "uptime,level,tags", ""))
                 .when(gcLogging)
                 .queryState();
         when(exchange.getRequestMethod()).thenReturn("GET");
@@ -231,6 +224,8 @@ class GcLogContextTest {
                 state.logFilePath);
         assertEquals("all=off,gc=info", state.what);
         assertEquals("time,level", state.decorators);
+        assertEquals("filecount=5,filesize=20480K,async=false", state.outputOptions);
+        assertEquals(5, state.filecount());
     }
 
     @Test
@@ -310,29 +305,29 @@ class GcLogContextTest {
     }
 
     // -------------------------------------------------------------------------
-    // GcLogging.collectAndRedirect (stream-output guard)
+    // GcLogging.collectAfterRotate (stream-output guard)
     // -------------------------------------------------------------------------
 
     @Test
-    void testCollectAndRedirectReturnsEmptyStreamForStdout() throws Exception {
+    void testCollectAfterRotateReturnsEmptyStreamForStdout() throws Exception {
         doReturn(
                         new GcLogging.State(
-                                true, GcLogging.DEV_STDOUT, "all=warning", "uptime,level,tags"))
+                                true, GcLogging.DEV_STDOUT, "all=warning", "uptime,level,tags", ""))
                 .when(gcLogging)
                 .queryState();
-        try (InputStream stream = gcLogging.collectAndRedirect()) {
+        try (InputStream stream = gcLogging.collectAfterRotate()) {
             assertEquals(0, stream.readAllBytes().length);
         }
     }
 
     @Test
-    void testCollectAndRedirectReturnsEmptyStreamForStderr() throws Exception {
+    void testCollectAfterRotateReturnsEmptyStreamForStderr() throws Exception {
         doReturn(
                         new GcLogging.State(
-                                true, GcLogging.DEV_STDERR, "all=warning", "uptime,level,tags"))
+                                true, GcLogging.DEV_STDERR, "all=warning", "uptime,level,tags", ""))
                 .when(gcLogging)
                 .queryState();
-        try (InputStream stream = gcLogging.collectAndRedirect()) {
+        try (InputStream stream = gcLogging.collectAfterRotate()) {
             assertEquals(0, stream.readAllBytes().length);
         }
     }
@@ -342,42 +337,94 @@ class GcLogContextTest {
     // -------------------------------------------------------------------------
 
     @Test
-    void testCollectAndRedirectConcatenatesRotatedLogsAndDeletesThem() throws Exception {
+    void testOpenCollectedLogsConcatenatesRotatedLogsOldestFirst() throws Exception {
         Path logFile = tempDir.resolve("gc.log");
-        Path rotatedOne = tempDir.resolve("gc.log.1");
-        Path rotatedTwo = tempDir.resolve("gc.log.2");
+        Path rotatedIndex0 = tempDir.resolve("gc.log.0");
+        Path rotatedIndex1 = tempDir.resolve("gc.log.1");
+        Path rotatedIndex2 = tempDir.resolve("gc.log.2");
         Files.writeString(logFile, "current");
-        Files.writeString(rotatedOne, "rotated-one");
-        Files.writeString(rotatedTwo, "rotated-two");
-        Files.setLastModifiedTime(logFile, java.nio.file.attribute.FileTime.fromMillis(30L));
-        Files.setLastModifiedTime(rotatedOne, java.nio.file.attribute.FileTime.fromMillis(10L));
-        Files.setLastModifiedTime(rotatedTwo, java.nio.file.attribute.FileTime.fromMillis(20L));
+        Files.writeString(rotatedIndex0, "newest-sealed");
+        Files.writeString(rotatedIndex1, "middle");
+        Files.writeString(rotatedIndex2, "oldest");
 
         try (InputStream stream = gcLogging.openCollectedLogs(gcLogging.collectLogPaths(logFile))) {
-            assertEquals("rotated-onerotated-twocurrent", new String(stream.readAllBytes()));
+            assertEquals("oldestmiddlenewest-sealed", new String(stream.readAllBytes()));
         }
 
-        assertFalse(Files.exists(logFile));
-        assertFalse(Files.exists(rotatedOne));
-        assertFalse(Files.exists(rotatedTwo));
+        assertTrue(Files.exists(rotatedIndex0));
+        assertTrue(Files.exists(rotatedIndex1));
+        assertTrue(Files.exists(rotatedIndex2));
+        assertTrue(Files.exists(logFile));
     }
 
     @Test
-    void testCollectLogPathsUsesPrefixAndLastModifiedOrdering() throws Exception {
+    void testCollectLogPathsExcludesCurrentPathAndOrdersByRotationIndex() throws Exception {
         Path logFile = tempDir.resolve("gc.log");
-        Path rotatedOlder = tempDir.resolve("gc.log.9");
-        Path rotatedNewer = tempDir.resolve("gc.log.current");
+        Path index0 = tempDir.resolve("gc.log.0");
+        Path index3 = tempDir.resolve("gc.log.3");
+        Path index9 = tempDir.resolve("gc.log.9");
         Path ignored = tempDir.resolve("other.log.1");
         Files.writeString(logFile, "current");
-        Files.writeString(rotatedOlder, "older");
-        Files.writeString(rotatedNewer, "newer");
+        Files.writeString(index0, "newest-sealed");
+        Files.writeString(index3, "middle");
+        Files.writeString(index9, "oldest");
         Files.writeString(ignored, "ignored");
-        Files.setLastModifiedTime(logFile, java.nio.file.attribute.FileTime.fromMillis(30L));
-        Files.setLastModifiedTime(rotatedOlder, java.nio.file.attribute.FileTime.fromMillis(10L));
-        Files.setLastModifiedTime(rotatedNewer, java.nio.file.attribute.FileTime.fromMillis(20L));
 
         assertIterableEquals(
-                java.util.List.of(rotatedOlder, rotatedNewer, logFile),
-                gcLogging.collectLogPaths(logFile));
+                java.util.List.of(index9, index3, index0), gcLogging.collectLogPaths(logFile));
+    }
+
+    @Test
+    void testCollectLogPathsRequiresDotSeparatorBeforeIndex() throws Exception {
+        Path logFile = tempDir.resolve("gc.log");
+        Path validRotated = tempDir.resolve("gc.log.0");
+        Path noSeparator = tempDir.resolve("gc.log0");
+        Files.writeString(logFile, "current");
+        Files.writeString(validRotated, "rotated");
+        Files.writeString(noSeparator, "not-rotated");
+
+        assertIterableEquals(java.util.List.of(validRotated), gcLogging.collectLogPaths(logFile));
+    }
+
+    // -------------------------------------------------------------------------
+    // GcLogging.State.filecount()
+    // -------------------------------------------------------------------------
+
+    @Test
+    void testFilecountParsedFromOutputOptions() {
+        GcLogging.State state =
+                new GcLogging.State(true, null, "gc", "uptime", "filecount=3,filesize=1m");
+        assertEquals(3, state.filecount());
+    }
+
+    @Test
+    void testFilecountReturnsMaxValueWhenOutputOptionsEmpty() {
+        GcLogging.State state = new GcLogging.State(true, null, "gc", "uptime", "");
+        assertEquals(Integer.MAX_VALUE, state.filecount());
+    }
+
+    @Test
+    void testFilecountReturnsMaxValueWhenNoFilecountKeyPresent() {
+        GcLogging.State state =
+                new GcLogging.State(true, null, "gc", "uptime", "filesize=1m,async=false");
+        assertEquals(Integer.MAX_VALUE, state.filecount());
+    }
+
+    // -------------------------------------------------------------------------
+    // GcLogging.collectAfterRotate — filecount=1 fallback
+    // -------------------------------------------------------------------------
+
+    @Test
+    void testCollectAfterRotateFallsBackToActiveFileWhenFilecountIsOne() throws Exception {
+        Path logFile = tempDir.resolve("gc.log");
+        Files.writeString(logFile, "live-content");
+        doReturn(new GcLogging.State(true, logFile, "gc", "uptime", "filecount=1,filesize=1m"))
+                .when(gcLogging)
+                .queryState();
+        doNothing().when(gcLogging).issueRotate();
+
+        try (InputStream stream = gcLogging.collectAfterRotate()) {
+            assertEquals("live-content", new String(stream.readAllBytes()));
+        }
     }
 }
