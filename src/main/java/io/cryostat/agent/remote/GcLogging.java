@@ -18,10 +18,16 @@ package io.cryostat.agent.remote;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.SequenceInputStream;
 import java.lang.management.ManagementFactory;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -124,15 +130,84 @@ public class GcLogging {
             throw new Exception("VM.log redirect failed", e);
         }
         gcLogPath = nextPath;
-        if (!Files.exists(currentPath)) {
+        List<Path> collectedPaths = collectLogPaths(currentPath);
+        if (collectedPaths.isEmpty()) {
             log.warn("GC log file not found after redirect: {}", currentPath);
             return new ByteArrayInputStream(new byte[0]);
         }
-        if (Files.size(currentPath) == 0L) {
-            Files.deleteIfExists(currentPath);
-            return new ByteArrayInputStream(new byte[0]);
+        return openCollectedLogs(collectedPaths);
+    }
+
+    InputStream openCollectedLogs(List<Path> paths) throws IOException {
+        List<InputStream> streams = new ArrayList<>();
+        boolean hasContent = false;
+        try {
+            for (Path path : paths) {
+                long size = Files.size(path);
+                if (size == 0L) {
+                    Files.deleteIfExists(path);
+                    continue;
+                }
+                streams.add(DeletingInputStream.of(path));
+                hasContent = true;
+            }
+            if (!hasContent) {
+                return new ByteArrayInputStream(new byte[0]);
+            }
+            return new SequenceInputStream(Collections.enumeration(streams));
+        } catch (IOException e) {
+            IOException suppressed = null;
+            for (InputStream stream : streams) {
+                try {
+                    stream.close();
+                } catch (IOException closeException) {
+                    if (suppressed == null) {
+                        suppressed = closeException;
+                    } else {
+                        suppressed.addSuppressed(closeException);
+                    }
+                }
+            }
+            if (suppressed != null) {
+                e.addSuppressed(suppressed);
+            }
+            throw e;
         }
-        return DeletingInputStream.of(currentPath);
+    }
+
+    List<Path> collectLogPaths(Path currentPath) throws IOException {
+        List<Path> paths = new ArrayList<>();
+        if (Files.exists(currentPath)) {
+            paths.add(currentPath);
+        }
+        Path parent = currentPath.getParent();
+        if (parent == null || !Files.isDirectory(parent)) {
+            return paths;
+        }
+        String fileName = currentPath.getFileName().toString();
+        try (DirectoryStream<Path> stream =
+                Files.newDirectoryStream(
+                        parent, entry -> isRotatedLog(currentPath, fileName, entry))) {
+            for (Path path : stream) {
+                paths.add(path);
+            }
+        }
+        paths.sort(Comparator.comparingLong(this::lastModified));
+        return paths;
+    }
+
+    private boolean isRotatedLog(Path currentPath, String fileName, Path candidate) {
+        return !currentPath.equals(candidate)
+                && Files.isRegularFile(candidate)
+                && candidate.getFileName().toString().startsWith(fileName);
+    }
+
+    private long lastModified(Path path) {
+        try {
+            return Files.getLastModifiedTime(path).toMillis();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private static class DeletingInputStream extends InputStream {
