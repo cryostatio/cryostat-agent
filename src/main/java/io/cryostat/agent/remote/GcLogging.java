@@ -181,10 +181,11 @@ public class GcLogging {
             paths.add(currentPath);
         }
         Path parent = currentPath.getParent();
-        if (parent == null || !Files.isDirectory(parent)) {
+        Path fileNamePath = currentPath.getFileName();
+        if (parent == null || fileNamePath == null || !Files.isDirectory(parent)) {
             return paths;
         }
-        String fileName = currentPath.getFileName().toString();
+        String fileName = fileNamePath.toString();
         try (DirectoryStream<Path> stream =
                 Files.newDirectoryStream(
                         parent, entry -> isRotatedLog(currentPath, fileName, entry))) {
@@ -197,9 +198,11 @@ public class GcLogging {
     }
 
     private boolean isRotatedLog(Path currentPath, String fileName, Path candidate) {
+        Path candidateFileName = candidate.getFileName();
         return !currentPath.equals(candidate)
+                && candidateFileName != null
                 && Files.isRegularFile(candidate)
-                && candidate.getFileName().toString().startsWith(fileName);
+                && candidateFileName.toString().startsWith(fileName);
     }
 
     private long lastModified(Path path) {
