@@ -49,4 +49,8 @@ public abstract class RemoteModule {
     @Binds
     @IntoSet
     abstract RemoteContext bindAsyncProfilerContext(AsyncProfilerContext ctx);
+
+    @Binds
+    @IntoSet
+    abstract RemoteContext bindGcLogContext(GcLogContext ctx);
 }

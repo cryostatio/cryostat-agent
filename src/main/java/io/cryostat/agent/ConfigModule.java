@@ -277,6 +277,13 @@ public abstract class ConfigModule {
     public static final String CRYOSTAT_AGENT_WEBCLIENT_CONNECTION_POOL_MAX_PER_ROUTE =
             "cryostat.agent.webclient.connection-pool.max-per-route";
 
+    public static final String CRYOSTAT_AGENT_GC_LOG_ENABLED = "cryostat.agent.gc-log.enabled";
+
+    public static final String CRYOSTAT_AGENT_GC_LOG_OUTPUT = "cryostat.agent.gc-log.output";
+
+    public static final String CRYOSTAT_AGENT_GC_LOG_OUTPUT_OPTIONS =
+            "cryostat.agent.gc-log.output-options";
+
     @Provides
     @Singleton
     public static SmallRyeConfig provideConfig() {
@@ -1197,6 +1204,29 @@ public abstract class ConfigModule {
     @Named(CRYOSTAT_AGENT_WEBCLIENT_CONNECTION_POOL_MAX_PER_ROUTE)
     public static int provideConnectionPoolMaxPerRoute(SmallRyeConfig config) {
         return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_CONNECTION_POOL_MAX_PER_ROUTE, int.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_GC_LOG_OUTPUT)
+    public static String provideGcLogOutput(SmallRyeConfig config) {
+        return config.getOptionalValue(CRYOSTAT_AGENT_GC_LOG_OUTPUT, String.class)
+                .filter(s -> !s.isBlank())
+                .orElseGet(
+                        () -> {
+                            try {
+                                return Files.createTempFile("cryostat-gc-", ".log").toString();
+                            } catch (IOException ioe) {
+                                throw new IllegalStateException(ioe);
+                            }
+                        });
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_GC_LOG_OUTPUT_OPTIONS)
+    public static String provideGcLogOutputOptions(SmallRyeConfig config) {
+        return config.getValue(CRYOSTAT_AGENT_GC_LOG_OUTPUT_OPTIONS, String.class);
     }
 
     public enum URIRange {
