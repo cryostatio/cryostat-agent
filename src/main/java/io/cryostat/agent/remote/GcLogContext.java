@@ -86,8 +86,12 @@ class GcLogContext implements RemoteContext {
         status.put("what", gcLogging.what);
         status.put("decorators", gcLogging.decorators);
         status.put(
+                "logFilePath", gcLogging.gcLogPath != null ? gcLogging.gcLogPath.toString() : null);
+        status.put(
                 "hasLog",
-                gcLogging.gcLogPath != null && java.nio.file.Files.exists(gcLogging.gcLogPath));
+                gcLogging.gcLogPath != null
+                        && !gcLogging.isStreamOutput()
+                        && Files.exists(gcLogging.gcLogPath));
         exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
         try (OutputStream response = exchange.getResponseBody()) {
             mapper.writeValue(response, status);
@@ -97,6 +101,10 @@ class GcLogContext implements RemoteContext {
     private void handleGet(HttpExchange exchange) throws IOException {
         if (!gcLogging.loggingEnabled || gcLogging.gcLogPath == null) {
             exchange.sendResponseHeaders(HttpStatus.SC_CONFLICT, BODY_LENGTH_NONE);
+            return;
+        }
+        if (gcLogging.isStreamOutput()) {
+            exchange.sendResponseHeaders(HttpStatus.SC_NO_CONTENT, BODY_LENGTH_NONE);
             return;
         }
         if (!Files.exists(gcLogging.gcLogPath) || Files.size(gcLogging.gcLogPath) == 0L) {
