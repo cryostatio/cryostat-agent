@@ -47,9 +47,11 @@ import org.slf4j.LoggerFactory;
 public class GcLogging {
 
     private static final Pattern VM_LOG_LIST_FILE_PATTERN =
-            Pattern.compile("^\\s*#\\d+: file=(\\S+) (\\S+) (\\S+)");
+            Pattern.compile("^\\s*#\\d+: file=(\\S+) (\\S+) (\\S+)(?:\\s+(\\S+))?");
     private static final Pattern VM_LOG_LIST_NONFILE_PATTERN =
             Pattern.compile("^\\s*#\\d+: (stdout|stderr) (\\S+) (\\S+)");
+    private static final Pattern FILECOUNT_PATTERN =
+            Pattern.compile("(?:^|,)filecount=(\\d+)(?:,|$)");
 
     static final Path DEV_STDOUT = Paths.get("/dev/stdout");
     static final Path DEV_STDERR = Paths.get("/dev/stderr");
@@ -68,20 +70,49 @@ public class GcLogging {
         public final String what;
         public final String decorators;
 
-        State(boolean loggingEnabled, Path gcLogPath, String what, String decorators) {
+        /** Raw {@code output_options} string from {@code vmLog list}, or empty. */
+        @JsonIgnore public final String outputOptions;
+
+        State(
+                boolean loggingEnabled,
+                Path gcLogPath,
+                String what,
+                String decorators,
+                String outputOptions) {
             this.enabled = loggingEnabled;
             this.logFilePath = gcLogPath;
             this.what = what;
             this.decorators = decorators;
+            this.outputOptions = outputOptions == null ? "" : outputOptions;
         }
 
         static State disabled() {
-            return new State(false, null, "gc", "time,level");
+            return new State(false, null, "gc", "time,level", "");
         }
 
         @JsonIgnore
         boolean isStreamOutput() {
             return DEV_STDOUT.equals(logFilePath) || DEV_STDERR.equals(logFilePath);
+        }
+
+        /**
+         * Returns the {@code filecount} value from {@code output_options}, or {@link
+         * Integer#MAX_VALUE} if not specified (treat as unbounded).
+         */
+        @JsonIgnore
+        int filecount() {
+            if (outputOptions.isBlank()) {
+                return Integer.MAX_VALUE;
+            }
+            Matcher m = FILECOUNT_PATTERN.matcher(outputOptions);
+            if (!m.find()) {
+                return Integer.MAX_VALUE;
+            }
+            try {
+                return Integer.parseInt(m.group(1));
+            } catch (NumberFormatException e) {
+                return Integer.MAX_VALUE;
+            }
         }
     }
 
@@ -128,23 +159,28 @@ public class GcLogging {
             if (!m.find()) {
                 return State.disabled();
             }
-            return new State(true, Paths.get(m.group(1)), m.group(2), m.group(3));
+            return new State(true, Paths.get(m.group(1)), m.group(2), m.group(3), m.group(4));
         } else if (lastActiveNonFileLine != null) {
             Matcher m = VM_LOG_LIST_NONFILE_PATTERN.matcher(lastActiveNonFileLine);
             if (!m.find()) {
                 return State.disabled();
             }
             Path streamPath = "stdout".equals(m.group(1)) ? DEV_STDOUT : DEV_STDERR;
-            return new State(true, streamPath, m.group(2), m.group(3));
+            return new State(true, streamPath, m.group(2), m.group(3), "");
         }
         return State.disabled();
     }
 
     /**
-     * Redirects JVM GC logging to a fresh temp file, closing the current log. Returns an {@link
-     * InputStream} over the closed log content. The caller is responsible for closing the stream.
+     * Issues a {@code vmLog rotate} to force the JVM to close the current log file and begin
+     * writing to a new one, then returns an {@link InputStream} over all rotated (non-current) log
+     * files concatenated in chronological order. Log rotation and retention are managed by the
+     * JVM's own {@code output_options} (e.g. {@code filecount=10,filesize=100m}). The file at
+     * {@code currentPath} is the JVM's active write target after rotation and is always excluded by
+     * path identity — not by modification time. The caller is responsible for closing the returned
+     * stream.
      */
-    public InputStream collectAndRedirect() throws Exception {
+    public InputStream collectAfterRotate() throws Exception {
         State state = queryState();
         if (!state.enabled || state.logFilePath == null) {
             throw new IllegalStateException("GC logging is not active");
@@ -153,30 +189,17 @@ public class GcLogging {
             return new ByteArrayInputStream(new byte[0]);
         }
         Path currentPath = state.logFilePath;
-        Path nextPath = Files.createTempFile("cryostat-gc-", ".log");
-        Files.delete(nextPath);
-        MBeanServer server = ManagementFactory.getPlatformMBeanServer();
-        String redirectArg =
-                "what=" + state.what + " decorators=" + state.decorators + " output=" + nextPath;
-        try {
-            server.invoke(
-                    ObjectName.getInstance("com.sun.management:type=DiagnosticCommand"),
-                    InvokeContext.VM_LOG,
-                    new Object[] {new String[] {redirectArg}},
-                    new String[] {String[].class.getName()});
-        } catch (InstanceNotFoundException
-                | MBeanException
-                | MalformedObjectNameException
-                | ReflectionException e) {
-            try {
-                Files.deleteIfExists(nextPath);
-            } catch (IOException ignored) {
-            }
-            throw new Exception("VM.log redirect failed", e);
-        }
+        issueRotate();
         List<Path> collectedPaths = collectLogPaths(currentPath);
         if (collectedPaths.isEmpty()) {
-            log.warn("GC log file not found after redirect: {}", currentPath);
+            if (state.filecount() <= 1) {
+                log.debug(
+                        "filecount<=1: no rotated files available, reading active log directly"
+                                + " (torn reads possible): {}",
+                        currentPath);
+                return openCollectedLogs(List.of(currentPath));
+            }
+            log.warn("No rotated GC log files found for: {}", currentPath);
             return new ByteArrayInputStream(new byte[0]);
         }
         return openCollectedLogs(collectedPaths);
@@ -189,10 +212,9 @@ public class GcLogging {
             for (Path path : paths) {
                 long size = Files.size(path);
                 if (size == 0L) {
-                    Files.deleteIfExists(path);
                     continue;
                 }
-                streams.add(DeletingInputStream.of(path));
+                streams.add(Files.newInputStream(path));
                 hasContent = true;
             }
             if (!hasContent) {
@@ -219,11 +241,32 @@ public class GcLogging {
         }
     }
 
+    void issueRotate() throws Exception {
+        MBeanServer server = ManagementFactory.getPlatformMBeanServer();
+        try {
+            server.invoke(
+                    ObjectName.getInstance("com.sun.management:type=DiagnosticCommand"),
+                    InvokeContext.VM_LOG,
+                    new Object[] {new String[] {"rotate"}},
+                    new String[] {String[].class.getName()});
+        } catch (InstanceNotFoundException
+                | MBeanException
+                | MalformedObjectNameException
+                | ReflectionException e) {
+            throw new Exception("vmLog rotate failed", e);
+        }
+    }
+
+    /**
+     * Returns all rotated sibling log files of {@code currentPath} sorted in oldest-first
+     * chronological order. The JVM unified logging rotation scheme names files with a numeric
+     * suffix: {@code gc.log.0} holds the most recently closed content, {@code gc.log.1} is older,
+     * {@code gc.log.2} older still, and so on. Correct concatenation order is therefore descending
+     * by suffix index (highest index = oldest). The file at {@code currentPath} itself is always
+     * excluded by path identity: it is the active write target and must never be read.
+     */
     List<Path> collectLogPaths(Path currentPath) throws IOException {
         List<Path> paths = new ArrayList<>();
-        if (Files.exists(currentPath)) {
-            paths.add(currentPath);
-        }
         Path parent = currentPath.getParent();
         Path fileNamePath = currentPath.getFileName();
         if (parent == null || fileNamePath == null || !Files.isDirectory(parent)) {
@@ -237,7 +280,7 @@ public class GcLogging {
                 paths.add(path);
             }
         }
-        paths.sort(Comparator.comparingLong(this::lastModified));
+        paths.sort(Comparator.comparingInt(this::rotationIndex).reversed());
         return paths;
     }
 
@@ -246,51 +289,30 @@ public class GcLogging {
         return !currentPath.equals(candidate)
                 && candidateFileName != null
                 && Files.isRegularFile(candidate)
-                && candidateFileName.toString().startsWith(fileName);
+                && candidateFileName.toString().startsWith(fileName + ".");
     }
 
-    private long lastModified(Path path) {
+    /**
+     * Returns the numeric rotation index encoded in a rotated log file's name suffix (e.g. {@code
+     * gc.log.3} → {@code 3}). Returns {@code -1} for any file whose suffix is not a non-negative
+     * integer so that such files sort before all indexed files when the comparator is reversed.
+     */
+    private int rotationIndex(Path path) {
+        Path fileNamePath = path.getFileName();
+        if (fileNamePath == null) {
+            return -1;
+        }
+        String name = fileNamePath.toString();
+        int dot = name.lastIndexOf('.');
+        if (dot < 0 || dot == name.length() - 1) {
+            return -1;
+        }
+        String suffix = name.substring(dot + 1);
         try {
-            return Files.getLastModifiedTime(path).toMillis();
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    private static class DeletingInputStream extends InputStream {
-
-        private final InputStream delegate;
-        private final Path path;
-
-        private DeletingInputStream(InputStream delegate, Path path) {
-            this.delegate = delegate;
-            this.path = path;
-        }
-
-        static DeletingInputStream of(Path path) throws IOException {
-            return new DeletingInputStream(Files.newInputStream(path), path);
-        }
-
-        @Override
-        public int read() throws IOException {
-            return delegate.read();
-        }
-
-        @Override
-        public int read(byte[] b, int off, int len) throws IOException {
-            return delegate.read(b, off, len);
-        }
-
-        @Override
-        public void close() throws IOException {
-            try {
-                delegate.close();
-            } finally {
-                try {
-                    Files.deleteIfExists(path);
-                } catch (IOException ignored) {
-                }
-            }
+            int index = Integer.parseInt(suffix);
+            return index >= 0 ? index : -1;
+        } catch (NumberFormatException e) {
+            return -1;
         }
     }
 }

@@ -26,6 +26,7 @@ import java.util.Objects;
 import java.util.UUID;
 
 import javax.inject.Inject;
+import javax.inject.Named;
 import javax.management.InstanceNotFoundException;
 import javax.management.MBeanException;
 import javax.management.MBeanServer;
@@ -52,14 +53,23 @@ class InvokeContext extends MutatingRemoteContext {
     static final String VM_LOG = "vmLog";
     private final Logger log = LoggerFactory.getLogger(getClass());
     private final ObjectMapper mapper;
+    private final String gcLogOutput;
+    private final String gcLogOutputOptions;
 
     private CryostatClient client;
 
     @Inject
-    InvokeContext(ObjectMapper mapper, SmallRyeConfig config, CryostatClient client) {
+    InvokeContext(
+            ObjectMapper mapper,
+            SmallRyeConfig config,
+            CryostatClient client,
+            @Named(ConfigModule.CRYOSTAT_AGENT_GC_LOG_OUTPUT) String gcLogOutput,
+            @Named(ConfigModule.CRYOSTAT_AGENT_GC_LOG_OUTPUT_OPTIONS) String gcLogOutputOptions) {
         super(config);
         this.mapper = mapper;
         this.client = client;
+        this.gcLogOutput = gcLogOutput;
+        this.gcLogOutputOptions = gcLogOutputOptions;
     }
 
     @Override
@@ -109,9 +119,10 @@ class InvokeContext extends MutatingRemoteContext {
                                 Collection<String> col = (Collection<String>) req.parameters[0];
                                 req.parameters[0] = col.toArray(new String[0]);
                             }
-                            // The agent owns the GC log file path. Strip any output= the
-                            // caller sent and inject one that points to a fresh tempfile so
-                            // that GcLogContext always has a known path to read back.
+                            // The remote caller is only allowed to set what= and
+                            // decorators=. Strip output= and output_options= regardless
+                            // of what was sent, then inject the agent-controlled values
+                            // so GcLogContext can always find the log via vmLog list.
                             String vmLogArgs;
                             if (req.parameters[0] instanceof String[]) {
                                 String[] strArr = (String[]) req.parameters[0];
@@ -119,11 +130,22 @@ class InvokeContext extends MutatingRemoteContext {
                             } else {
                                 vmLogArgs = String.valueOf(req.parameters[0]);
                             }
-                            if (!vmLogArgs.contains("disable=true")) {
-                                vmLogArgs = vmLogArgs.replaceAll("(?:^|\\s)output=\\S+", "").trim();
-                                String gcLogFile =
-                                        Files.createTempFile("cryostat-gc-", ".log").toString();
-                                vmLogArgs = vmLogArgs + " output=" + gcLogFile;
+                            if (!vmLogArgs.contains("disable=true")
+                                    && !vmLogArgs.contains("rotate")) {
+                                vmLogArgs =
+                                        vmLogArgs
+                                                .replaceAll("(?:^|\\s)output_options=\\S+", "")
+                                                .replaceAll("(?:^|\\s)output=\\S+", "")
+                                                .trim();
+                                String output =
+                                        gcLogOutput.isBlank()
+                                                ? Files.createTempFile("cryostat-gc-", ".log")
+                                                        .toString()
+                                                : gcLogOutput;
+                                vmLogArgs = vmLogArgs + " output=" + output;
+                                if (!gcLogOutputOptions.isBlank()) {
+                                    vmLogArgs = vmLogArgs + " output_options=" + gcLogOutputOptions;
+                                }
                                 req.parameters[0] = new String[] {vmLogArgs};
                             }
                         }
