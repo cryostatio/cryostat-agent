@@ -137,12 +137,7 @@ class InvokeContext extends MutatingRemoteContext {
                                                 .replaceAll("(?:^|\\s)output_options=\\S+", "")
                                                 .replaceAll("(?:^|\\s)output=\\S+", "")
                                                 .trim();
-                                String output =
-                                        gcLogOutput.isBlank()
-                                                ? Files.createTempFile("cryostat-gc-", ".log")
-                                                        .toString()
-                                                : gcLogOutput;
-                                vmLogArgs = vmLogArgs + " output=" + output;
+                                vmLogArgs = vmLogArgs + " output=" + gcLogOutput;
                                 if (!gcLogOutputOptions.isBlank()) {
                                     vmLogArgs = vmLogArgs + " output_options=" + gcLogOutputOptions;
                                 }
