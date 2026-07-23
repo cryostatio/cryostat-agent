@@ -42,6 +42,7 @@ import io.cryostat.agent.harvest.Harvester;
 import io.cryostat.agent.insights.InsightsAgentHelper;
 import io.cryostat.agent.model.PluginInfo;
 import io.cryostat.agent.mxbean.CryostatAgentMXBeanImpl;
+import io.cryostat.agent.remote.GcLogging;
 import io.cryostat.agent.triggers.TriggerEvaluator;
 import io.cryostat.libcryostat.net.CryostatAgentMXBean;
 
@@ -271,6 +272,7 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
                                 break;
                         }
                     });
+            client.gcLogging().loadInitialState();
             webServer.start();
             registration.start();
             client.triggerEvaluator().start(args.getSmartTriggers());
@@ -344,6 +346,8 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
         Harvester harvester();
 
         TriggerEvaluator triggerEvaluator();
+
+        GcLogging gcLogging();
 
         CryostatClient cryostatClient();
 
