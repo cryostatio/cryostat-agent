@@ -80,21 +80,10 @@ class GcLogContext implements RemoteContext {
     }
 
     private void handleStatus(HttpExchange exchange) throws IOException {
-        GcLogging.State current = gcLogging.queryState();
-        GcLogging.State initial = gcLogging.getInitialConfiguration();
+        GcLogging.State state = gcLogging.queryState();
         exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
         try (OutputStream response = exchange.getResponseBody()) {
-            mapper.writeValue(response, new StatusResponse(current, initial));
-        }
-    }
-
-    static class StatusResponse {
-        public final GcLogging.State currentConfiguration;
-        public final GcLogging.State initialConfiguration;
-
-        StatusResponse(GcLogging.State currentConfiguration, GcLogging.State initialConfiguration) {
-            this.currentConfiguration = currentConfiguration;
-            this.initialConfiguration = initialConfiguration;
+            mapper.writeValue(response, state);
         }
     }
 

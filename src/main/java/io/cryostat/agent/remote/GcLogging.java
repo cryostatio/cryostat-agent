@@ -29,7 +29,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -59,7 +58,6 @@ public class GcLogging {
     static final Path DEV_STDERR = Paths.get("/dev/stderr");
 
     private final Logger log = LoggerFactory.getLogger(getClass());
-    private final AtomicReference<State> initialConfiguration = new AtomicReference<>(null);
 
     public GcLogging() {}
 
@@ -122,9 +120,6 @@ public class GcLogging {
     /**
      * Queries the JVM's unified logging configuration via {@code vmLog list} and returns the
      * current GC logging state. Always reflects the live JVM configuration.
-     *
-     * <p>The first result returned by this method is also stored as the immutable initial
-     * configuration snapshot, accessible via {@link #getInitialConfiguration()}.
      */
     public State queryState() {
         MBeanServer server = ManagementFactory.getPlatformMBeanServer();
@@ -144,23 +139,7 @@ public class GcLogging {
             log.debug("Could not query vmLog list to determine GC log state", e);
             return State.disabled();
         }
-        State state = parseVmLogListOutput(output);
-        captureInitialIfAbsent(state);
-        return state;
-    }
-
-    void captureInitialIfAbsent(State state) {
-        initialConfiguration.compareAndSet(null, state);
-    }
-
-    /**
-     * Returns the immutable snapshot of the JVM unified logging configuration captured on the first
-     * call to {@link #queryState()}. Returns {@link State#disabled()} if {@code queryState} has not
-     * yet been called.
-     */
-    State getInitialConfiguration() {
-        State snapshot = initialConfiguration.get();
-        return snapshot != null ? snapshot : State.disabled();
+        return parseVmLogListOutput(output);
     }
 
     State parseVmLogListOutput(String output) {
