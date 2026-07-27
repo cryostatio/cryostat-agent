@@ -98,8 +98,10 @@ class GcLogContextTest {
 
         verify(exchange).sendResponseHeaders(200, RemoteContext.BODY_LENGTH_UNKNOWN);
         JsonNode node = mapper.readTree(baos.toByteArray());
-        assertFalse(node.get("enabled").asBoolean());
-        assertTrue(node.get("logFilePath").isNull());
+        assertNotNull(node.get("currentConfiguration"));
+        assertFalse(node.get("currentConfiguration").get("enabled").asBoolean());
+        assertTrue(node.get("currentConfiguration").get("logFilePath").isNull());
+        assertNotNull(node.get("initialConfiguration"));
     }
 
     @Test
@@ -119,9 +121,12 @@ class GcLogContextTest {
 
         verify(exchange).sendResponseHeaders(200, RemoteContext.BODY_LENGTH_UNKNOWN);
         JsonNode node = mapper.readTree(baos.toByteArray());
-        assertTrue(node.get("enabled").asBoolean());
-        assertEquals("uptime", node.get("decorators").asText());
-        assertEquals(logFile.toString(), node.get("logFilePath").asText());
+        JsonNode current = node.get("currentConfiguration");
+        assertNotNull(current);
+        assertTrue(current.get("enabled").asBoolean());
+        assertEquals("uptime", current.get("decorators").asText());
+        assertEquals(logFile.toString(), current.get("logFilePath").asText());
+        assertNotNull(node.get("initialConfiguration"));
     }
 
     @Test
@@ -141,8 +146,62 @@ class GcLogContextTest {
 
         verify(exchange).sendResponseHeaders(200, RemoteContext.BODY_LENGTH_UNKNOWN);
         JsonNode node = mapper.readTree(baos.toByteArray());
-        assertTrue(node.get("enabled").asBoolean());
-        assertEquals(GcLogging.DEV_STDOUT.toString(), node.get("logFilePath").asText());
+        JsonNode current = node.get("currentConfiguration");
+        assertNotNull(current);
+        assertTrue(current.get("enabled").asBoolean());
+        assertEquals(GcLogging.DEV_STDOUT.toString(), current.get("logFilePath").asText());
+        assertNotNull(node.get("initialConfiguration"));
+    }
+
+    @Test
+    void testStatusResponseContainsBothKeys() throws Exception {
+        Path logFile = tempDir.resolve("gc.log");
+        Files.writeString(logFile, "GC log content");
+        GcLogging.State enabledState =
+                new GcLogging.State(true, logFile, "gc", "time,level", "filecount=5");
+        doReturn(enabledState).when(gcLogging).queryState();
+
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        when(exchange.getRequestMethod()).thenReturn("GET");
+        when(exchange.getRequestURI()).thenReturn(URI.create("/gc-log/status"));
+        when(exchange.getResponseBody()).thenReturn(baos);
+
+        ctx.handle(exchange);
+
+        JsonNode root = mapper.readTree(baos.toByteArray());
+        assertTrue(root.has("currentConfiguration"), "missing currentConfiguration key");
+        assertTrue(root.has("initialConfiguration"), "missing initialConfiguration key");
+        JsonNode current = root.get("currentConfiguration");
+        assertTrue(current.get("enabled").asBoolean());
+        assertEquals(logFile.toString(), current.get("logFilePath").asText());
+        assertEquals("gc", current.get("what").asText());
+        assertEquals("time,level", current.get("decorators").asText());
+        assertFalse(current.has("outputOptions"), "outputOptions must not be serialized");
+    }
+
+    @Test
+    void testInitialConfigurationCapturedOnFirstQuery() {
+        GcLogging subject = new GcLogging();
+
+        GcLogging.State first = subject.parseVmLogListOutput("Log output configuration:\n");
+        subject.captureInitialIfAbsent(first);
+
+        GcLogging.State second =
+                subject.parseVmLogListOutput(
+                        "Log output configuration:\n"
+                                + " #1: file=/tmp/gc.log all=off,gc=info time,level"
+                                + " filecount=5,filesize=20480K,async=false\n");
+        subject.captureInitialIfAbsent(second);
+
+        assertSame(first, subject.getInitialConfiguration());
+    }
+
+    @Test
+    void testInitialConfigurationDefaultsToDisabledBeforeFirstQuery() {
+        GcLogging fresh = new GcLogging();
+        GcLogging.State initial = fresh.getInitialConfiguration();
+        assertNotNull(initial);
+        assertFalse(initial.enabled);
     }
 
     // -------------------------------------------------------------------------
