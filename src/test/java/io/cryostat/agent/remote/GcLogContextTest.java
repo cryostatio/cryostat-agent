@@ -161,7 +161,7 @@ class GcLogContextTest {
     }
 
     @Test
-    void testGetReturns200WithEmptyBodyWhenNoRotatedFiles() throws Exception {
+    void testGetReturns204WhenNoRotatedFiles() throws Exception {
         Path logFile = tempDir.resolve("gc.log");
         doReturn(new GcLogging.State(true, logFile, "gc", "time,level", ""))
                 .when(gcLogging)
@@ -169,6 +169,41 @@ class GcLogContextTest {
         doReturn(new java.io.ByteArrayInputStream(new byte[0]))
                 .when(gcLogging)
                 .collectAfterRotate();
+        when(exchange.getRequestMethod()).thenReturn("GET");
+        when(exchange.getRequestURI()).thenReturn(URI.create("/gc-log/"));
+
+        ctx.handle(exchange);
+
+        verify(exchange).sendResponseHeaders(204, RemoteContext.BODY_LENGTH_NONE);
+        verify(exchange, never()).getResponseBody();
+    }
+
+    @Test
+    void testGetReturns204WhenActiveLogFileIsEmpty() throws Exception {
+        Path logFile = tempDir.resolve("gc.log");
+        doReturn(new GcLogging.State(true, logFile, "gc", "time,level", "filecount=1,filesize=1m"))
+                .when(gcLogging)
+                .queryState();
+        doReturn(new java.io.ByteArrayInputStream(new byte[0]))
+                .when(gcLogging)
+                .collectAfterRotate();
+        when(exchange.getRequestMethod()).thenReturn("GET");
+        when(exchange.getRequestURI()).thenReturn(URI.create("/gc-log/"));
+
+        ctx.handle(exchange);
+
+        verify(exchange).sendResponseHeaders(204, RemoteContext.BODY_LENGTH_NONE);
+        verify(exchange, never()).getResponseBody();
+    }
+
+    @Test
+    void testGetReturns200WithContentWhenRotatedFilesExist() throws Exception {
+        Path logFile = tempDir.resolve("gc.log");
+        byte[] content = "gc log content".getBytes();
+        doReturn(new GcLogging.State(true, logFile, "gc", "time,level", "filecount=5,filesize=1m"))
+                .when(gcLogging)
+                .queryState();
+        doReturn(new java.io.ByteArrayInputStream(content)).when(gcLogging).collectAfterRotate();
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         when(exchange.getRequestMethod()).thenReturn("GET");
         when(exchange.getRequestURI()).thenReturn(URI.create("/gc-log/"));
@@ -177,7 +212,7 @@ class GcLogContextTest {
         ctx.handle(exchange);
 
         verify(exchange).sendResponseHeaders(200, RemoteContext.BODY_LENGTH_UNKNOWN);
-        assertEquals(0, baos.size());
+        assertArrayEquals(content, baos.toByteArray());
     }
 
     @Test

@@ -15,9 +15,11 @@
  */
 package io.cryostat.agent.remote;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.SequenceInputStream;
 
 import javax.inject.Inject;
 
@@ -103,10 +105,27 @@ class GcLogContext implements RemoteContext {
             exchange.sendResponseHeaders(HttpStatus.SC_INTERNAL_SERVER_ERROR, BODY_LENGTH_NONE);
             return;
         }
+        int firstByte;
+        try {
+            firstByte = stream.read();
+        } catch (IOException e) {
+            stream.close();
+            log.error("Failed to read GC log stream", e);
+            exchange.sendResponseHeaders(HttpStatus.SC_INTERNAL_SERVER_ERROR, BODY_LENGTH_NONE);
+            return;
+        }
+        if (firstByte == -1) {
+            stream.close();
+            exchange.sendResponseHeaders(HttpStatus.SC_NO_CONTENT, BODY_LENGTH_NONE);
+            return;
+        }
+        InputStream fullStream =
+                new SequenceInputStream(
+                        new ByteArrayInputStream(new byte[] {(byte) firstByte}), stream);
         exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
-        try (stream;
+        try (fullStream;
                 OutputStream out = exchange.getResponseBody()) {
-            stream.transferTo(out);
+            fullStream.transferTo(out);
         }
     }
 }
