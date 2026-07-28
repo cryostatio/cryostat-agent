@@ -142,7 +142,7 @@ class GcLogContextTest {
     // -------------------------------------------------------------------------
 
     @Test
-    void testGetReturns409WhenNotEnabled() throws Exception {
+    void testGetReturns404WhenNotEnabled() throws Exception {
         doThrow(new GcLogException("GC logging is not active"))
                 .when(gcLogging)
                 .collectAfterRotate();
@@ -151,7 +151,7 @@ class GcLogContextTest {
 
         ctx.handle(exchange);
 
-        verify(exchange).sendResponseHeaders(409, RemoteContext.BODY_LENGTH_NONE);
+        verify(exchange).sendResponseHeaders(404, RemoteContext.BODY_LENGTH_NONE);
     }
 
     @Test

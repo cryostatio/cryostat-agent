@@ -96,7 +96,7 @@ class GcLogContext implements RemoteContext {
             stream = gcLogging.collectAfterRotate();
         } catch (GcLogException e) {
             log.warn("GC logging is not active: {}", e.getMessage());
-            exchange.sendResponseHeaders(HttpStatus.SC_CONFLICT, BODY_LENGTH_NONE);
+            exchange.sendResponseHeaders(HttpStatus.SC_NOT_FOUND, BODY_LENGTH_NONE);
             return;
         } catch (IOException e) {
             log.error("Failed to collect GC log", e);
