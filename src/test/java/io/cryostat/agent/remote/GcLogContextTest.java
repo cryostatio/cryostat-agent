@@ -26,12 +26,9 @@ import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
 import java.time.Instant;
 
-import io.cryostat.agent.ConfigModule;
-
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
-import io.smallrye.config.SmallRyeConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -42,7 +39,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class GcLogContextTest {
 
-    @Mock SmallRyeConfig config;
     @Mock HttpExchange exchange;
 
     private final ObjectMapper mapper = new ObjectMapper();
@@ -53,11 +49,8 @@ class GcLogContextTest {
 
     @BeforeEach
     void setup() {
-        lenient()
-                .when(config.getValue(ConfigModule.CRYOSTAT_AGENT_GC_LOG_ENABLED, boolean.class))
-                .thenReturn(true);
         gcLogging = spy(new GcLogging());
-        ctx = new GcLogContext(mapper, config, gcLogging);
+        ctx = new GcLogContext(mapper, true, gcLogging);
     }
 
     // -------------------------------------------------------------------------
@@ -71,9 +64,8 @@ class GcLogContextTest {
 
     @Test
     void testAvailableFalseWhenDisabled() {
-        when(config.getValue(ConfigModule.CRYOSTAT_AGENT_GC_LOG_ENABLED, boolean.class))
-                .thenReturn(false);
-        assertFalse(ctx.available());
+        GcLogContext disabledCtx = new GcLogContext(mapper, false, gcLogging);
+        assertFalse(disabledCtx.available());
     }
 
     @Test
@@ -151,7 +143,9 @@ class GcLogContextTest {
 
     @Test
     void testGetReturns409WhenNotEnabled() throws Exception {
-        doReturn(GcLogging.State.disabled()).when(gcLogging).queryState();
+        doThrow(new GcLogException("GC logging is not active"))
+                .when(gcLogging)
+                .collectAfterRotate();
         when(exchange.getRequestMethod()).thenReturn("GET");
         when(exchange.getRequestURI()).thenReturn(URI.create("/gc-log/"));
 
@@ -163,9 +157,6 @@ class GcLogContextTest {
     @Test
     void testGetReturns204WhenNoRotatedFiles() throws Exception {
         Path logFile = tempDir.resolve("gc.log");
-        doReturn(new GcLogging.State(true, logFile, "gc", "time,level", ""))
-                .when(gcLogging)
-                .queryState();
         doReturn(new java.io.ByteArrayInputStream(new byte[0]))
                 .when(gcLogging)
                 .collectAfterRotate();
@@ -181,9 +172,6 @@ class GcLogContextTest {
     @Test
     void testGetReturns204WhenActiveLogFileIsEmpty() throws Exception {
         Path logFile = tempDir.resolve("gc.log");
-        doReturn(new GcLogging.State(true, logFile, "gc", "time,level", "filecount=1,filesize=1m"))
-                .when(gcLogging)
-                .queryState();
         doReturn(new java.io.ByteArrayInputStream(new byte[0]))
                 .when(gcLogging)
                 .collectAfterRotate();
@@ -200,9 +188,6 @@ class GcLogContextTest {
     void testGetReturns200WithContentWhenRotatedFilesExist() throws Exception {
         Path logFile = tempDir.resolve("gc.log");
         byte[] content = "gc log content".getBytes();
-        doReturn(new GcLogging.State(true, logFile, "gc", "time,level", "filecount=5,filesize=1m"))
-                .when(gcLogging)
-                .queryState();
         doReturn(new java.io.ByteArrayInputStream(content)).when(gcLogging).collectAfterRotate();
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         when(exchange.getRequestMethod()).thenReturn("GET");
@@ -336,8 +321,8 @@ class GcLogContextTest {
         GcLogging.State state = gcLogging.parseVmLogListOutput("");
         assertFalse(state.enabled);
         assertNull(state.logFilePath);
-        assertEquals("time,level", state.decorators);
-        assertEquals("gc", state.what);
+        assertEquals("", state.decorators);
+        assertEquals("", state.what);
     }
 
     // -------------------------------------------------------------------------

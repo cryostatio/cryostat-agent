@@ -22,12 +22,12 @@ import java.io.OutputStream;
 import java.io.SequenceInputStream;
 
 import javax.inject.Inject;
+import javax.inject.Named;
 
 import io.cryostat.agent.ConfigModule;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
-import io.smallrye.config.SmallRyeConfig;
 import org.apache.hc.core5.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,13 +39,16 @@ class GcLogContext implements RemoteContext {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
     private final ObjectMapper mapper;
-    private final SmallRyeConfig config;
+    private final boolean gcLogEnabled;
     private final GcLogging gcLogging;
 
     @Inject
-    GcLogContext(ObjectMapper mapper, SmallRyeConfig config, GcLogging gcLogging) {
+    GcLogContext(
+            ObjectMapper mapper,
+            @Named(ConfigModule.CRYOSTAT_AGENT_GC_LOG_ENABLED) boolean gcLogEnabled,
+            GcLogging gcLogging) {
         this.mapper = mapper;
-        this.config = config;
+        this.gcLogEnabled = gcLogEnabled;
         this.gcLogging = gcLogging;
     }
 
@@ -56,7 +59,7 @@ class GcLogContext implements RemoteContext {
 
     @Override
     public boolean available() {
-        return config.getValue(ConfigModule.CRYOSTAT_AGENT_GC_LOG_ENABLED, boolean.class);
+        return gcLogEnabled;
     }
 
     @Override
@@ -88,19 +91,14 @@ class GcLogContext implements RemoteContext {
     }
 
     private void handleGet(HttpExchange exchange) throws IOException {
-        GcLogging.State state = gcLogging.queryState();
-        if (!state.enabled || state.logFilePath == null) {
-            exchange.sendResponseHeaders(HttpStatus.SC_CONFLICT, BODY_LENGTH_NONE);
-            return;
-        }
-        if (state.isStreamOutput()) {
-            exchange.sendResponseHeaders(HttpStatus.SC_NO_CONTENT, BODY_LENGTH_NONE);
-            return;
-        }
         InputStream stream;
         try {
             stream = gcLogging.collectAfterRotate();
-        } catch (Exception e) {
+        } catch (GcLogException e) {
+            log.warn("GC logging is not active: {}", e.getMessage());
+            exchange.sendResponseHeaders(HttpStatus.SC_CONFLICT, BODY_LENGTH_NONE);
+            return;
+        } catch (IOException e) {
             log.error("Failed to collect GC log", e);
             exchange.sendResponseHeaders(HttpStatus.SC_INTERNAL_SERVER_ERROR, BODY_LENGTH_NONE);
             return;

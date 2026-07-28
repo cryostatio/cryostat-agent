@@ -112,37 +112,7 @@ class InvokeContext extends MutatingRemoteContext {
                         } else if (VM_LOG.equals(req.getOperation())
                                 && req.parameters != null
                                 && req.parameters.length > 0) {
-                            // Normalise the parameter array first (JSON deserialises as a
-                            // Collection when the type is Object[]).
-                            if (req.parameters[0] instanceof Collection) {
-                                @SuppressWarnings("unchecked")
-                                Collection<String> col = (Collection<String>) req.parameters[0];
-                                req.parameters[0] = col.toArray(new String[0]);
-                            }
-                            // The remote caller is only allowed to set what= and
-                            // decorators=. Strip output= and output_options= regardless
-                            // of what was sent, then inject the agent-controlled values
-                            // so GcLogContext can always find the log via vmLog list.
-                            String vmLogArgs;
-                            if (req.parameters[0] instanceof String[]) {
-                                String[] strArr = (String[]) req.parameters[0];
-                                vmLogArgs = strArr.length > 0 ? strArr[0] : "";
-                            } else {
-                                vmLogArgs = String.valueOf(req.parameters[0]);
-                            }
-                            if (!vmLogArgs.contains("disable=true")
-                                    && !vmLogArgs.contains("rotate")) {
-                                vmLogArgs =
-                                        vmLogArgs
-                                                .replaceAll("(?:^|\\s)output_options=\\S+", "")
-                                                .replaceAll("(?:^|\\s)output=\\S+", "")
-                                                .trim();
-                                vmLogArgs = vmLogArgs + " output=" + gcLogOutput;
-                                if (!gcLogOutputOptions.isBlank()) {
-                                    vmLogArgs = vmLogArgs + " output_options=" + gcLogOutputOptions;
-                                }
-                                req.parameters[0] = new String[] {vmLogArgs};
-                            }
+                            applyGcLogConfig(req);
                         }
 
                         MBeanServer server = ManagementFactory.getPlatformMBeanServer();
@@ -156,9 +126,9 @@ class InvokeContext extends MutatingRemoteContext {
                         if (req.getOperation().equals("dumpHeap")) {
                             // Send the request Id back with the heap dump so the server
                             // can match it with the open requests.
-                            if (heapDumpFilename == null
-                                    || !Files.exists(Paths.get(heapDumpFilename))) {
-                                throw new IllegalStateException();
+                            if (!Files.exists(Paths.get(heapDumpFilename))) {
+                                throw new IllegalStateException(
+                                        "Heap dump file was not created at: " + heapDumpFilename);
                             }
                             client.pushHeapDump(Paths.get(heapDumpFilename), requestId);
                         }
@@ -188,6 +158,43 @@ class InvokeContext extends MutatingRemoteContext {
             }
         } finally {
             exchange.close();
+        }
+    }
+
+    /**
+     * Normalises a {@code vmLog} invocation request so that the {@code output=} and {@code
+     * output_options=} parameters are always set to the agent-controlled values, preventing the
+     * remote caller from redirecting GC log output to an arbitrary path.
+     *
+     * <p>The remote caller is permitted to set {@code what=} and {@code decorators=} only. {@code
+     * disable=true} and {@code rotate} sub-commands are passed through unchanged.
+     */
+    private void applyGcLogConfig(MBeanInvocationRequest<?> req) {
+        // Normalise the parameter array (JSON deserialises as a Collection when the type is
+        // Object[]).
+        if (req.parameters[0] instanceof Collection) {
+            @SuppressWarnings("unchecked")
+            Collection<String> col = (Collection<String>) req.parameters[0];
+            req.parameters[0] = col.toArray(new String[0]);
+        }
+        String vmLogArgs;
+        if (req.parameters[0] instanceof String[]) {
+            String[] strArr = (String[]) req.parameters[0];
+            vmLogArgs = strArr.length > 0 ? strArr[0] : "";
+        } else {
+            vmLogArgs = String.valueOf(req.parameters[0]);
+        }
+        if (!vmLogArgs.contains("disable=true") && !vmLogArgs.contains("rotate")) {
+            vmLogArgs =
+                    vmLogArgs
+                            .replaceAll("(?:^|\\s)output_options=\\S+", "")
+                            .replaceAll("(?:^|\\s)output=\\S+", "")
+                            .trim();
+            vmLogArgs = vmLogArgs + " output=" + gcLogOutput;
+            if (!gcLogOutputOptions.isBlank()) {
+                vmLogArgs = vmLogArgs + " output_options=" + gcLogOutputOptions;
+            }
+            req.parameters[0] = new String[] {vmLogArgs};
         }
     }
 

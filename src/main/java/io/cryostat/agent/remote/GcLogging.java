@@ -56,8 +56,6 @@ public class GcLogging {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
-    public GcLogging() {}
-
     /** Immutable snapshot of the JVM unified logging configuration for GC output. */
     static class State {
         public final boolean enabled;
@@ -85,7 +83,7 @@ public class GcLogging {
         }
 
         static State disabled() {
-            return new State(false, null, "gc", "time,level", "");
+            return new State(false, null, "", "", "");
         }
 
         @JsonIgnore
@@ -150,10 +148,10 @@ public class GcLogging {
      * Log rotation and retention are managed by the JVM's own {@code output_options} (e.g. {@code
      * filecount=10,filesize=100m}). The caller is responsible for closing the returned stream.
      */
-    public InputStream collectAfterRotate() throws Exception {
+    public InputStream collectAfterRotate() throws IOException {
         State state = queryState();
         if (!state.enabled || state.logFilePath == null) {
-            throw new IllegalStateException("GC logging is not active");
+            throw new GcLogException("GC logging is not active");
         }
         if (state.isStreamOutput()) {
             return new ByteArrayInputStream(new byte[0]);
@@ -166,19 +164,13 @@ public class GcLogging {
     }
 
     InputStream openCollectedLogs(List<Path> paths) throws IOException {
+        if (paths == null || paths.isEmpty()) {
+            return new ByteArrayInputStream(new byte[0]);
+        }
         List<InputStream> streams = new ArrayList<>();
-        boolean hasContent = false;
         try {
             for (Path path : paths) {
-                long size = Files.size(path);
-                if (size == 0L) {
-                    continue;
-                }
                 streams.add(Files.newInputStream(path));
-                hasContent = true;
-            }
-            if (!hasContent) {
-                return new ByteArrayInputStream(new byte[0]);
             }
             return new SequenceInputStream(Collections.enumeration(streams));
         } catch (IOException e) {
@@ -201,14 +193,14 @@ public class GcLogging {
         }
     }
 
-    void issueRotate() throws Exception {
+    void issueRotate() throws IOException {
         try {
             invokeVmLogCommand("rotate");
         } catch (InstanceNotFoundException
                 | MBeanException
                 | MalformedObjectNameException
                 | ReflectionException e) {
-            throw new Exception("vmLog rotate failed", e);
+            throw new GcLogException("vmLog rotate failed", e);
         }
     }
 

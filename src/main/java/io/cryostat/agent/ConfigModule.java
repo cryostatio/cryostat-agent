@@ -1229,6 +1229,13 @@ public abstract class ConfigModule {
         return config.getValue(CRYOSTAT_AGENT_GC_LOG_OUTPUT_OPTIONS, String.class);
     }
 
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_GC_LOG_ENABLED)
+    public static boolean provideGcLogEnabled(SmallRyeConfig config) {
+        return config.getValue(CRYOSTAT_AGENT_GC_LOG_ENABLED, boolean.class);
+    }
+
     public enum URIRange {
         LOOPBACK(u -> check(u, u2 -> true, InetAddress::isLoopbackAddress)),
         LINK_LOCAL(
