@@ -262,7 +262,6 @@ class GcLogContextTest {
         assertEquals("all=off,gc=info", state.what);
         assertEquals("time,level", state.decorators);
         assertEquals("filecount=5,filesize=20480K,async=false", state.outputOptions);
-        assertEquals(5, state.filecount());
     }
 
     @Test
@@ -430,35 +429,28 @@ class GcLogContextTest {
     }
 
     // -------------------------------------------------------------------------
-    // GcLogging.State.filecount()
+    // GcLogging.collectAfterRotate — active file always appended
     // -------------------------------------------------------------------------
 
     @Test
-    void testFilecountParsedFromOutputOptions() {
-        GcLogging.State state =
-                new GcLogging.State(true, null, "gc", "uptime", "filecount=3,filesize=1m");
-        assertEquals(3, state.filecount());
+    void testCollectAfterRotateAlwaysIncludesActiveFileLast() throws Exception {
+        Path logFile = tempDir.resolve("gc.log");
+        Path rotated = tempDir.resolve("gc.log.0");
+        Files.writeString(rotated, "sealed");
+        Files.setLastModifiedTime(rotated, FileTime.from(Instant.ofEpochSecond(1000)));
+        Files.writeString(logFile, "active");
+        doReturn(new GcLogging.State(true, logFile, "gc", "uptime", "filecount=5,filesize=1m"))
+                .when(gcLogging)
+                .queryState();
+        doNothing().when(gcLogging).issueRotate();
+
+        try (InputStream stream = gcLogging.collectAfterRotate()) {
+            assertEquals("sealedactive", new String(stream.readAllBytes()));
+        }
     }
 
     @Test
-    void testFilecountReturnsMaxValueWhenOutputOptionsEmpty() {
-        GcLogging.State state = new GcLogging.State(true, null, "gc", "uptime", "");
-        assertEquals(Integer.MAX_VALUE, state.filecount());
-    }
-
-    @Test
-    void testFilecountReturnsMaxValueWhenNoFilecountKeyPresent() {
-        GcLogging.State state =
-                new GcLogging.State(true, null, "gc", "uptime", "filesize=1m,async=false");
-        assertEquals(Integer.MAX_VALUE, state.filecount());
-    }
-
-    // -------------------------------------------------------------------------
-    // GcLogging.collectAfterRotate — filecount=1 fallback
-    // -------------------------------------------------------------------------
-
-    @Test
-    void testCollectAfterRotateFallsBackToActiveFileWhenFilecountIsOne() throws Exception {
+    void testCollectAfterRotateIncludesActiveFileEvenWhenNoRotatedFilesExist() throws Exception {
         Path logFile = tempDir.resolve("gc.log");
         Files.writeString(logFile, "live-content");
         doReturn(new GcLogging.State(true, logFile, "gc", "uptime", "filecount=1,filesize=1m"))

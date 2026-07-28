@@ -51,9 +51,6 @@ public class GcLogging {
             Pattern.compile("^\\s*#\\d+: file=(\\S+) (\\S+) (\\S+)(?:\\s+(\\S+))?");
     private static final Pattern VM_LOG_LIST_NONFILE_PATTERN =
             Pattern.compile("^\\s*#\\d+: (stdout|stderr) (\\S+) (\\S+)");
-    private static final Pattern FILECOUNT_PATTERN =
-            Pattern.compile("(?:^|,)filecount=(\\d+)(?:,|$)");
-
     static final Path DEV_STDOUT = Paths.get("/dev/stdout");
     static final Path DEV_STDERR = Paths.get("/dev/stderr");
 
@@ -94,26 +91,6 @@ public class GcLogging {
         @JsonIgnore
         boolean isStreamOutput() {
             return DEV_STDOUT.equals(logFilePath) || DEV_STDERR.equals(logFilePath);
-        }
-
-        /**
-         * Returns the {@code filecount} value from {@code output_options}, or {@link
-         * Integer#MAX_VALUE} if not specified (treat as unbounded).
-         */
-        @JsonIgnore
-        int filecount() {
-            if (outputOptions.isBlank()) {
-                return Integer.MAX_VALUE;
-            }
-            Matcher m = FILECOUNT_PATTERN.matcher(outputOptions);
-            if (!m.find()) {
-                return Integer.MAX_VALUE;
-            }
-            try {
-                return Integer.parseInt(m.group(1));
-            } catch (NumberFormatException e) {
-                return Integer.MAX_VALUE;
-            }
         }
     }
 
@@ -168,12 +145,10 @@ public class GcLogging {
 
     /**
      * Issues a {@code vmLog rotate} to force the JVM to close the current log file and begin
-     * writing to a new one, then returns an {@link InputStream} over all rotated (non-current) log
-     * files concatenated in chronological order. Log rotation and retention are managed by the
-     * JVM's own {@code output_options} (e.g. {@code filecount=10,filesize=100m}). The file at
-     * {@code currentPath} is the JVM's active write target after rotation and is always excluded by
-     * path identity — not by modification time. The caller is responsible for closing the returned
-     * stream.
+     * writing to a new one, then returns an {@link InputStream} over all rotated log files
+     * concatenated in chronological order, followed by the currently active (unsealed) log file.
+     * Log rotation and retention are managed by the JVM's own {@code output_options} (e.g. {@code
+     * filecount=10,filesize=100m}). The caller is responsible for closing the returned stream.
      */
     public InputStream collectAfterRotate() throws Exception {
         State state = queryState();
@@ -186,17 +161,7 @@ public class GcLogging {
         Path currentPath = state.logFilePath;
         issueRotate();
         List<Path> collectedPaths = collectLogPaths(currentPath);
-        if (collectedPaths.isEmpty()) {
-            if (state.filecount() <= 1) {
-                log.debug(
-                        "filecount<=1: no rotated files available, reading active log directly"
-                                + " (torn reads possible): {}",
-                        currentPath);
-                return openCollectedLogs(List.of(currentPath));
-            }
-            log.warn("No rotated GC log files found for: {}", currentPath);
-            return new ByteArrayInputStream(new byte[0]);
-        }
+        collectedPaths.add(currentPath);
         return openCollectedLogs(collectedPaths);
     }
 
@@ -258,10 +223,9 @@ public class GcLogging {
      * most recently. Files are returned oldest-modified-first so that concatenating them produces a
      * log with monotonically increasing timestamps.
      *
-     * <p>The file at {@code currentPath} itself is excluded by path identity. It is the active
-     * write target and is not read here; the sole exception is when {@code filecount=1}, in which
-     * case the caller ({@link #collectAfterRotate()}) passes it directly, accepting the risk of
-     * torn line reads.
+     * <p>The file at {@code currentPath} itself is excluded by path identity; the caller ({@link
+     * #collectAfterRotate()}) appends it separately so that the active write target always appears
+     * last in the concatenated stream.
      */
     List<Path> collectLogPaths(Path currentPath) throws IOException {
         List<Path> paths = new ArrayList<>();
