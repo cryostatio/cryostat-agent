@@ -125,12 +125,7 @@ public class GcLogging {
         MBeanServer server = ManagementFactory.getPlatformMBeanServer();
         String output;
         try {
-            Object result =
-                    server.invoke(
-                            ObjectName.getInstance("com.sun.management:type=DiagnosticCommand"),
-                            "vmLog",
-                            new Object[] {new String[] {"list"}},
-                            new String[] {String[].class.getName()});
+            Object result = invokeVmLogCommand(server, "list");
             output = String.valueOf(result);
         } catch (InstanceNotFoundException
                 | MBeanException
@@ -245,11 +240,7 @@ public class GcLogging {
     void issueRotate() throws Exception {
         MBeanServer server = ManagementFactory.getPlatformMBeanServer();
         try {
-            server.invoke(
-                    ObjectName.getInstance("com.sun.management:type=DiagnosticCommand"),
-                    InvokeContext.VM_LOG,
-                    new Object[] {new String[] {"rotate"}},
-                    new String[] {String[].class.getName()});
+            invokeVmLogCommand(server, "rotate");
         } catch (InstanceNotFoundException
                 | MBeanException
                 | MalformedObjectNameException
@@ -299,6 +290,18 @@ public class GcLogging {
                             }
                         }));
         return paths;
+    }
+
+    private Object invokeVmLogCommand(MBeanServer server, String cmd)
+            throws ReflectionException,
+                    MBeanException,
+                    InstanceNotFoundException,
+                    MalformedObjectNameException {
+        return server.invoke(
+                ObjectName.getInstance("com.sun.management:type=DiagnosticCommand"),
+                InvokeContext.VM_LOG,
+                new Object[] {new String[] {cmd}},
+                new String[] {String[].class.getName()});
     }
 
     private boolean isRotatedLog(Path currentPath, String fileName, Path candidate) {
