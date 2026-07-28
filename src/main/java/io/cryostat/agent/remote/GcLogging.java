@@ -122,10 +122,9 @@ public class GcLogging {
      * current GC logging state. Always reflects the live JVM configuration.
      */
     public State queryState() {
-        MBeanServer server = ManagementFactory.getPlatformMBeanServer();
         String output;
         try {
-            Object result = invokeVmLogCommand(server, "list");
+            Object result = invokeVmLogCommand("list");
             output = String.valueOf(result);
         } catch (InstanceNotFoundException
                 | MBeanException
@@ -238,9 +237,8 @@ public class GcLogging {
     }
 
     void issueRotate() throws Exception {
-        MBeanServer server = ManagementFactory.getPlatformMBeanServer();
         try {
-            invokeVmLogCommand(server, "rotate");
+            invokeVmLogCommand("rotate");
         } catch (InstanceNotFoundException
                 | MBeanException
                 | MalformedObjectNameException
@@ -292,11 +290,13 @@ public class GcLogging {
         return paths;
     }
 
-    private Object invokeVmLogCommand(MBeanServer server, String cmd)
+    private Object invokeVmLogCommand(String cmd)
             throws ReflectionException,
                     MBeanException,
                     InstanceNotFoundException,
                     MalformedObjectNameException {
+        MBeanServer server = ManagementFactory.getPlatformMBeanServer();
+
         return server.invoke(
                 ObjectName.getInstance("com.sun.management:type=DiagnosticCommand"),
                 InvokeContext.VM_LOG,
