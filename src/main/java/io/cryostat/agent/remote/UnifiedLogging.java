@@ -45,7 +45,7 @@ import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class GcLogging {
+public class UnifiedLogging {
 
     private static final Pattern VM_LOG_LIST_FILE_PATTERN =
             Pattern.compile("^\\s*#\\d+: file=(\\S+) (\\S+) (\\S+)(?:\\s+(\\S+))?");
@@ -56,7 +56,7 @@ public class GcLogging {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
-    /** Immutable snapshot of the JVM unified logging configuration for GC output. */
+    /** Immutable snapshot of the JVM unified logging configuration. */
     static class State {
         public final boolean enabled;
 
@@ -71,12 +71,12 @@ public class GcLogging {
 
         State(
                 boolean loggingEnabled,
-                Path gcLogPath,
+                Path logPath,
                 String what,
                 String decorators,
                 String outputOptions) {
             this.enabled = loggingEnabled;
-            this.logFilePath = gcLogPath;
+            this.logFilePath = logPath;
             this.what = what;
             this.decorators = decorators;
             this.outputOptions = outputOptions == null ? "" : outputOptions;
@@ -94,7 +94,7 @@ public class GcLogging {
 
     /**
      * Queries the JVM's unified logging configuration via {@code vmLog list} and returns the
-     * current GC logging state. Always reflects the live JVM configuration.
+     * current logging state. Always reflects the live JVM configuration.
      */
     public State queryState() {
         String output;
@@ -105,7 +105,7 @@ public class GcLogging {
                 | MBeanException
                 | MalformedObjectNameException
                 | ReflectionException e) {
-            log.debug("Could not query vmLog list to determine GC log state", e);
+            log.debug("Could not query vmLog list to determine log state", e);
             return State.disabled();
         }
         return parseVmLogListOutput(output);
@@ -151,7 +151,7 @@ public class GcLogging {
     public InputStream collectAfterRotate() throws IOException {
         State state = queryState();
         if (!state.enabled || state.logFilePath == null) {
-            throw new GcLogException("GC logging is not active");
+            throw new UnifiedLogException("Logging is not active");
         }
         if (state.isStreamOutput()) {
             return new ByteArrayInputStream(new byte[0]);
@@ -200,7 +200,7 @@ public class GcLogging {
                 | MBeanException
                 | MalformedObjectNameException
                 | ReflectionException e) {
-            throw new GcLogException("vmLog rotate failed", e);
+            throw new UnifiedLogException("vmLog rotate failed", e);
         }
     }
 
@@ -209,11 +209,11 @@ public class GcLogging {
      * chronological order, using filesystem modification time as the ordering key.
      *
      * <p>The JVM unified logging rotation scheme uses a fixed-size ring buffer of numbered files
-     * (e.g. {@code gc.log.0}, {@code gc.log.1}, …). The numeric suffix encodes the ring-buffer
-     * slot, not the age: after the ring wraps, a low-numbered file can be newer than a
-     * high-numbered one. Modification time is the only reliable indicator of which file was sealed
-     * most recently. Files are returned oldest-modified-first so that concatenating them produces a
-     * log with monotonically increasing timestamps.
+     * (e.g. {@code log.0}, {@code log.1}, …). The numeric suffix encodes the ring-buffer slot, not
+     * the age: after the ring wraps, a low-numbered file can be newer than a high-numbered one.
+     * Modification time is the only reliable indicator of which file was sealed most recently.
+     * Files are returned oldest-modified-first so that concatenating them produces a log with
+     * monotonically increasing timestamps.
      *
      * <p>The file at {@code currentPath} itself is excluded by path identity; the caller ({@link
      * #collectAfterRotate()}) appends it separately so that the active write target always appears

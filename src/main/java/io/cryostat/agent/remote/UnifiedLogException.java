@@ -17,14 +17,14 @@ package io.cryostat.agent.remote;
 
 import java.io.IOException;
 
-/** Signals a failure in GC log management (inactive logging or JMX rotate failure). */
-class GcLogException extends IOException {
+/** Signals a failure in log management (inactive logging or JMX rotate failure). */
+class UnifiedLogException extends IOException {
 
-    GcLogException(String message) {
+    UnifiedLogException(String message) {
         super(message);
     }
 
-    GcLogException(String message, Throwable cause) {
+    UnifiedLogException(String message, Throwable cause) {
         super(message, cause);
     }
 }

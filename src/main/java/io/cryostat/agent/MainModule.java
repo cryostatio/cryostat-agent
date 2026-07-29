@@ -76,9 +76,9 @@ import javax.net.ssl.X509TrustManager;
 import io.cryostat.agent.ConfigModule.BytePass;
 import io.cryostat.agent.ConfigModule.CallbackCandidate;
 import io.cryostat.agent.harvest.HarvestModule;
-import io.cryostat.agent.remote.GcLogging;
 import io.cryostat.agent.remote.RemoteContext;
 import io.cryostat.agent.remote.RemoteModule;
+import io.cryostat.agent.remote.UnifiedLogging;
 import io.cryostat.agent.triggers.TriggerModule;
 import io.cryostat.agent.util.AppNameResolver;
 import io.cryostat.libcryostat.JvmIdentifier;
@@ -794,8 +794,8 @@ public abstract class MainModule {
 
     @Provides
     @Singleton
-    public static GcLogging provideGcLogging() {
-        return new GcLogging();
+    public static UnifiedLogging provideUnifiedLogging() {
+        return new UnifiedLogging();
     }
 
     @Provides

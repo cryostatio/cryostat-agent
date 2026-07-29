@@ -18,11 +18,13 @@ package io.cryostat.agent.remote;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.file.attribute.FileTime;
 import java.time.Instant;
 
@@ -37,24 +39,24 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
-class GcLogContextTest {
+class UnifiedLogContextTest {
 
     @Mock HttpExchange exchange;
 
     private final ObjectMapper mapper = new ObjectMapper();
-    private GcLogging gcLogging;
-    private GcLogContext ctx;
+    private UnifiedLogging logging;
+    private UnifiedLogContext ctx;
 
     @TempDir Path tempDir;
 
     @BeforeEach
     void setup() {
-        gcLogging = spy(new GcLogging());
-        ctx = new GcLogContext(mapper, true, gcLogging);
+        logging = spy(new UnifiedLogging());
+        ctx = new UnifiedLogContext(mapper, true, logging);
     }
 
     // -------------------------------------------------------------------------
-    // GcLogContext.available / path
+    // UnifiedLogContext.available / path
     // -------------------------------------------------------------------------
 
     @Test
@@ -64,13 +66,13 @@ class GcLogContextTest {
 
     @Test
     void testAvailableFalseWhenDisabled() {
-        GcLogContext disabledCtx = new GcLogContext(mapper, false, gcLogging);
+        UnifiedLogContext disabledCtx = new UnifiedLogContext(mapper, false, logging);
         assertFalse(disabledCtx.available());
     }
 
     @Test
     void testPath() {
-        assertEquals("/gc-log/", ctx.path());
+        assertEquals("/unified-log/", ctx.path());
     }
 
     // -------------------------------------------------------------------------
@@ -79,11 +81,11 @@ class GcLogContextTest {
 
     @Test
     void testStatusWhenDisabled() throws Exception {
-        doReturn(GcLogging.State.disabled()).when(gcLogging).queryState();
+        doReturn(UnifiedLogging.State.disabled()).when(logging).queryState();
 
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         when(exchange.getRequestMethod()).thenReturn("GET");
-        when(exchange.getRequestURI()).thenReturn(URI.create("/gc-log/status"));
+        when(exchange.getRequestURI()).thenReturn(URI.create("/unified-log/status"));
         when(exchange.getResponseBody()).thenReturn(baos);
 
         ctx.handle(exchange);
@@ -96,15 +98,15 @@ class GcLogContextTest {
 
     @Test
     void testStatusWhenEnabledWithExistingFile() throws Exception {
-        Path logFile = tempDir.resolve("gc.log");
-        Files.writeString(logFile, "GC log content");
-        doReturn(new GcLogging.State(true, logFile, "gc", "uptime", ""))
-                .when(gcLogging)
+        Path logFile = tempDir.resolve("test.log");
+        Files.writeString(logFile, "log content");
+        doReturn(new UnifiedLogging.State(true, logFile, "gc", "uptime", ""))
+                .when(logging)
                 .queryState();
 
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         when(exchange.getRequestMethod()).thenReturn("GET");
-        when(exchange.getRequestURI()).thenReturn(URI.create("/gc-log/status"));
+        when(exchange.getRequestURI()).thenReturn(URI.create("/unified-log/status"));
         when(exchange.getResponseBody()).thenReturn(baos);
 
         ctx.handle(exchange);
@@ -119,14 +121,18 @@ class GcLogContextTest {
     @Test
     void testStatusWhenLoggingToStdout() throws Exception {
         doReturn(
-                        new GcLogging.State(
-                                true, GcLogging.DEV_STDOUT, "all=warning", "uptime,level,tags", ""))
-                .when(gcLogging)
+                        new UnifiedLogging.State(
+                                true,
+                                UnifiedLogging.DEV_STDOUT,
+                                "all=warning",
+                                "uptime,level,tags",
+                                ""))
+                .when(logging)
                 .queryState();
 
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         when(exchange.getRequestMethod()).thenReturn("GET");
-        when(exchange.getRequestURI()).thenReturn(URI.create("/gc-log/status"));
+        when(exchange.getRequestURI()).thenReturn(URI.create("/unified-log/status"));
         when(exchange.getResponseBody()).thenReturn(baos);
 
         ctx.handle(exchange);
@@ -134,7 +140,7 @@ class GcLogContextTest {
         verify(exchange).sendResponseHeaders(200, RemoteContext.BODY_LENGTH_UNKNOWN);
         JsonNode node = mapper.readTree(baos.toByteArray());
         assertTrue(node.get("enabled").asBoolean());
-        assertEquals(GcLogging.DEV_STDOUT.toString(), node.get("logFilePath").asText());
+        assertEquals(UnifiedLogging.DEV_STDOUT.toString(), node.get("logFilePath").asText());
     }
 
     // -------------------------------------------------------------------------
@@ -143,11 +149,11 @@ class GcLogContextTest {
 
     @Test
     void testGetReturns404WhenNotEnabled() throws Exception {
-        doThrow(new GcLogException("GC logging is not active"))
-                .when(gcLogging)
+        doThrow(new UnifiedLogException("Logging is not active"))
+                .when(logging)
                 .collectAfterRotate();
         when(exchange.getRequestMethod()).thenReturn("GET");
-        when(exchange.getRequestURI()).thenReturn(URI.create("/gc-log/"));
+        when(exchange.getRequestURI()).thenReturn(URI.create("/unified-log/"));
 
         ctx.handle(exchange);
 
@@ -156,12 +162,9 @@ class GcLogContextTest {
 
     @Test
     void testGetReturns204WhenNoRotatedFiles() throws Exception {
-        Path logFile = tempDir.resolve("gc.log");
-        doReturn(new java.io.ByteArrayInputStream(new byte[0]))
-                .when(gcLogging)
-                .collectAfterRotate();
+        doReturn(new ByteArrayInputStream(new byte[0])).when(logging).collectAfterRotate();
         when(exchange.getRequestMethod()).thenReturn("GET");
-        when(exchange.getRequestURI()).thenReturn(URI.create("/gc-log/"));
+        when(exchange.getRequestURI()).thenReturn(URI.create("/unified-log/"));
 
         ctx.handle(exchange);
 
@@ -171,12 +174,9 @@ class GcLogContextTest {
 
     @Test
     void testGetReturns204WhenActiveLogFileIsEmpty() throws Exception {
-        Path logFile = tempDir.resolve("gc.log");
-        doReturn(new java.io.ByteArrayInputStream(new byte[0]))
-                .when(gcLogging)
-                .collectAfterRotate();
+        doReturn(new ByteArrayInputStream(new byte[0])).when(logging).collectAfterRotate();
         when(exchange.getRequestMethod()).thenReturn("GET");
-        when(exchange.getRequestURI()).thenReturn(URI.create("/gc-log/"));
+        when(exchange.getRequestURI()).thenReturn(URI.create("/unified-log/"));
 
         ctx.handle(exchange);
 
@@ -186,12 +186,11 @@ class GcLogContextTest {
 
     @Test
     void testGetReturns200WithContentWhenRotatedFilesExist() throws Exception {
-        Path logFile = tempDir.resolve("gc.log");
-        byte[] content = "gc log content".getBytes();
-        doReturn(new java.io.ByteArrayInputStream(content)).when(gcLogging).collectAfterRotate();
+        byte[] content = "log content".getBytes();
+        doReturn(new ByteArrayInputStream(content)).when(logging).collectAfterRotate();
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         when(exchange.getRequestMethod()).thenReturn("GET");
-        when(exchange.getRequestURI()).thenReturn(URI.create("/gc-log/"));
+        when(exchange.getRequestURI()).thenReturn(URI.create("/unified-log/"));
         when(exchange.getResponseBody()).thenReturn(baos);
 
         ctx.handle(exchange);
@@ -203,12 +202,16 @@ class GcLogContextTest {
     @Test
     void testGetReturns204WhenLoggingToStdout() throws Exception {
         doReturn(
-                        new GcLogging.State(
-                                true, GcLogging.DEV_STDOUT, "all=warning", "uptime,level,tags", ""))
-                .when(gcLogging)
+                        new UnifiedLogging.State(
+                                true,
+                                UnifiedLogging.DEV_STDOUT,
+                                "all=warning",
+                                "uptime,level,tags",
+                                ""))
+                .when(logging)
                 .queryState();
         when(exchange.getRequestMethod()).thenReturn("GET");
-        when(exchange.getRequestURI()).thenReturn(URI.create("/gc-log/"));
+        when(exchange.getRequestURI()).thenReturn(URI.create("/unified-log/"));
 
         ctx.handle(exchange);
 
@@ -225,7 +228,7 @@ class GcLogContextTest {
     }
 
     // -------------------------------------------------------------------------
-    // GcLogging.parseVmLogListOutput
+    // UnifiedLogging.parseVmLogListOutput
     // -------------------------------------------------------------------------
 
     @Test
@@ -237,13 +240,11 @@ class GcLogContextTest {
                         + " #1: stderr all=off uptime,level,tags\n"
                         + " #2: file=/tmp/gc.log all=off,gc=info time,level,tags"
                         + " filecount=5,filesize=20480K,async=false\n"
-                        + " #3: file=/tmp/cryostat-gc-12768272396475621478.log all=off,gc=info"
+                        + " #3: file=/tmp/cryostat-12768272396475621478.log all=off,gc=info"
                         + " time,level filecount=5,filesize=20480K,async=false (reconfigured)\n";
-        GcLogging.State state = gcLogging.parseVmLogListOutput(output);
+        UnifiedLogging.State state = logging.parseVmLogListOutput(output);
         assertTrue(state.enabled);
-        assertEquals(
-                java.nio.file.Paths.get("/tmp/cryostat-gc-12768272396475621478.log"),
-                state.logFilePath);
+        assertEquals(Paths.get("/tmp/cryostat-12768272396475621478.log"), state.logFilePath);
         assertEquals("all=off,gc=info", state.what);
         assertEquals("time,level", state.decorators);
         assertEquals("filecount=5,filesize=20480K,async=false", state.outputOptions);
@@ -255,7 +256,7 @@ class GcLogContextTest {
                 "Log output configuration:\n"
                         + " #0: stdout all=off uptime,level,tags\n"
                         + " #1: stderr all=off uptime,level,tags\n";
-        GcLogging.State state = gcLogging.parseVmLogListOutput(output);
+        UnifiedLogging.State state = logging.parseVmLogListOutput(output);
         assertFalse(state.enabled);
         assertNull(state.logFilePath);
     }
@@ -266,9 +267,9 @@ class GcLogContextTest {
                 "Log output configuration:\n"
                         + " #0: stdout all=warning uptime,level,tags\n"
                         + " #1: stderr all=off uptime,level,tags\n";
-        GcLogging.State state = gcLogging.parseVmLogListOutput(output);
+        UnifiedLogging.State state = logging.parseVmLogListOutput(output);
         assertTrue(state.enabled);
-        assertEquals(GcLogging.DEV_STDOUT, state.logFilePath);
+        assertEquals(UnifiedLogging.DEV_STDOUT, state.logFilePath);
         assertEquals("all=warning", state.what);
         assertEquals("uptime,level,tags", state.decorators);
     }
@@ -279,9 +280,9 @@ class GcLogContextTest {
                 "Log output configuration:\n"
                         + " #0: stdout all=off uptime,level,tags\n"
                         + " #1: stderr all=warning uptime,level\n";
-        GcLogging.State state = gcLogging.parseVmLogListOutput(output);
+        UnifiedLogging.State state = logging.parseVmLogListOutput(output);
         assertTrue(state.enabled);
-        assertEquals(GcLogging.DEV_STDERR, state.logFilePath);
+        assertEquals(UnifiedLogging.DEV_STDERR, state.logFilePath);
         assertEquals("all=warning", state.what);
         assertEquals("uptime,level", state.decorators);
     }
@@ -293,9 +294,9 @@ class GcLogContextTest {
                         + " #0: stdout all=warning uptime,level,tags\n"
                         + " #2: file=/tmp/gc.log all=off,gc=info time,level"
                         + " filecount=5,filesize=20480K,async=false\n";
-        GcLogging.State state = gcLogging.parseVmLogListOutput(output);
+        UnifiedLogging.State state = logging.parseVmLogListOutput(output);
         assertTrue(state.enabled);
-        assertEquals(java.nio.file.Paths.get("/tmp/gc.log"), state.logFilePath);
+        assertEquals(Paths.get("/tmp/gc.log"), state.logFilePath);
         assertEquals("all=off,gc=info", state.what);
         assertEquals("time,level", state.decorators);
     }
@@ -307,18 +308,18 @@ class GcLogContextTest {
                         + " #0: stdout all=warning uptime,level,tags\n"
                         + " #2: file=/tmp/gc.log all=off,gc=info uptime,level"
                         + " filecount=5,filesize=20480K,async=false\n"
-                        + " #3: file=/tmp/cryostat-gc-latest.log all=off,gc=debug time"
+                        + " #3: file=/tmp/cryostat-latest.log all=off,gc=debug time"
                         + " filecount=5,filesize=20480K,async=false\n";
-        GcLogging.State state = gcLogging.parseVmLogListOutput(output);
+        UnifiedLogging.State state = logging.parseVmLogListOutput(output);
         assertTrue(state.enabled);
-        assertEquals(java.nio.file.Paths.get("/tmp/cryostat-gc-latest.log"), state.logFilePath);
+        assertEquals(Paths.get("/tmp/cryostat-latest.log"), state.logFilePath);
         assertEquals("all=off,gc=debug", state.what);
         assertEquals("time", state.decorators);
     }
 
     @Test
     void testParseVmLogListOutputEmptyOutputReturnsDisabled() {
-        GcLogging.State state = gcLogging.parseVmLogListOutput("");
+        UnifiedLogging.State state = logging.parseVmLogListOutput("");
         assertFalse(state.enabled);
         assertNull(state.logFilePath);
         assertEquals("", state.decorators);
@@ -326,17 +327,21 @@ class GcLogContextTest {
     }
 
     // -------------------------------------------------------------------------
-    // GcLogging.collectAfterRotate (stream-output guard)
+    // UnifiedLogging.collectAfterRotate (stream-output guard)
     // -------------------------------------------------------------------------
 
     @Test
     void testCollectAfterRotateReturnsEmptyStreamForStdout() throws Exception {
         doReturn(
-                        new GcLogging.State(
-                                true, GcLogging.DEV_STDOUT, "all=warning", "uptime,level,tags", ""))
-                .when(gcLogging)
+                        new UnifiedLogging.State(
+                                true,
+                                UnifiedLogging.DEV_STDOUT,
+                                "all=warning",
+                                "uptime,level,tags",
+                                ""))
+                .when(logging)
                 .queryState();
-        try (InputStream stream = gcLogging.collectAfterRotate()) {
+        try (InputStream stream = logging.collectAfterRotate()) {
             assertEquals(0, stream.readAllBytes().length);
         }
     }
@@ -344,25 +349,29 @@ class GcLogContextTest {
     @Test
     void testCollectAfterRotateReturnsEmptyStreamForStderr() throws Exception {
         doReturn(
-                        new GcLogging.State(
-                                true, GcLogging.DEV_STDERR, "all=warning", "uptime,level,tags", ""))
-                .when(gcLogging)
+                        new UnifiedLogging.State(
+                                true,
+                                UnifiedLogging.DEV_STDERR,
+                                "all=warning",
+                                "uptime,level,tags",
+                                ""))
+                .when(logging)
                 .queryState();
-        try (InputStream stream = gcLogging.collectAfterRotate()) {
+        try (InputStream stream = logging.collectAfterRotate()) {
             assertEquals(0, stream.readAllBytes().length);
         }
     }
 
     // -------------------------------------------------------------------------
-    // GcLogging.openCollectedLogs / collectLogPaths
+    // UnifiedLogging.openCollectedLogs / collectLogPaths
     // -------------------------------------------------------------------------
 
     @Test
     void testOpenCollectedLogsConcatenatesRotatedLogsOldestFirst() throws Exception {
-        Path logFile = tempDir.resolve("gc.log");
-        Path rotatedOldest = tempDir.resolve("gc.log.2");
-        Path rotatedMiddle = tempDir.resolve("gc.log.0");
-        Path rotatedNewest = tempDir.resolve("gc.log.1");
+        Path logFile = tempDir.resolve("test.log");
+        Path rotatedOldest = tempDir.resolve("test.log.2");
+        Path rotatedMiddle = tempDir.resolve("test.log.0");
+        Path rotatedNewest = tempDir.resolve("test.log.1");
         Files.writeString(logFile, "current");
         Files.writeString(rotatedOldest, "oldest");
         Files.setLastModifiedTime(rotatedOldest, FileTime.from(Instant.ofEpochSecond(1000)));
@@ -371,7 +380,7 @@ class GcLogContextTest {
         Files.writeString(rotatedNewest, "newest-sealed");
         Files.setLastModifiedTime(rotatedNewest, FileTime.from(Instant.ofEpochSecond(3000)));
 
-        try (InputStream stream = gcLogging.openCollectedLogs(gcLogging.collectLogPaths(logFile))) {
+        try (InputStream stream = logging.openCollectedLogs(logging.collectLogPaths(logFile))) {
             assertEquals("oldestmiddlenewest-sealed", new String(stream.readAllBytes()));
         }
 
@@ -383,10 +392,10 @@ class GcLogContextTest {
 
     @Test
     void testCollectLogPathsExcludesCurrentPathAndOrdersByModificationTime() throws Exception {
-        Path logFile = tempDir.resolve("gc.log");
-        Path fileA = tempDir.resolve("gc.log.0");
-        Path fileB = tempDir.resolve("gc.log.3");
-        Path fileC = tempDir.resolve("gc.log.9");
+        Path logFile = tempDir.resolve("test.log");
+        Path fileA = tempDir.resolve("test.log.0");
+        Path fileB = tempDir.resolve("test.log.3");
+        Path fileC = tempDir.resolve("test.log.9");
         Path ignored = tempDir.resolve("other.log.1");
         Files.writeString(logFile, "current");
         Files.writeString(fileA, "newest-sealed");
@@ -398,52 +407,52 @@ class GcLogContextTest {
         Files.writeString(ignored, "ignored");
 
         assertIterableEquals(
-                java.util.List.of(fileC, fileB, fileA), gcLogging.collectLogPaths(logFile));
+                java.util.List.of(fileC, fileB, fileA), logging.collectLogPaths(logFile));
     }
 
     @Test
     void testCollectLogPathsRequiresDotSeparatorBeforeIndex() throws Exception {
-        Path logFile = tempDir.resolve("gc.log");
-        Path validRotated = tempDir.resolve("gc.log.0");
-        Path noSeparator = tempDir.resolve("gc.log0");
+        Path logFile = tempDir.resolve("test.log");
+        Path validRotated = tempDir.resolve("test.log.0");
+        Path noSeparator = tempDir.resolve("test.log0");
         Files.writeString(logFile, "current");
         Files.writeString(validRotated, "rotated");
         Files.writeString(noSeparator, "not-rotated");
 
-        assertIterableEquals(java.util.List.of(validRotated), gcLogging.collectLogPaths(logFile));
+        assertIterableEquals(java.util.List.of(validRotated), logging.collectLogPaths(logFile));
     }
 
     // -------------------------------------------------------------------------
-    // GcLogging.collectAfterRotate — active file always appended
+    // UnifiedLogging.collectAfterRotate — active file always appended
     // -------------------------------------------------------------------------
 
     @Test
     void testCollectAfterRotateAlwaysIncludesActiveFileLast() throws Exception {
-        Path logFile = tempDir.resolve("gc.log");
-        Path rotated = tempDir.resolve("gc.log.0");
+        Path logFile = tempDir.resolve("test.log");
+        Path rotated = tempDir.resolve("test.log.0");
         Files.writeString(rotated, "sealed");
         Files.setLastModifiedTime(rotated, FileTime.from(Instant.ofEpochSecond(1000)));
         Files.writeString(logFile, "active");
-        doReturn(new GcLogging.State(true, logFile, "gc", "uptime", "filecount=5,filesize=1m"))
-                .when(gcLogging)
+        doReturn(new UnifiedLogging.State(true, logFile, "gc", "uptime", "filecount=5,filesize=1m"))
+                .when(logging)
                 .queryState();
-        doNothing().when(gcLogging).issueRotate();
+        doNothing().when(logging).issueRotate();
 
-        try (InputStream stream = gcLogging.collectAfterRotate()) {
+        try (InputStream stream = logging.collectAfterRotate()) {
             assertEquals("sealedactive", new String(stream.readAllBytes()));
         }
     }
 
     @Test
     void testCollectAfterRotateIncludesActiveFileEvenWhenNoRotatedFilesExist() throws Exception {
-        Path logFile = tempDir.resolve("gc.log");
+        Path logFile = tempDir.resolve("test.log");
         Files.writeString(logFile, "live-content");
-        doReturn(new GcLogging.State(true, logFile, "gc", "uptime", "filecount=1,filesize=1m"))
-                .when(gcLogging)
+        doReturn(new UnifiedLogging.State(true, logFile, "gc", "uptime", "filecount=1,filesize=1m"))
+                .when(logging)
                 .queryState();
-        doNothing().when(gcLogging).issueRotate();
+        doNothing().when(logging).issueRotate();
 
-        try (InputStream stream = gcLogging.collectAfterRotate()) {
+        try (InputStream stream = logging.collectAfterRotate()) {
             assertEquals("live-content", new String(stream.readAllBytes()));
         }
     }

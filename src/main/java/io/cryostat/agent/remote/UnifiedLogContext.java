@@ -32,24 +32,24 @@ import org.apache.hc.core5.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-class GcLogContext implements RemoteContext {
+class UnifiedLogContext implements RemoteContext {
 
-    static final String PATH = "/gc-log/";
-    static final String STATUS_PATH = "/gc-log/status";
+    static final String PATH = "/unified-log/";
+    static final String STATUS_PATH = "/unified-log/status";
 
     private final Logger log = LoggerFactory.getLogger(getClass());
     private final ObjectMapper mapper;
-    private final boolean gcLogEnabled;
-    private final GcLogging gcLogging;
+    private final boolean logEnabled;
+    private final UnifiedLogging logging;
 
     @Inject
-    GcLogContext(
+    UnifiedLogContext(
             ObjectMapper mapper,
-            @Named(ConfigModule.CRYOSTAT_AGENT_GC_LOG_ENABLED) boolean gcLogEnabled,
-            GcLogging gcLogging) {
+            @Named(ConfigModule.CRYOSTAT_AGENT_UNIFIED_LOG_ENABLED) boolean logEnabled,
+            UnifiedLogging logging) {
         this.mapper = mapper;
-        this.gcLogEnabled = gcLogEnabled;
-        this.gcLogging = gcLogging;
+        this.logEnabled = logEnabled;
+        this.logging = logging;
     }
 
     @Override
@@ -59,7 +59,7 @@ class GcLogContext implements RemoteContext {
 
     @Override
     public boolean available() {
-        return gcLogEnabled;
+        return logEnabled;
     }
 
     @Override
@@ -83,7 +83,7 @@ class GcLogContext implements RemoteContext {
     }
 
     private void handleStatus(HttpExchange exchange) throws IOException {
-        GcLogging.State state = gcLogging.queryState();
+        UnifiedLogging.State state = logging.queryState();
         exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
         try (OutputStream response = exchange.getResponseBody()) {
             mapper.writeValue(response, state);
@@ -93,13 +93,13 @@ class GcLogContext implements RemoteContext {
     private void handleGet(HttpExchange exchange) throws IOException {
         InputStream stream;
         try {
-            stream = gcLogging.collectAfterRotate();
-        } catch (GcLogException e) {
-            log.warn("GC logging is not active: {}", e.getMessage());
+            stream = logging.collectAfterRotate();
+        } catch (UnifiedLogException e) {
+            log.warn("Logging is not active: {}", e.getMessage());
             exchange.sendResponseHeaders(HttpStatus.SC_NOT_FOUND, BODY_LENGTH_NONE);
             return;
         } catch (IOException e) {
-            log.error("Failed to collect GC log", e);
+            log.error("Failed to collect log", e);
             exchange.sendResponseHeaders(HttpStatus.SC_INTERNAL_SERVER_ERROR, BODY_LENGTH_NONE);
             return;
         }
@@ -108,7 +108,7 @@ class GcLogContext implements RemoteContext {
             firstByte = stream.read();
         } catch (IOException e) {
             stream.close();
-            log.error("Failed to read GC log stream", e);
+            log.error("Failed to read log stream", e);
             exchange.sendResponseHeaders(HttpStatus.SC_INTERNAL_SERVER_ERROR, BODY_LENGTH_NONE);
             return;
         }

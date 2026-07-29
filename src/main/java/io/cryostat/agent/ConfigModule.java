@@ -277,12 +277,14 @@ public abstract class ConfigModule {
     public static final String CRYOSTAT_AGENT_WEBCLIENT_CONNECTION_POOL_MAX_PER_ROUTE =
             "cryostat.agent.webclient.connection-pool.max-per-route";
 
-    public static final String CRYOSTAT_AGENT_GC_LOG_ENABLED = "cryostat.agent.gc-log.enabled";
+    public static final String CRYOSTAT_AGENT_UNIFIED_LOG_ENABLED =
+            "cryostat.agent.unified-log.enabled";
 
-    public static final String CRYOSTAT_AGENT_GC_LOG_OUTPUT = "cryostat.agent.gc-log.output";
+    public static final String CRYOSTAT_AGENT_UNIFIED_LOG_OUTPUT =
+            "cryostat.agent.unified-log.output";
 
-    public static final String CRYOSTAT_AGENT_GC_LOG_OUTPUT_OPTIONS =
-            "cryostat.agent.gc-log.output-options";
+    public static final String CRYOSTAT_AGENT_UNIFIED_LOG_OUTPUT_OPTIONS =
+            "cryostat.agent.unified-log.output-options";
 
     @Provides
     @Singleton
@@ -1208,14 +1210,14 @@ public abstract class ConfigModule {
 
     @Provides
     @Singleton
-    @Named(CRYOSTAT_AGENT_GC_LOG_OUTPUT)
-    public static String provideGcLogOutput(SmallRyeConfig config) {
-        return config.getOptionalValue(CRYOSTAT_AGENT_GC_LOG_OUTPUT, String.class)
+    @Named(CRYOSTAT_AGENT_UNIFIED_LOG_OUTPUT)
+    public static String provideUnifiedLogOutput(SmallRyeConfig config) {
+        return config.getOptionalValue(CRYOSTAT_AGENT_UNIFIED_LOG_OUTPUT, String.class)
                 .filter(s -> !s.isBlank())
                 .orElseGet(
                         () -> {
                             try {
-                                return Files.createTempFile("cryostat-gc-", ".log").toString();
+                                return Files.createTempFile("cryostat-", ".log").toString();
                             } catch (IOException ioe) {
                                 throw new IllegalStateException(ioe);
                             }
@@ -1224,16 +1226,16 @@ public abstract class ConfigModule {
 
     @Provides
     @Singleton
-    @Named(CRYOSTAT_AGENT_GC_LOG_OUTPUT_OPTIONS)
-    public static String provideGcLogOutputOptions(SmallRyeConfig config) {
-        return config.getValue(CRYOSTAT_AGENT_GC_LOG_OUTPUT_OPTIONS, String.class);
+    @Named(CRYOSTAT_AGENT_UNIFIED_LOG_OUTPUT_OPTIONS)
+    public static String provideUnifiedLogOutputOptions(SmallRyeConfig config) {
+        return config.getValue(CRYOSTAT_AGENT_UNIFIED_LOG_OUTPUT_OPTIONS, String.class);
     }
 
     @Provides
     @Singleton
-    @Named(CRYOSTAT_AGENT_GC_LOG_ENABLED)
-    public static boolean provideGcLogEnabled(SmallRyeConfig config) {
-        return config.getValue(CRYOSTAT_AGENT_GC_LOG_ENABLED, boolean.class);
+    @Named(CRYOSTAT_AGENT_UNIFIED_LOG_ENABLED)
+    public static boolean provideUnifiedLogEnabled(SmallRyeConfig config) {
+        return config.getValue(CRYOSTAT_AGENT_UNIFIED_LOG_ENABLED, boolean.class);
     }
 
     public enum URIRange {

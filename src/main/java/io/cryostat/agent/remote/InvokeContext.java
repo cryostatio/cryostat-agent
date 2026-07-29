@@ -53,8 +53,8 @@ class InvokeContext extends MutatingRemoteContext {
     static final String VM_LOG = "vmLog";
     private final Logger log = LoggerFactory.getLogger(getClass());
     private final ObjectMapper mapper;
-    private final String gcLogOutput;
-    private final String gcLogOutputOptions;
+    private final String logOutput;
+    private final String logOutputOptions;
 
     private CryostatClient client;
 
@@ -63,13 +63,14 @@ class InvokeContext extends MutatingRemoteContext {
             ObjectMapper mapper,
             SmallRyeConfig config,
             CryostatClient client,
-            @Named(ConfigModule.CRYOSTAT_AGENT_GC_LOG_OUTPUT) String gcLogOutput,
-            @Named(ConfigModule.CRYOSTAT_AGENT_GC_LOG_OUTPUT_OPTIONS) String gcLogOutputOptions) {
+            @Named(ConfigModule.CRYOSTAT_AGENT_UNIFIED_LOG_OUTPUT) String logOutput,
+            @Named(ConfigModule.CRYOSTAT_AGENT_UNIFIED_LOG_OUTPUT_OPTIONS)
+                    String logOutputOptions) {
         super(config);
         this.mapper = mapper;
         this.client = client;
-        this.gcLogOutput = gcLogOutput;
-        this.gcLogOutputOptions = gcLogOutputOptions;
+        this.logOutput = logOutput;
+        this.logOutputOptions = logOutputOptions;
     }
 
     @Override
@@ -112,7 +113,7 @@ class InvokeContext extends MutatingRemoteContext {
                         } else if (VM_LOG.equals(req.getOperation())
                                 && req.parameters != null
                                 && req.parameters.length > 0) {
-                            applyGcLogConfig(req);
+                            applyLogConfig(req);
                         }
 
                         MBeanServer server = ManagementFactory.getPlatformMBeanServer();
@@ -164,12 +165,12 @@ class InvokeContext extends MutatingRemoteContext {
     /**
      * Normalises a {@code vmLog} invocation request so that the {@code output=} and {@code
      * output_options=} parameters are always set to the agent-controlled values, preventing the
-     * remote caller from redirecting GC log output to an arbitrary path.
+     * remote caller from redirecting log output to an arbitrary path.
      *
      * <p>The remote caller is permitted to set {@code what=} and {@code decorators=} only. {@code
      * disable=true} and {@code rotate} sub-commands are passed through unchanged.
      */
-    private void applyGcLogConfig(MBeanInvocationRequest<?> req) {
+    private void applyLogConfig(MBeanInvocationRequest<?> req) {
         // Normalise the parameter array (JSON deserialises as a Collection when the type is
         // Object[]).
         if (req.parameters[0] instanceof Collection) {
@@ -190,9 +191,9 @@ class InvokeContext extends MutatingRemoteContext {
                             .replaceAll("(?:^|\\s)output_options=\\S+", "")
                             .replaceAll("(?:^|\\s)output=\\S+", "")
                             .trim();
-            vmLogArgs = vmLogArgs + " output=" + gcLogOutput;
-            if (!gcLogOutputOptions.isBlank()) {
-                vmLogArgs = vmLogArgs + " output_options=" + gcLogOutputOptions;
+            vmLogArgs = vmLogArgs + " output=" + logOutput;
+            if (!logOutputOptions.isBlank()) {
+                vmLogArgs = vmLogArgs + " output_options=" + logOutputOptions;
             }
             req.parameters[0] = new String[] {vmLogArgs};
         }

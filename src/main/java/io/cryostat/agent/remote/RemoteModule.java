@@ -52,5 +52,5 @@ public abstract class RemoteModule {
 
     @Binds
     @IntoSet
-    abstract RemoteContext bindGcLogContext(GcLogContext ctx);
+    abstract RemoteContext bindUnifiedLogContext(UnifiedLogContext ctx);
 }
