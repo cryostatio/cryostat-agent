@@ -78,6 +78,7 @@ import io.cryostat.agent.ConfigModule.CallbackCandidate;
 import io.cryostat.agent.harvest.HarvestModule;
 import io.cryostat.agent.remote.RemoteContext;
 import io.cryostat.agent.remote.RemoteModule;
+import io.cryostat.agent.remote.UnifiedLogging;
 import io.cryostat.agent.triggers.TriggerModule;
 import io.cryostat.agent.util.AppNameResolver;
 import io.cryostat.libcryostat.JvmIdentifier;
@@ -789,6 +790,12 @@ public abstract class MainModule {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    @Provides
+    @Singleton
+    public static UnifiedLogging provideUnifiedLogging() {
+        return new UnifiedLogging();
     }
 
     @Provides
