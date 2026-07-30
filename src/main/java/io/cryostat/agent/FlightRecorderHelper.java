@@ -128,7 +128,7 @@ public class FlightRecorderHelper {
         return getRecordings(r -> r.getId() == id).stream().findFirst();
     }
 
-    @SuppressFBWarnings("EI_EXPOSE_REP")
+    @SuppressFBWarnings({"EI_EXPOSE_REP", "CT_CONSTRUCTOR_THROW"})
     public static class TemplatedRecording {
         private final ConfigurationInfo configuration;
         private final Recording recording;
@@ -147,6 +147,10 @@ public class FlightRecorderHelper {
         }
     }
 
+    @SuppressFBWarnings(
+            value = "CT_CONSTRUCTOR_THROW",
+            justification =
+                    "Constructor only validates and stores immutable configuration metadata")
     public static class ConfigurationInfo {
         private final String name;
         private final String label;
@@ -159,7 +163,18 @@ public class FlightRecorderHelper {
         }
 
         public ConfigurationInfo(Configuration configuration) {
-            this(TemplateType.TARGET, configuration.getName(), configuration.getLabel());
+            this(
+                    TemplateType.TARGET,
+                    requireConfiguration(configuration).getName(),
+                    getConfigurationLabel(configuration));
+        }
+
+        private static Configuration requireConfiguration(Configuration configuration) {
+            return Objects.requireNonNull(configuration);
+        }
+
+        private static String getConfigurationLabel(Configuration configuration) {
+            return requireConfiguration(configuration).getLabel();
         }
 
         public String getName() {
