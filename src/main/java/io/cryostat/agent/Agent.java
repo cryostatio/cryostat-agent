@@ -46,6 +46,7 @@ import io.cryostat.agent.triggers.TriggerEvaluator;
 import io.cryostat.libcryostat.net.CryostatAgentMXBean;
 
 import dagger.Component;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import io.smallrye.config.SmallRyeConfig;
 import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.Logger;
@@ -356,6 +357,9 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
         }
     }
 
+    @SuppressFBWarnings(
+            value = "CT_CONSTRUCTOR_THROW",
+            justification = "Private helper constructor only validates required dependencies")
     private static class AgentExitHandler implements SignalHandler {
 
         private static Logger log = LoggerFactory.getLogger(AgentExitHandler.class);

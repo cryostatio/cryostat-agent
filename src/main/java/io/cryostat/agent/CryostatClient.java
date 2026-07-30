@@ -250,9 +250,12 @@ public class CryostatClient {
     public CompletableFuture<Void> pushHeapDump(Path heapDump, String requestId)
             throws IOException, IllegalArgumentException {
         Instant start = Instant.now();
-        if (heapDump.toFile().getName().isBlank()) {
-            throw new IllegalArgumentException("Failed to generate heap dump");
-        }
+        String heapDumpName =
+                Optional.ofNullable(heapDump.getFileName())
+                        .map(Path::toString)
+                        .filter(name -> !name.isBlank())
+                        .orElseThrow(
+                                () -> new IllegalArgumentException("Failed to generate heap dump"));
         HttpPost req =
                 new HttpPost(baseUri.resolve("/api/beta/diagnostics/heapdump/upload/" + jvmId));
 
@@ -266,7 +269,7 @@ public class CryostatClient {
                                                 new InputStreamBody(
                                                         is,
                                                         ContentType.APPLICATION_OCTET_STREAM,
-                                                        heapDump.toFile().getName()))
+                                                        heapDumpName))
                                         .build())
                         .addPart(
                                 FormBodyPartBuilder.create(
@@ -282,7 +285,7 @@ public class CryostatClient {
                                     "{} {} ({} -> {}): {}/{}",
                                     req.getMethod(),
                                     res.getCode(),
-                                    heapDump.getFileName().toString(),
+                                    heapDumpName,
                                     req.getRequestUri(),
                                     FileUtils.byteCountToDisplaySize(is.getByteCount()),
                                     Duration.between(start, finish));
