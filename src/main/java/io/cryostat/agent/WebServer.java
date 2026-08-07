@@ -211,6 +211,14 @@ class WebServer {
         return this.credentials.snapshot();
     }
 
+    void commitPendingCredentials() {
+        this.credentials.commitPending();
+    }
+
+    void discardPendingCredentials() {
+        this.credentials.discardPending();
+    }
+
     void clearPlaintextCredentials() {
         this.credentials.clear();
         synchronized (credentialGenerationLock) {
@@ -339,7 +347,11 @@ class WebServer {
         private final MessageDigest digest;
         private final String user;
         private final byte[] pass;
-        private byte[] passHash = new byte[0];
+        // Keep the credential known to Cryostat valid while its replacement registration is in
+        // flight. The replacement is accepted locally before the request starts, then becomes the
+        // sole active credential only after Cryostat acknowledges the registration.
+        private byte[] activePassHash = new byte[0];
+        private byte[] pendingPassHash = new byte[0];
 
         Credentials(SecureRandom random, MessageDigest digest, String user, int passLength) {
             this.random = random;
@@ -349,16 +361,20 @@ class WebServer {
         }
 
         synchronized boolean checkUserInfo(String username, String password) {
-            return passHash.length > 0
-                    && Objects.equals(username, user)
-                    && Arrays.equals(hash(password), this.passHash);
+            if (!Objects.equals(username, user)) {
+                return false;
+            }
+            byte[] hash = hash(password);
+            return Arrays.equals(hash, this.activePassHash)
+                    || Arrays.equals(hash, this.pendingPassHash);
         }
 
         synchronized void regenerate() {
             for (int idx = 0; idx < this.pass.length; idx++) {
                 this.pass[idx] = randomAscii();
             }
-            this.passHash = hash(this.pass);
+            Arrays.fill(this.pendingPassHash, (byte) 0);
+            this.pendingPassHash = hash(this.pass);
         }
 
         String user() {
@@ -367,6 +383,21 @@ class WebServer {
 
         synchronized void clear() {
             Arrays.fill(this.pass, (byte) 0);
+        }
+
+        synchronized void commitPending() {
+            if (this.pendingPassHash.length == 0) {
+                throw new IllegalStateException("credentials have not been generated");
+            }
+            Arrays.fill(this.activePassHash, (byte) 0);
+            this.activePassHash = this.pendingPassHash;
+            this.pendingPassHash = new byte[0];
+        }
+
+        synchronized void discardPending() {
+            clear();
+            Arrays.fill(this.pendingPassHash, (byte) 0);
+            this.pendingPassHash = new byte[0];
         }
 
         // generated passwords contain only printable ASCII, so an all-zero buffer can only
@@ -398,7 +429,7 @@ class WebServer {
         }
 
         synchronized CredentialsSnapshot snapshot() {
-            if (passHash.length == 0) {
+            if (pendingPassHash.length == 0) {
                 throw new IllegalStateException("credentials have not been generated");
             }
             if (isPlaintextCleared()) {

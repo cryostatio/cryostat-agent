@@ -28,6 +28,8 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
+import io.cryostat.agent.model.PluginInfo;
+import io.cryostat.agent.model.ServerHealth;
 import io.cryostat.agent.util.AppNameResolver;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -465,8 +467,40 @@ class RegistrationTest {
         registration.tryRegister();
 
         verify(webServer).clearPlaintextCredentials();
+        verify(webServer).discardPendingCredentials();
         verify(cryostat, never()).register(any(URI.class), any(), anyCollection());
         verify(executor).schedule(any(Runnable.class), anyLong(), eq(TimeUnit.MILLISECONDS));
+    }
+
+    @Test
+    void testSuccessfulRegistrationCommitsPendingCredentials() throws Exception {
+        URI callback = URI.create("http://agent.example.com:9977");
+        when(callbackResolver.determineSelfCallback()).thenReturn(callback);
+        when(appNameResolver.extractFromJavaCommand()).thenReturn("test.Main");
+        when(cryostat.serverHealth())
+                .thenReturn(
+                        CompletableFuture.completedFuture(
+                                new ServerHealth(
+                                        "4.3.0",
+                                        new ServerHealth.BuildInfo(
+                                                new ServerHealth.GitInfo("test-hash")))));
+        when(cryostat.register(eq(callback), any(), anyCollection()))
+                .thenReturn(
+                        CompletableFuture.completedFuture(
+                                new PluginInfo("plugin-id", "plugin-token", List.of())));
+        doAnswer(
+                        invocation -> {
+                            invocation.getArgument(0, Runnable.class).run();
+                            return scheduledFuture;
+                        })
+                .when(executor)
+                .submit(any(Runnable.class));
+
+        registration.start();
+
+        verify(webServer).commitPendingCredentials();
+        verify(webServer, never()).discardPendingCredentials();
+        assertEquals("plugin-id", registration.getPluginInfo().getId());
     }
 
     @Test

@@ -333,6 +333,7 @@ public class Registration {
                                         return completeRegistrationFailure(t);
                                     }
 
+                                    webServer.commitPendingCredentials();
                                     boolean previouslyRegistered = this.pluginInfo.isInitialized();
                                     this.pluginInfo.copyFrom(plugin);
                                     log.debug("Registered as {}", this.pluginInfo.getId());
@@ -363,6 +364,7 @@ public class Registration {
     }
 
     private CompletableFuture<Void> completeRegistrationFailure(Throwable t) {
+        webServer.discardPendingCredentials();
         this.pluginInfo.clear();
 
         int failures = consecutiveFailures.incrementAndGet();
