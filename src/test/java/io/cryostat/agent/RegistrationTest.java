@@ -28,6 +28,8 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
+import io.cryostat.agent.model.PluginInfo;
+import io.cryostat.agent.model.ServerHealth;
 import io.cryostat.agent.util.AppNameResolver;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -439,8 +441,25 @@ class RegistrationTest {
         verify(cryostat, times(1)).serverHealth();
     }
 
+<<<<<<< HEAD
     void testRegistrationFailureRetainsCredentialIdWhenCredentialStillExists() {
         when(webServer.getCredentialId()).thenReturn(42);
+=======
+    @Test
+    void testOverlappingRegistrationAttemptsAreSerialized() {
+        CompletableFuture<ServerHealth> health = new CompletableFuture<>();
+        when(cryostat.serverHealth()).thenReturn(health);
+
+        registration.tryRegister();
+        registration.tryRegister();
+
+        verify(webServer, times(1)).generateCredentials(nullable(URI.class));
+        verify(cryostat, times(1)).serverHealth();
+    }
+
+    @Test
+    void testRegistrationFailureDoesNotCheckRemoteCredentialState() {
+>>>>>>> 71a6f53 (fix(registration): keep stored credentials valid during refresh (#977))
         when(cryostat.serverHealth())
                 .thenReturn(
                         CompletableFuture.failedFuture(
@@ -472,15 +491,56 @@ class RegistrationTest {
 
         registration.tryRegister();
 
+<<<<<<< HEAD
         verify(webServer).resetCredentialId();
         verify(cryostat).credentialExists(42);
         verify(cryostat, never()).register(anyInt(), any(), any(URI.class));
+=======
+        verify(webServer).clearPlaintextCredentials();
+        verify(webServer).discardPendingCredentials();
+        verify(cryostat, never()).register(any(URI.class), any(), anyCollection());
+>>>>>>> 71a6f53 (fix(registration): keep stored credentials valid during refresh (#977))
         verify(executor).schedule(any(Runnable.class), anyLong(), eq(TimeUnit.MILLISECONDS));
     }
 
     @Test
+<<<<<<< HEAD
     void testRegistrationFailureRetainsCredentialIdWhenServerHealthFailsAndCredentialCheckFails() {
         when(webServer.getCredentialId()).thenReturn(42);
+=======
+    void testSuccessfulRegistrationCommitsPendingCredentials() throws Exception {
+        URI callback = URI.create("http://agent.example.com:9977");
+        when(callbackResolver.determineSelfCallback()).thenReturn(callback);
+        when(appNameResolver.extractFromJavaCommand()).thenReturn("test.Main");
+        when(cryostat.serverHealth())
+                .thenReturn(
+                        CompletableFuture.completedFuture(
+                                new ServerHealth(
+                                        "4.3.0",
+                                        new ServerHealth.BuildInfo(
+                                                new ServerHealth.GitInfo("test-hash")))));
+        when(cryostat.register(eq(callback), any(), anyCollection()))
+                .thenReturn(
+                        CompletableFuture.completedFuture(
+                                new PluginInfo("plugin-id", "plugin-token", List.of())));
+        doAnswer(
+                        invocation -> {
+                            invocation.getArgument(0, Runnable.class).run();
+                            return scheduledFuture;
+                        })
+                .when(executor)
+                .submit(any(Runnable.class));
+
+        registration.start();
+
+        verify(webServer).commitPendingCredentials();
+        verify(webServer, never()).discardPendingCredentials();
+        assertEquals("plugin-id", registration.getPluginInfo().getId());
+    }
+
+    @Test
+    void testRegistrationFailureSchedulesRetryWhenServerHealthFails() {
+>>>>>>> 71a6f53 (fix(registration): keep stored credentials valid during refresh (#977))
         when(cryostat.serverHealth())
                 .thenReturn(
                         CompletableFuture.failedFuture(

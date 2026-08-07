@@ -255,6 +255,28 @@ class WebServer {
         }
     }
 
+<<<<<<< HEAD
+=======
+    CredentialsSnapshot getCredentialsSnapshot() {
+        return this.credentials.snapshot();
+    }
+
+    void commitPendingCredentials() {
+        this.credentials.commitPending();
+    }
+
+    void discardPendingCredentials() {
+        this.credentials.discardPending();
+    }
+
+    void clearPlaintextCredentials() {
+        this.credentials.clear();
+        synchronized (credentialGenerationLock) {
+            this.credentialGeneration = null;
+        }
+    }
+
+>>>>>>> 71a6f53 (fix(registration): keep stored credentials valid during refresh (#977))
     private HttpHandler wrap(HttpHandler handler) {
         return x -> {
             try {
@@ -376,7 +398,11 @@ class WebServer {
         private final MessageDigest digest;
         private final String user;
         private final byte[] pass;
-        private byte[] passHash = new byte[0];
+        // Keep the credential known to Cryostat valid while its replacement registration is in
+        // flight. The replacement is accepted locally before the request starts, then becomes the
+        // sole active credential only after Cryostat acknowledges the registration.
+        private byte[] activePassHash = new byte[0];
+        private byte[] pendingPassHash = new byte[0];
 
         Credentials(SecureRandom random, MessageDigest digest, String user, int passLength) {
             this.random = random;
@@ -386,16 +412,20 @@ class WebServer {
         }
 
         synchronized boolean checkUserInfo(String username, String password) {
-            return passHash.length > 0
-                    && Objects.equals(username, user)
-                    && Arrays.equals(hash(password), this.passHash);
+            if (!Objects.equals(username, user)) {
+                return false;
+            }
+            byte[] hash = hash(password);
+            return Arrays.equals(hash, this.activePassHash)
+                    || Arrays.equals(hash, this.pendingPassHash);
         }
 
         synchronized void regenerate() {
             for (int idx = 0; idx < this.pass.length; idx++) {
                 this.pass[idx] = randomAscii();
             }
-            this.passHash = hash(this.pass);
+            Arrays.fill(this.pendingPassHash, (byte) 0);
+            this.pendingPassHash = hash(this.pass);
         }
 
         String user() {
@@ -406,8 +436,35 @@ class WebServer {
             return pass;
         }
 
+<<<<<<< HEAD
         synchronized void clear() {
             Arrays.fill(this.pass, (byte) 0);
+=======
+        synchronized void commitPending() {
+            if (this.pendingPassHash.length == 0) {
+                throw new IllegalStateException("credentials have not been generated");
+            }
+            Arrays.fill(this.activePassHash, (byte) 0);
+            this.activePassHash = this.pendingPassHash;
+            this.pendingPassHash = new byte[0];
+        }
+
+        synchronized void discardPending() {
+            clear();
+            Arrays.fill(this.pendingPassHash, (byte) 0);
+            this.pendingPassHash = new byte[0];
+        }
+
+        // generated passwords contain only printable ASCII, so an all-zero buffer can only
+        // mean the plaintext has been cleared
+        private boolean isPlaintextCleared() {
+            for (byte b : pass) {
+                if (b != 0) {
+                    return false;
+                }
+            }
+            return true;
+>>>>>>> 71a6f53 (fix(registration): keep stored credentials valid during refresh (#977))
         }
 
         private byte randomAscii() {
@@ -426,5 +483,43 @@ class WebServer {
         private byte[] hash(byte[] bytes) {
             return digest.digest(bytes);
         }
+<<<<<<< HEAD
+=======
+
+        synchronized CredentialsSnapshot snapshot() {
+            if (pendingPassHash.length == 0) {
+                throw new IllegalStateException("credentials have not been generated");
+            }
+            if (isPlaintextCleared()) {
+                throw new IllegalStateException("plaintext credentials have already been cleared");
+            }
+            CredentialsSnapshot snapshot = new CredentialsSnapshot(user, pass);
+            clear();
+            return snapshot;
+        }
+    }
+
+    static class CredentialsSnapshot implements AutoCloseable {
+        private final String user;
+        private final byte[] pass;
+
+        CredentialsSnapshot(String user, byte[] pass) {
+            this.user = user;
+            this.pass = Arrays.copyOf(pass, pass.length);
+        }
+
+        String user() {
+            return user;
+        }
+
+        byte[] pass() {
+            return Arrays.copyOf(pass, pass.length);
+        }
+
+        @Override
+        public void close() {
+            Arrays.fill(pass, (byte) 0);
+        }
+>>>>>>> 71a6f53 (fix(registration): keep stored credentials valid during refresh (#977))
     }
 }
