@@ -260,7 +260,11 @@ class AsyncProfilerContext extends MutatingRemoteContext {
                     Files.list(repository)
                             .map(
                                     p -> {
-                                        String name = p.getFileName().toString();
+                                        Path fileName = p.getFileName();
+                                        if (fileName == null) {
+                                            return null;
+                                        }
+                                        String name = fileName.toString();
                                         // exclude file being written to by the active session
                                         // since that file content is not yet ready to be exported
                                         if (this.currentProfile != null
