@@ -29,6 +29,7 @@ import io.cryostat.agent.CryostatClient;
 import io.cryostat.agent.FlightRecorderHelper;
 import io.cryostat.agent.harvest.Harvester;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import dagger.Module;
 import dagger.Provides;
 import org.projectnessie.cel.tools.ScriptHost;
@@ -50,8 +51,9 @@ public abstract class TriggerModule {
     public static TriggerParser provideTriggerParser(
             FlightRecorderHelper helper,
             @Named(ConfigModule.CRYOSTAT_AGENT_SMART_TRIGGER_CONFIG_PATH)
-                    Optional<Path> triggerPath) {
-        return new TriggerParser(helper, triggerPath);
+                    Optional<Path> triggerPath,
+            ObjectMapper mapper) {
+        return new TriggerParser(helper, triggerPath, mapper);
     }
 
     @Provides
@@ -65,6 +67,7 @@ public abstract class TriggerModule {
             Harvester harvester,
             @Named(ConfigModule.CRYOSTAT_AGENT_SMART_TRIGGER_EVALUATION_PERIOD_MS)
                     long evaluationPeriodMs,
+            @Named(ConfigModule.CRYOSTAT_AGENT_SMART_TRIGGER_BETA_FORMAT) boolean jsonFormat,
             CryostatClient client) {
         return new TriggerEvaluator(
                 scheduler,
@@ -74,6 +77,7 @@ public abstract class TriggerModule {
                 helper,
                 harvester,
                 evaluationPeriodMs,
+                jsonFormat,
                 client);
     }
 }
