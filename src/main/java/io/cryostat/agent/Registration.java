@@ -252,18 +252,18 @@ public class Registration {
         }
     }
 
-    void tryRegister() {
+    synchronized void tryRegister() {
+        if (currentRegistration != null && !currentRegistration.isDone()) {
+            log.debug("Registration attempt already in progress");
+            return;
+        }
+
         Instant shouldAttemptRegistrationAt = shouldAttemptRegistrationAt();
         if (Instant.now().isBefore(shouldAttemptRegistrationAt)) {
             long delay = Duration.between(Instant.now(), shouldAttemptRegistrationAt).toMillis();
             executor.schedule(
                     () -> notify(RegistrationEvent.State.REFRESHING), delay, TimeUnit.MILLISECONDS);
             return;
-        }
-
-        if (currentRegistration != null && !currentRegistration.isDone()) {
-            log.warn("Cancelling previous registration attempt");
-            currentRegistration.cancel(true);
         }
 
         if (isInCooldown()) {

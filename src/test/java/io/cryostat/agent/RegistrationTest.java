@@ -439,6 +439,18 @@ class RegistrationTest {
     }
 
     @Test
+    void testOverlappingRegistrationAttemptsAreSerialized() {
+        CompletableFuture<ServerHealth> health = new CompletableFuture<>();
+        when(cryostat.serverHealth()).thenReturn(health);
+
+        registration.tryRegister();
+        registration.tryRegister();
+
+        verify(webServer, times(1)).generateCredentials(nullable(URI.class));
+        verify(cryostat, times(1)).serverHealth();
+    }
+
+    @Test
     void testRegistrationFailureDoesNotCheckRemoteCredentialState() {
         when(cryostat.serverHealth())
                 .thenReturn(
