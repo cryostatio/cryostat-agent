@@ -252,18 +252,18 @@ public class Registration {
         }
     }
 
-    void tryRegister() {
+    synchronized void tryRegister() {
+        if (currentRegistration != null && !currentRegistration.isDone()) {
+            log.debug("Registration attempt already in progress");
+            return;
+        }
+
         Instant shouldAttemptRegistrationAt = shouldAttemptRegistrationAt();
         if (Instant.now().isBefore(shouldAttemptRegistrationAt)) {
             long delay = Duration.between(Instant.now(), shouldAttemptRegistrationAt).toMillis();
             executor.schedule(
                     () -> notify(RegistrationEvent.State.REFRESHING), delay, TimeUnit.MILLISECONDS);
             return;
-        }
-
-        if (currentRegistration != null && !currentRegistration.isDone()) {
-            log.warn("Cancelling previous registration attempt");
-            currentRegistration.cancel(true);
         }
 
         if (isInCooldown()) {
@@ -333,6 +333,7 @@ public class Registration {
                                         return completeRegistrationFailure(t);
                                     }
 
+                                    webServer.commitPendingCredentials();
                                     boolean previouslyRegistered = this.pluginInfo.isInitialized();
                                     this.pluginInfo.copyFrom(plugin);
                                     log.debug("Registered as {}", this.pluginInfo.getId());
@@ -363,6 +364,7 @@ public class Registration {
     }
 
     private CompletableFuture<Void> completeRegistrationFailure(Throwable t) {
+        webServer.discardPendingCredentials();
         this.pluginInfo.clear();
 
         int failures = consecutiveFailures.incrementAndGet();
