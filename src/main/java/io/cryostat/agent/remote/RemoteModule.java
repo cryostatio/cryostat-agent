@@ -53,4 +53,8 @@ public abstract class RemoteModule {
     @Binds
     @IntoSet
     abstract RemoteContext bindAsyncProfilerContext(AsyncProfilerContext ctx);
+
+    @Binds
+    @IntoSet
+    abstract RemoteContext bindUnifiedLogContext(UnifiedLogContext ctx);
 }

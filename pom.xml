@@ -62,7 +62,7 @@
   <skipUnitTests>false</skipUnitTests>
 
   <io.reactiverse.plugin.version>1.0.27</io.reactiverse.plugin.version>
-  <org.apache.maven.plugins.jar.version>3.5.0</org.apache.maven.plugins.jar.version>
+  <org.apache.maven.plugins.jar.version>3.5.1</org.apache.maven.plugins.jar.version>
   <org.apache.maven.plugins.shade.version>3.6.2</org.apache.maven.plugins.shade.version>
   <org.apache.maven.plugins.compiler.version>3.15.0</org.apache.maven.plugins.compiler.version>
   <org.apache.maven.plugins.surefire.version>3.5.6</org.apache.maven.plugins.surefire.version>
@@ -72,7 +72,7 @@
   <org.apache.maven.plugins.clean.version>3.2.0</org.apache.maven.plugins.clean.version>
   <org.apache.maven.plugins.resources.version>3.3.0</org.apache.maven.plugins.resources.version>
   <org.apache.maven.plugins.assembly.version>3.4.2</org.apache.maven.plugins.assembly.version>
-  <com.mycila.license.maven.plugin.version>5.0.0</com.mycila.license.maven.plugin.version>
+  <com.mycila.license.maven.plugin.version>5.1.1</com.mycila.license.maven.plugin.version>
   <org.owasp.dependency.check.version>12.2.2</org.owasp.dependency.check.version>
 
   <!-- Use a separate property for dependency alignment purposes. -->
@@ -82,9 +82,9 @@
   <io.cryostat.libcryostat.version>4.3.0-SNAPSHOT</io.cryostat.libcryostat.version>
 
   <org.apache.commons.lang3.version>3.20.0</org.apache.commons.lang3.version>
-  <org.apache.commons.io.version>2.21.0</org.apache.commons.io.version>
+  <org.apache.commons.io.version>2.22.0</org.apache.commons.io.version>
   <org.apache.httpcomponents.httpclient.version>5.4.4</org.apache.httpcomponents.httpclient.version>
-  <com.fasterxml.jackson.version>2.22.0</com.fasterxml.jackson.version>
+  <com.fasterxml.jackson.version>2.22.1</com.fasterxml.jackson.version>
   <io.smallrye.config.version>3.10.2</io.smallrye.config.version><!-- latest version which supports JDK 11 -->
   <org.slf4j.version>2.0.18</org.slf4j.version>
   <org.projectnessie.cel.bom.version>0.5.2</org.projectnessie.cel.bom.version>
@@ -92,9 +92,9 @@
   <info.picocli.version>4.7.7</info.picocli.version>
   <com.redhat.insights.agent.version>1.0.3</com.redhat.insights.agent.version>
 
-  <com.github.spotbugs.version>4.10.2</com.github.spotbugs.version>
+  <com.github.spotbugs.version>4.10.3</com.github.spotbugs.version>
   <com.github.spotbugs.plugin.version>4.9.8.5</com.github.spotbugs.plugin.version>
-  <org.junit.jupiter.version>6.1.0</org.junit.jupiter.version>
+  <org.junit.jupiter.version>6.1.3</org.junit.jupiter.version>
   <org.hamcrest.version>3.0</org.hamcrest.version>
   <org.mockito.version>5.23.0</org.mockito.version>
   <org.jacoco.maven.plugin.version>0.8.15</org.jacoco.maven.plugin.version>
@@ -104,7 +104,7 @@
 
   <maven-source-plugin.version>3.4.0</maven-source-plugin.version>
   <maven-javadoc-plugin.version>3.12.0</maven-javadoc-plugin.version>
-  <jreleaser-maven-plugin.version>1.24.0</jreleaser-maven-plugin.version>
+  <jreleaser-maven-plugin.version>1.25.0</jreleaser-maven-plugin.version>
   <org.codehaus.mojo.exec.plugin.version>3.6.3</org.codehaus.mojo.exec.plugin.version>
 
   <shade.prefix>io.cryostat.agent.shaded</shade.prefix>
