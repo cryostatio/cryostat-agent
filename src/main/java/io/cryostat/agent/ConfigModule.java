@@ -1184,14 +1184,6 @@ public abstract class ConfigModule {
 
     @Provides
     @Singleton
-    @Named(CRYOSTAT_AGENT_SMART_TRIGGER_BETA_FORMAT)
-    public static boolean provideCryostatAgentSmartTriggerBetaFormat(SmallRyeConfig config) {
-        return config.getOptionalValue(CRYOSTAT_AGENT_SMART_TRIGGER_BETA_FORMAT, boolean.class)
-                .orElse(false);
-    }
-
-    @Provides
-    @Singleton
     @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_REQUIRED)
     public static boolean provideCryostatAgentTlsEnabled(SmallRyeConfig config) {
         return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_TLS_REQUIRED, boolean.class);
