@@ -20,7 +20,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -44,7 +43,7 @@ public class TriggerParser {
             "\\[(.*(&&)*|(\\|\\|)*)\\]~([\\w\\-]+)(?:\\.jfc)?";
     private static final Pattern EXPRESSION_PATTERN = Pattern.compile(EXPRESSION_PATTERN_STRING);
     private final FlightRecorderHelper flightRecorderHelper;
-    private ObjectMapper mapper;
+    private final ObjectMapper mapper;
     private final Optional<Path> triggerPath;
     private final Logger log = LoggerFactory.getLogger(getClass());
 
@@ -58,7 +57,7 @@ public class TriggerParser {
         this.mapper = mapper;
     }
 
-    public List<SmartTrigger> parseFromFiles(boolean jsonFormat) {
+    public List<SmartTrigger> parseFromFiles() {
         if (triggerPath.isEmpty()) {
             return Collections.emptyList();
         }
@@ -72,11 +71,7 @@ public class TriggerParser {
             return Files.walk(triggerPath.get())
                     .filter(Files::isRegularFile)
                     .filter(Files::isReadable)
-                    .flatMap(
-                            path ->
-                                    jsonFormat
-                                            ? parseJsonFromFiles(path).stream()
-                                            : createFromFile(path).stream())
+                    .flatMap(path -> parseJsonFromFiles(path).stream())
                     .collect(Collectors.toList());
         } catch (IOException e) {
             log.error(e.getMessage());
@@ -88,19 +83,6 @@ public class TriggerParser {
         try {
             String triggerDefinitions = Files.readString(path);
             return parseFromJson(triggerDefinitions);
-        } catch (IOException ioe) {
-            log.error(ioe.getMessage());
-            return Collections.emptyList();
-        }
-    }
-
-    private List<SmartTrigger> createFromFile(Path path) {
-        try {
-            String triggerDefinitions = Files.readString(path);
-            return Arrays.asList(triggerDefinitions.split(System.lineSeparator())).stream()
-                    .map(String::strip)
-                    .flatMap(definition -> parse(definition).stream())
-                    .collect(Collectors.toList());
         } catch (IOException ioe) {
             log.error(ioe.getMessage());
             return Collections.emptyList();
@@ -164,23 +146,15 @@ public class TriggerParser {
             for (SmartTriggerReq r : reqs) {
                 // Null/non-provided fields will already be caught by the
                 // ObjectMapper, check their values are valid
-                System.out.println(
-                        "Parsed values: "
-                                + r.getCondition()
-                                + ", "
-                                + r.getDurationExpr()
-                                + ", "
-                                + r.getRecordingTemplate());
-                if (!isValid(r.getCondition(), r.getDurationExpr(), r.getRecordingTemplate())) {
+                if (!isValid(r.getCondition(), r.getRecordingTemplate())) {
                     // Log and skip invalid triggers
+                    log.warn(
+                            "Trigger failed validation: {1} {2} {3}",
+                            r.getCondition(), r.getDurationExpr(), r.getRecordingTemplate());
                     continue;
                 }
                 try {
-                    returnVal.add(
-                            new SmartTrigger(
-                                    UUID.randomUUID().toString(),
-                                    r.constructExprFromParams(),
-                                    r.getRecordingTemplate()));
+                    returnVal.addAll(parse(r.constructDefinitionFromParams()));
                 } catch (DateTimeParseException dtpe) {
                     log.error("Failed to parse trigger duration constraint", dtpe);
                 }
@@ -193,12 +167,9 @@ public class TriggerParser {
         }
     }
 
-    public boolean isValid(String condition, String duration, String template) {
+    public boolean isValid(String condition, String template) {
         if (condition.isBlank()) {
             log.warn("Trigger condition was blank. Skipping Trigger.");
-            return false;
-        } else if (duration.isBlank()) {
-            log.warn("Trigger duration was blank. Skipping Trigger.");
             return false;
         } else if (template.isBlank()) {
             log.warn("Template was blank. Skipping Trigger.");

@@ -15,6 +15,8 @@
  */
 package io.cryostat.agent.triggers;
 
+import org.apache.commons.lang3.StringUtils;
+
 public class SmartTriggerReq {
 
     // TODO: For now the only supported operation is starting a recording,
@@ -25,10 +27,10 @@ public class SmartTriggerReq {
     private String durationExpr;
     private String recordingTemplate;
 
-    public SmartTriggerReq(String condition, String duration, String template) {
+    public SmartTriggerReq(String condition, String durationExpr, String recordingTemplate) {
         this.condition = condition;
-        this.durationExpr = duration;
-        this.recordingTemplate = template;
+        this.durationExpr = durationExpr;
+        this.recordingTemplate = recordingTemplate;
     }
 
     // 0-arg constructor for serializer
@@ -66,10 +68,18 @@ public class SmartTriggerReq {
     // to users, we can construct the expression to evaulate
     // from a simple set of properties.
     public String constructExprFromParams() {
-        return this.condition + ";" + constructDurationExprFromRequest();
+        return this.condition + constructDurationExprFromRequest();
     }
 
+    public String constructDefinitionFromParams() {
+        return "[" + constructExprFromParams() + "]~" + recordingTemplate;
+    }
+
+    // Blank Duration indicates the trigger should fire immediately
+    // when the condition is met.
     private String constructDurationExprFromRequest() {
-        return "TargetDuration>duration(\"" + this.durationExpr + "\")";
+        return StringUtils.isBlank(this.durationExpr)
+                ? ""
+                : ";TargetDuration>duration(\"" + this.durationExpr + "\")";
     }
 }

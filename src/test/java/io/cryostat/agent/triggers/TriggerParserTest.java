@@ -77,6 +77,12 @@ class TriggerParserTest {
     @Test
     void testFromFile() {
         Path file = Mockito.mock(Path.class);
+        String in =
+                "[{"
+                        + "\"condition\" : \"ProcessCpuLoad>0.2\","
+                        + "\"durationExpr\" : \"\","
+                        + "\"recordingTemplate\" : \"profile\""
+                        + "}]";
 
         filesMock.when(() -> Files.exists(triggerPath)).thenReturn(true);
         filesMock.when(() -> Files.isReadable(triggerPath)).thenReturn(true);
@@ -86,11 +92,11 @@ class TriggerParserTest {
         filesMock.when(() -> Files.walk(triggerPath)).thenReturn(Stream.of(file));
         filesMock.when(() -> Files.isReadable(file)).thenReturn(true);
         filesMock.when(() -> Files.isRegularFile(file)).thenReturn(true);
-        filesMock.when(() -> Files.readString(file)).thenReturn("[ProcessCpuLoad>0.2]~profile");
+        filesMock.when(() -> Files.readString(file)).thenReturn(in);
 
         Mockito.when(helper.isValidTemplate(Mockito.anyString())).thenReturn(true);
 
-        List<SmartTrigger> out = parser.parseFromFiles(false);
+        List<SmartTrigger> out = parser.parseFromFiles();
 
         MatcherAssert.assertThat(out, Matchers.hasSize(1));
         SmartTrigger trigger = out.get(0);
@@ -303,8 +309,7 @@ class TriggerParserTest {
         MatcherAssert.assertThat(
                 trigger.getExpression(),
                 Matchers.equalTo("ProcessCpuLoad>0.2;TargetDuration>duration(\"30s\")"));
-        MatcherAssert.assertThat(
-                trigger.getRecordingTemplateName(), Matchers.equalTo("default.jfc"));
+        MatcherAssert.assertThat(trigger.getRecordingTemplateName(), Matchers.equalTo("default"));
         MatcherAssert.assertThat(
                 trigger.getDurationConstraint(),
                 Matchers.equalTo("TargetDuration>duration(\"30s\")"));
@@ -358,6 +363,34 @@ class TriggerParserTest {
                         + "}]";
         List<SmartTrigger> out = parser.parseFromJson(in);
         MatcherAssert.assertThat(out, Matchers.hasSize(0));
+    }
+
+    // An empty duration indicates that the trigger should
+    // fire immediately when the condition is met, the field
+    // still needs to be present but it can be blank.
+    @Test
+    void testEmptyDurationIsValid() {
+        Mockito.when(helper.isValidTemplate(Mockito.anyString())).thenReturn(true);
+        String in =
+                "[{"
+                        + "\"condition\" : \"ProcessCpuLoad>0.2\","
+                        + "\"durationExpr\" : \"\","
+                        + "\"recordingTemplate\" : \"default.jfc\""
+                        + "}]";
+        List<SmartTrigger> out = parser.parseFromJson(in);
+        MatcherAssert.assertThat(out, Matchers.hasSize(1));
+
+        var trigger = out.get(0);
+        MatcherAssert.assertThat(trigger.getExpression(), Matchers.equalTo("ProcessCpuLoad>0.2"));
+        MatcherAssert.assertThat(trigger.getRecordingTemplateName(), Matchers.equalTo("default"));
+        MatcherAssert.assertThat(trigger.getDurationConstraint(), Matchers.equalTo(""));
+        MatcherAssert.assertThat(
+                trigger.getTriggerCondition(), Matchers.equalTo("ProcessCpuLoad>0.2"));
+        MatcherAssert.assertThat(trigger.getState(), Matchers.equalTo(TriggerState.NEW));
+        MatcherAssert.assertThat(
+                trigger.getTargetDuration(), Matchers.equalTo(Duration.ofSeconds(0)));
+        MatcherAssert.assertThat(
+                trigger.getTimeConditionFirstMet().getTime(), Matchers.equalTo(0L));
     }
 
     static List<List<String>> emptyCases() {

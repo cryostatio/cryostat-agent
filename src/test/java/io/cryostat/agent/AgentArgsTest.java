@@ -31,20 +31,13 @@ public class AgentArgsTest {
     public void testArgumentParsing() {
         Instrumentation instr = Mockito.mock(Instrumentation.class);
         // Check that a full argument line key=value![smartTrigger]~template is parsed.
-        AgentArgs args = AgentArgs.from(instr, "key=value![smartTrigger]~template");
+        AgentArgs args = AgentArgs.from(instr, "key=value");
         assertEquals(args.getProperties(), Map.of("key", "value"));
-        assertEquals(args.getSmartTriggers(), "[smartTrigger]~template");
-        // Check that a single argument smart trigger definition is parsed
-        args = AgentArgs.from(instr, "[smartTriggerDef]~template2");
-        assertTrue(args.getProperties().isEmpty());
-        assertEquals(args.getSmartTriggers(), "[smartTriggerDef]~template2");
         // Check that a single argument property is parsed
         args = AgentArgs.from(instr, "key2=value2");
         assertEquals(args.getProperties(), Map.of("key2", "value2"));
-        assertTrue(args.getSmartTriggers().isBlank());
         // Check that no argument doesn't throw an exception
         args = AgentArgs.from(instr, "");
         assertTrue(args.getProperties().isEmpty());
-        assertTrue(args.getSmartTriggers().isBlank());
     }
 }

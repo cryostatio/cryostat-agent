@@ -67,7 +67,6 @@ public abstract class TriggerModule {
             Harvester harvester,
             @Named(ConfigModule.CRYOSTAT_AGENT_SMART_TRIGGER_EVALUATION_PERIOD_MS)
                     long evaluationPeriodMs,
-            @Named(ConfigModule.CRYOSTAT_AGENT_SMART_TRIGGER_BETA_FORMAT) boolean jsonFormat,
             CryostatClient client) {
         return new TriggerEvaluator(
                 scheduler,
@@ -77,7 +76,6 @@ public abstract class TriggerModule {
                 helper,
                 harvester,
                 evaluationPeriodMs,
-                jsonFormat,
                 client);
     }
 }

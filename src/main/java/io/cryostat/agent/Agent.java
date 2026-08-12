@@ -273,7 +273,7 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
                     });
             webServer.start();
             registration.start();
-            client.triggerEvaluator().start(args.getSmartTriggers());
+            client.triggerEvaluator().start();
             log.trace("Startup complete");
         } catch (Exception e) {
             log.error(Agent.class.getSimpleName() + " startup failure", e);

@@ -54,7 +54,6 @@ public class TriggerEvaluator {
     private final FlightRecorderHelper flightRecorderHelper;
     private final Harvester harvester;
     private final long evaluationPeriodMs;
-    private final boolean jsonTriggerFormat;
     private final ConcurrentHashMap<SmartTrigger, Script> conditionScriptCache =
             new ConcurrentHashMap<>();
     private final ConcurrentHashMap<SmartTrigger, Script> durationScriptCache =
@@ -73,7 +72,6 @@ public class TriggerEvaluator {
             FlightRecorderHelper flightRecorderHelper,
             Harvester harvester,
             long evaluationPeriodMs,
-            boolean jsonTriggerFormat,
             CryostatClient client) {
         this.scheduler = scheduler;
         this.definitions = Collections.unmodifiableList(definitions);
@@ -82,20 +80,7 @@ public class TriggerEvaluator {
         this.flightRecorderHelper = flightRecorderHelper;
         this.harvester = harvester;
         this.evaluationPeriodMs = evaluationPeriodMs;
-        this.jsonTriggerFormat = jsonTriggerFormat;
         this.client = client;
-    }
-
-    public void start(String args) {
-        this.stop();
-        parser.parseFromFiles(jsonTriggerFormat).forEach(this::registerTrigger);
-        parser.parse(args).forEach(this::registerTrigger);
-        parser.parse(String.join(",", definitions)).forEach(this::registerTrigger);
-        this.start();
-    }
-
-    public String append(SmartTrigger trigger) {
-        return append(trigger.getExpression()).get(0);
     }
 
     // start(args) will re-parse the triggers directory, we don't need to do that
@@ -152,7 +137,9 @@ public class TriggerEvaluator {
         return t.getID();
     }
 
-    private void start() {
+    public void start() {
+        parser.parseFromFiles().forEach(this::registerTrigger);
+        parser.parse(String.join(",", definitions)).forEach(this::registerTrigger);
         this.stop();
         if (this.triggers.isEmpty()) {
             return;
