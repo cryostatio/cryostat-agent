@@ -61,8 +61,6 @@ public class SmartTriggersContext implements RemoteContext {
             }
             switch (mtd) {
                 case "GET":
-                    // GET is also unchanged. The UUID needs to be returned to the user
-                    // for DELETE.
                     exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
                     try (OutputStream response = exchange.getResponseBody()) {
                         mapper.writeValue(response, evaluator.getDefinitions());
@@ -85,7 +83,6 @@ public class SmartTriggersContext implements RemoteContext {
                     }
                     break;
                 case "DELETE":
-                    // Delete is unchanged, it doesn't need the full JSON Construction, just the ID
                     try (InputStream body = exchange.getRequestBody()) {
                         // UUID is passed as a path param
                         Matcher m = PATH_ID_PATTERN.matcher(exchange.getRequestURI().getPath());
