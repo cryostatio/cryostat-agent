@@ -70,9 +70,7 @@ public class SmartTriggersContext implements RemoteContext {
                     break;
                 case "POST":
                     try (InputStream body = exchange.getRequestBody()) {
-                        SmartTriggerReq req =
-                                mapper.readValue(
-                                        mapper.readTree(body).asText(), SmartTriggerReq.class);
+                        SmartTriggerReq req = mapper.readValue(body, SmartTriggerReq.class);
                         var triggerIds = new ArrayList<String>();
                         // Internally the duration expression still follows
                         // a strict format for CEL, we need to reconstruct this here

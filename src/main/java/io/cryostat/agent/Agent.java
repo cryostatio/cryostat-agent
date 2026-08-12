@@ -93,11 +93,6 @@ public class Agent implements Callable<Integer>, Consumer<AgentArgs> {
     Map<String, String> properties;
 
     @Option(
-            names = "--smartTrigger",
-            description = "Smart Triggers definition. May be specified more than once.")
-    List<String> smartTriggers;
-
-    @Option(
             names = {"-w", "--watch"},
             defaultValue = "false",
             description =

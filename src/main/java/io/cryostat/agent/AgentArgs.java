@@ -34,17 +34,14 @@ class AgentArgs {
     private static final String DELIMITER = "!";
     private final Instrumentation instrumentation;
     private final Map<String, String> properties;
-    private final String smartTriggers;
 
-    public AgentArgs(
-            Instrumentation instrumentation, Map<String, String> properties, String smartTriggers) {
+    public AgentArgs(Instrumentation instrumentation, Map<String, String> properties) {
         this.instrumentation = instrumentation;
         this.properties = Optional.ofNullable(properties).orElse(Collections.emptyMap());
-        this.smartTriggers = StringUtils.defaultIfBlank(smartTriggers, "");
     }
 
-    public AgentArgs(Map<String, String> properties, String smartTriggers) {
-        this(null, properties, smartTriggers);
+    public AgentArgs(Map<String, String> properties) {
+        this(null, properties);
     }
 
     public Instrumentation getInstrumentation() {
@@ -57,7 +54,6 @@ class AgentArgs {
 
     public static AgentArgs from(Instrumentation instrumentation, String agentmainArg) {
         Map<String, String> properties = new HashMap<>();
-        String smartTriggers = "";
         if (StringUtils.isNotBlank(agentmainArg)) {
             Queue<String> parts = new ArrayDeque<>(Arrays.asList(agentmainArg.split(DELIMITER)));
             String props = parts.poll();
@@ -76,12 +72,8 @@ class AgentArgs {
                                                 Pair<String, String>::getKey,
                                                 Pair<String, String>::getValue));
             }
-            // Parse smart triggers after properties
-            if (smartTriggers.isBlank()) {
-                smartTriggers = parts.poll();
-            }
         }
-        return new AgentArgs(instrumentation, properties, smartTriggers);
+        return new AgentArgs(instrumentation, properties);
     }
 
     public String toAgentMain() {
@@ -93,9 +85,6 @@ class AgentArgs {
                             properties.entrySet().stream()
                                     .map(e -> String.format("%s=%s", e.getKey(), e.getValue()))
                                     .collect(Collectors.toList())));
-        }
-        if (StringUtils.isNotBlank(smartTriggers)) {
-            parts.add(smartTriggers);
         }
         return String.join(DELIMITER, parts);
     }

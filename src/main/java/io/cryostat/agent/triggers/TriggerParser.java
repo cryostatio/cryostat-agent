@@ -22,6 +22,7 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.regex.Matcher;
@@ -144,9 +145,13 @@ public class TriggerParser {
             SmartTriggerReq[] reqs = mapper.readValue(req, SmartTriggerReq[].class);
             var returnVal = new ArrayList<SmartTrigger>();
             for (SmartTriggerReq r : reqs) {
-                // Null/non-provided fields will already be caught by the
+                if (Objects.isNull(r)) {
+                    log.warn("Trigger request was null");
+                    continue;
+                }
+                // non-provided fields will already be caught by the
                 // ObjectMapper, check their values are valid
-                if (!isValid(r.getCondition(), r.getRecordingTemplate())) {
+                if (!isValid(r)) {
                     // Log and skip invalid triggers
                     log.warn(
                             "Trigger failed validation: {1} {2} {3}",
@@ -167,14 +172,17 @@ public class TriggerParser {
         }
     }
 
-    public boolean isValid(String condition, String template) {
-        if (condition.isBlank()) {
+    public boolean isValid(SmartTriggerReq r) {
+        if (Objects.isNull(r.getCondition()) || r.getCondition().isBlank()) {
             log.warn("Trigger condition was blank. Skipping Trigger.");
             return false;
-        } else if (template.isBlank()) {
+        } else if (Objects.isNull(r.getRecordingTemplate()) || r.getRecordingTemplate().isBlank()) {
             log.warn("Template was blank. Skipping Trigger.");
             return false;
-        } else if (!flightRecorderHelper.isValidTemplate(template)) {
+        } else if (Objects.isNull(r.getDurationExpr())) {
+            log.warn("Duration expression was null. Skipping Trigger.");
+            return false;
+        } else if (!flightRecorderHelper.isValidTemplate(r.getRecordingTemplate())) {
             log.warn("Template was invalid. Skipping Trigger.");
             return false;
         }

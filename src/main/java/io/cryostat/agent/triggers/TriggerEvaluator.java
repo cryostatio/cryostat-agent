@@ -83,6 +83,15 @@ public class TriggerEvaluator {
         this.client = client;
     }
 
+    public void start() {
+        this.stop();
+        parser.parseFromFiles().forEach(this::registerTrigger);
+        for (String def : definitions) {
+            parser.parseFromJson(def).forEach(this::registerTrigger);
+        }
+        this.refresh();
+    }
+
     // start(args) will re-parse the triggers directory, we don't need to do that
     // for requests that come in later through the api since existing triggers
     // are already stored.
@@ -106,7 +115,7 @@ public class TriggerEvaluator {
                                 uuids.add(uuid);
                             }
                         });
-        this.start();
+        this.refresh();
         return uuids;
     }
 
@@ -119,7 +128,7 @@ public class TriggerEvaluator {
 
         this.stop();
         this.triggers.remove(uuid);
-        this.start();
+        this.refresh();
         return true;
     }
 
@@ -137,9 +146,7 @@ public class TriggerEvaluator {
         return t.getID();
     }
 
-    public void start() {
-        parser.parseFromFiles().forEach(this::registerTrigger);
-        parser.parse(String.join(",", definitions)).forEach(this::registerTrigger);
+    private void refresh() {
         this.stop();
         if (this.triggers.isEmpty()) {
             return;

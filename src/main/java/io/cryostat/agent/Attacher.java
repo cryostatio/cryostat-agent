@@ -42,13 +42,7 @@ class Attacher {
     static final String AUTO_ATTACH_PID = "0";
 
     void attach(Agent agent) throws Exception {
-        String agentmainArg =
-                new AgentArgs(
-                                agent.properties,
-                                String.join(
-                                        ",",
-                                        Optional.ofNullable(agent.smartTriggers).orElse(List.of())))
-                        .toAgentMain();
+        String agentmainArg = new AgentArgs(agent.properties).toAgentMain();
 
         if (agent.watch) {
             this.watchIncludeKeywords.addAll(agent.watchIncludeKeywords);
