@@ -1161,9 +1161,9 @@ public abstract class ConfigModule {
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_SMART_TRIGGER_DEFINITIONS)
-    public static List<String> provideCryostatSmartTriggerDefinitions(SmallRyeConfig config) {
-        return config.getOptionalValues(CRYOSTAT_AGENT_SMART_TRIGGER_DEFINITIONS, String.class)
-                .orElse(List.of());
+    public static String provideCryostatSmartTriggerDefinitions(SmallRyeConfig config) {
+        return config.getOptionalValue(CRYOSTAT_AGENT_SMART_TRIGGER_DEFINITIONS, String.class)
+                .orElse("");
     }
 
     @Provides

@@ -72,7 +72,7 @@ public class SmartTriggersContext implements RemoteContext {
                         var triggerIds = new ArrayList<String>();
                         // Internally the duration expression still follows
                         // a strict format for CEL, we need to reconstruct this here
-                        triggerIds.addAll(evaluator.append(req.constructDefinitionFromParams()));
+                        triggerIds.addAll(evaluator.append(req));
                         exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
                         try (OutputStream responseStream = exchange.getResponseBody()) {
                             mapper.writeValue(responseStream, triggerIds);

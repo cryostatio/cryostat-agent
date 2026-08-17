@@ -92,7 +92,7 @@ The general form of a Smart Trigger expression is as follows:
 
 ```
 { "condition": "constraint1(&&/||)constraint2...constraintN" ,
-  "durationExpr": "time" ,
+  "duration": "number of milliseconds" ,
   "recordingTemplate": "recordingTemplateNameOrLabel"
 }
 ```
@@ -107,7 +107,7 @@ An example for listening to CPU Usage and starting a recording using the Profili
 ```
 {
   "condition": "ProcessCpuLoad>0.2",
-  "durationExpr": "",
+  "duration": "0",
   "recordingTemplate": "profile"
 }
 ```
@@ -118,7 +118,7 @@ Continuous template:
 ```
 {
   "condition": "ThreadCount>20",
-  "durationExpr": "10s",
+  "duration": "10000",
   "recordingTemplate": "Continuous"
 }
 ```
@@ -128,7 +128,7 @@ Smart Triggers may define more complex conditions that test multiple metrics:
 ```
 {
   "condition": "(ProcessCpuLoad>0.5||SystemCpuLoad>0.25)&&"HeapMemoryUsagePercent">0.1",
-  "durationExpr": "1m",
+  "duration": "60000",
   "recordingTemplate": "Continuous"
 }
 ```
@@ -136,15 +136,15 @@ Smart Triggers may define more complex conditions that test multiple metrics:
 These may be passed as a [configuration property](#configuration):
 
 ```
-CRYOSTAT_AGENT_SMART_TRIGGER_DEFINITIONS="{\"condition\":\"ProcessCpuLoad>0.2\",\"durationExpr\":\"1m\",\"recordingTemplate\":\"default.jfc\"}"
+CRYOSTAT_AGENT_SMART_TRIGGER_DEFINITIONS="[{\"condition\":\"ProcessCpuLoad>0.2\",\"duration\":\"60000\",\"recordingTemplate\":\"default.jfc\"}]"
 
--Dcryostat.agent.smart-trigger.definitions="{condition:\"ProcessCpuLoad>0.2\",\"durationExpr\":\"1m\",\"recordingTemplate\":\"default.jfc\"}"
+-Dcryostat.agent.smart-trigger.definitions="[{condition:\"ProcessCpuLoad>0.2\",\"duration\":\"60000\",\"recordingTemplate\":\"default.jfc\"}]"
 ```
 
 Multiple Smart Trigger definitions may be specified and separated by commas, for example:
 
 ```
-{\"condition\":\"ProcessCpuLoad>0.2\",durationExpr:\"1m\",recordingTemplate:\"default.jfc\"},{\"condition\":\"ThreadCount>30\",\"durationExpr\":\"2m\",\"recordingTemplate\":\"profiling\"}
+[{\"condition\":\"ProcessCpuLoad>0.2\",duration:\"60000\",recordingTemplate:\"default.jfc\"},{\"condition\":\"ThreadCount>30\",\"duration\":\"120000\",\"recordingTemplate\":\"profiling\"}]
 ```
 
 **NOTE**: Smart Triggers are evaluated on a polling basis. The poll period is configurable (see list below). This means

@@ -29,7 +29,9 @@ import io.cryostat.agent.FlightRecorderHelper;
 import io.cryostat.libcryostat.triggers.SmartTrigger;
 import io.cryostat.libcryostat.triggers.SmartTrigger.TriggerState;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.hamcrest.MatcherAssert;
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.AfterEach;
@@ -49,7 +51,11 @@ class TriggerParserTest {
 
     @Mock FlightRecorderHelper helper;
     @Mock Path triggerPath;
-    private final ObjectMapper mapper = new ObjectMapper();
+    private final ObjectMapper mapper =
+            new ObjectMapper()
+                    .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+                    .registerModule(new JavaTimeModule());
+    ;
     MockedStatic<Files> filesMock;
 
     TriggerParser parser;
@@ -80,7 +86,7 @@ class TriggerParserTest {
         String in =
                 "[{"
                         + "\"condition\" : \"ProcessCpuLoad>0.2\","
-                        + "\"durationExpr\" : \"\","
+                        + "\"duration\" : \"\","
                         + "\"recordingTemplate\" : \"profile\""
                         + "}]";
 
@@ -299,7 +305,7 @@ class TriggerParserTest {
         String in =
                 "[{"
                         + "\"condition\" : \"ProcessCpuLoad>0.2\","
-                        + "\"durationExpr\" : \"30s\","
+                        + "\"duration\" : \"30000\","
                         + "\"recordingTemplate\" : \"default.jfc\""
                         + "}]";
         List<SmartTrigger> out = parser.parseFromJson(in);
@@ -327,7 +333,7 @@ class TriggerParserTest {
         String in =
                 "[{"
                         + "\"condition\" : \"\","
-                        + "\"durationExpr\" : \"30s\","
+                        + "\"duration\" : \"30000\","
                         + "\"recordingTemplate\" : \"default.jfc\""
                         + "}]";
         List<SmartTrigger> out = parser.parseFromJson(in);
@@ -336,7 +342,7 @@ class TriggerParserTest {
         in =
                 "[{"
                         + "\"condition\" : \"ProcessCpuLoad>0.1\","
-                        + "\"durationExpr\" : \"\","
+                        + "\"duration\" : \"\","
                         + "\"recordingTemplate\" : \"default.jfc\""
                         + "}]";
         out = parser.parseFromJson(in);
@@ -345,7 +351,7 @@ class TriggerParserTest {
         in =
                 "[{"
                         + "\"condition\" : \"ProcessCpuLoad>0.1\","
-                        + "\"durationExpr\" : \"30s\","
+                        + "\"duration\" : \"30000\","
                         + "\"recordingTemplate\" : \"\""
                         + "}]";
         out = parser.parseFromJson(in);
@@ -358,7 +364,7 @@ class TriggerParserTest {
         String in =
                 "[{"
                         + "\"condition\" : \"ProcessCpuLoad>0.2\","
-                        + "\"durationExpr\" : \"30s\","
+                        + "\"duration\" : \"30000\","
                         + "\"recordingTemplate\" : \"foo\""
                         + "}]";
         List<SmartTrigger> out = parser.parseFromJson(in);
@@ -374,7 +380,7 @@ class TriggerParserTest {
         String in =
                 "[{"
                         + "\"condition\" : \"ProcessCpuLoad>0.2\","
-                        + "\"durationExpr\" : \"\","
+                        + "\"duration\" : \"\","
                         + "\"recordingTemplate\" : \"default.jfc\""
                         + "}]";
         List<SmartTrigger> out = parser.parseFromJson(in);

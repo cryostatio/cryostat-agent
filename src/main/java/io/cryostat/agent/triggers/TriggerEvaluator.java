@@ -48,7 +48,7 @@ import org.slf4j.LoggerFactory;
 public class TriggerEvaluator {
 
     private final ScheduledExecutorService scheduler;
-    private final List<String> definitions;
+    private final String definitions;
     private final TriggerParser parser;
     private final ScriptHost scriptHost;
     private final FlightRecorderHelper flightRecorderHelper;
@@ -67,14 +67,14 @@ public class TriggerEvaluator {
     public TriggerEvaluator(
             ScheduledExecutorService scheduler,
             ScriptHost scriptHost,
-            List<String> definitions,
+            String definitions,
             TriggerParser parser,
             FlightRecorderHelper flightRecorderHelper,
             Harvester harvester,
             long evaluationPeriodMs,
             CryostatClient client) {
         this.scheduler = scheduler;
-        this.definitions = Collections.unmodifiableList(definitions);
+        this.definitions = definitions;
         this.parser = parser;
         this.scriptHost = scriptHost;
         this.flightRecorderHelper = flightRecorderHelper;
@@ -86,24 +86,26 @@ public class TriggerEvaluator {
     public void start() {
         this.stop();
         parser.parseFromFiles().forEach(this::registerTrigger);
-        for (String def : definitions) {
-            parser.parseFromJson(def).forEach(this::registerTrigger);
-        }
+        parser.parseFromJson(definitions).forEach(this::registerTrigger);
         this.refresh();
     }
 
     // start(args) will re-parse the triggers directory, we don't need to do that
     // for requests that come in later through the api since existing triggers
     // are already stored.
-    public List<String> append(String definitions) {
+    public List<String> append(SmartTriggerReq req) {
         // Sanity check the trigger definitions before we stop/start the evaluation
-        if (!parser.isValid(definitions)) {
-            log.warn("Invalid Trigger definition {}", definitions);
+        if (!parser.isValid(req)) {
+            log.warn(
+                    "Invalid Trigger definition {}, {}, {}",
+                    req.getCondition(),
+                    req.getDuration(),
+                    req.getRecordingTemplate());
             throw new IllegalArgumentException();
         }
         ArrayList<String> uuids = new ArrayList<String>();
         this.stop();
-        parser.parse(definitions)
+        parser.parse(req)
                 .forEach(
                         (SmartTrigger t) -> {
                             String uuid = registerTrigger(t);

@@ -18,6 +18,7 @@ package io.cryostat.agent.triggers;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -97,6 +98,10 @@ public class TriggerParser {
                 && Files.isDirectory(triggerPath.get());
     }
 
+    public List<SmartTrigger> parse(SmartTriggerReq req) {
+        return parse(constructDefinitionFromParams(req));
+    }
+
     public List<SmartTrigger> parse(String str) {
         List<SmartTrigger> triggers = new ArrayList<>();
         if (StringUtils.isBlank(str)) {
@@ -154,12 +159,14 @@ public class TriggerParser {
                 if (!isValid(r)) {
                     // Log and skip invalid triggers
                     log.warn(
-                            "Trigger failed validation: {1} {2} {3}",
-                            r.getCondition(), r.getDurationExpr(), r.getRecordingTemplate());
+                            "Trigger failed validation: {} {} {}",
+                            r.getCondition(),
+                            r.getDuration(),
+                            r.getRecordingTemplate());
                     continue;
                 }
                 try {
-                    returnVal.addAll(parse(r.constructDefinitionFromParams()));
+                    returnVal.addAll(parse(constructDefinitionFromParams(r)));
                 } catch (DateTimeParseException dtpe) {
                     log.error("Failed to parse trigger duration constraint", dtpe);
                 }
@@ -179,7 +186,7 @@ public class TriggerParser {
         } else if (Objects.isNull(r.getRecordingTemplate()) || r.getRecordingTemplate().isBlank()) {
             log.warn("Template was blank. Skipping Trigger.");
             return false;
-        } else if (Objects.isNull(r.getDurationExpr())) {
+        } else if (Objects.isNull(r.getDuration())) {
             log.warn("Duration expression was null. Skipping Trigger.");
             return false;
         } else if (!flightRecorderHelper.isValidTemplate(r.getRecordingTemplate())) {
@@ -187,5 +194,26 @@ public class TriggerParser {
             return false;
         }
         return true;
+    }
+
+    // The CEL internal representation doesn't need to be exposed
+    // to users, we can construct the expression to evaulate
+    // from a simple set of properties.
+    private String constructExprFromParams(SmartTriggerReq req) {
+        return req.getCondition() + constructDurationExprFromRequest(req);
+    }
+
+    private String constructDefinitionFromParams(SmartTriggerReq req) {
+        return "[" + constructExprFromParams(req) + "]~" + req.getRecordingTemplate();
+    }
+
+    // Blank Duration indicates the trigger should fire immediately
+    // when the condition is met.
+    private String constructDurationExprFromRequest(SmartTriggerReq req) {
+        return req.getDuration() == 0
+                ? ""
+                : ";TargetDuration>duration(\""
+                        + Duration.ofMillis(req.getDuration()).toSeconds()
+                        + "s\")";
     }
 }

@@ -15,37 +15,35 @@
  */
 package io.cryostat.agent.triggers;
 
-import org.apache.commons.lang3.StringUtils;
-
 public class SmartTriggerReq {
 
     // TODO: For now the only supported operation is starting a recording,
     // if/when work proceeds on supporting e.g. thread/heap dumps this can
     // be extended to support an operation type.
-    // { condition, durationExpr, template }
+    // { condition, duration, template }
     private String condition;
-    private String durationExpr;
+    private long duration;
     private String recordingTemplate;
 
-    public SmartTriggerReq(String condition, String durationExpr, String recordingTemplate) {
+    public SmartTriggerReq(String condition, long duration, String recordingTemplate) {
         this.condition = condition;
-        this.durationExpr = durationExpr;
+        this.duration = duration;
         this.recordingTemplate = recordingTemplate;
     }
 
     // 0-arg constructor for serializer
     public SmartTriggerReq() {
-        this.durationExpr = "";
+        this.duration = 0;
         this.condition = "";
         this.recordingTemplate = "";
     }
 
-    public String getDurationExpr() {
-        return durationExpr;
+    public long getDuration() {
+        return duration;
     }
 
-    public void setDurationExpr(String durationExpr) {
-        this.durationExpr = durationExpr;
+    public void setDuration(long duration) {
+        this.duration = duration;
     }
 
     public String getCondition() {
@@ -62,24 +60,5 @@ public class SmartTriggerReq {
 
     public void setRecordingTemplate(String recordingTemplate) {
         this.recordingTemplate = recordingTemplate;
-    }
-
-    // The CEL internal representation doesn't need to be exposed
-    // to users, we can construct the expression to evaulate
-    // from a simple set of properties.
-    public String constructExprFromParams() {
-        return this.condition + constructDurationExprFromRequest();
-    }
-
-    public String constructDefinitionFromParams() {
-        return "[" + constructExprFromParams() + "]~" + recordingTemplate;
-    }
-
-    // Blank Duration indicates the trigger should fire immediately
-    // when the condition is met.
-    private String constructDurationExprFromRequest() {
-        return StringUtils.isBlank(this.durationExpr)
-                ? ""
-                : ";TargetDuration>duration(\"" + this.durationExpr + "\")";
     }
 }
