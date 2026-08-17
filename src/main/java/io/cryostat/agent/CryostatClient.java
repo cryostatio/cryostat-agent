@@ -153,6 +153,62 @@ public class CryostatClient {
                 .whenComplete((v, t) -> req.reset());
     }
 
+    public CompletableFuture<PluginInfo> refreshRegistration(URI callback, PluginInfo pluginInfo) {
+        if (!pluginInfo.isInitialized()) {
+            return CompletableFuture.failedFuture(
+                    new IllegalStateException("registration has not been initialized"));
+        }
+        try {
+            RegistrationRefresh refresh =
+                    new RegistrationRefresh(
+                            pluginInfo.getId(), pluginInfo.getToken(), realm, callback);
+            HttpPost req = new HttpPost(baseUri.resolve(DISCOVERY_API_PATH));
+            log.trace("{}", req);
+            byte[] body = mapper.writeValueAsBytes(refresh);
+            req.setEntity(new ByteArrayEntity(body, ContentType.APPLICATION_JSON));
+            return supply(req, res -> logResponse(req, res))
+                    .thenApply(res -> assertOkStatus(req, res))
+                    .thenApply(
+                            res -> {
+                                try (InputStream is = res.getEntity().getContent()) {
+                                    return mapper.readValue(is, PluginInfo.class);
+                                } catch (IOException e) {
+                                    log.error("Unable to parse response as JSON", e);
+                                    throw new RegistrationException(e);
+                                }
+                            })
+                    .whenComplete((v, t) -> req.reset())
+                    .whenComplete((v, t) -> Arrays.fill(body, (byte) 0));
+        } catch (JsonProcessingException e) {
+            return CompletableFuture.failedFuture(e);
+        }
+    }
+
+    public CompletableFuture<PluginInfo> activateRegistrationRefresh(URI callback) {
+        try {
+            RegistrationActivation activation = new RegistrationActivation(realm, callback);
+            HttpPost req = new HttpPost(baseUri.resolve(DISCOVERY_API_PATH));
+            log.trace("{}", req);
+            byte[] body = mapper.writeValueAsBytes(activation);
+            req.setEntity(new ByteArrayEntity(body, ContentType.APPLICATION_JSON));
+            return supply(req, res -> logResponse(req, res))
+                    .thenApply(res -> assertOkStatus(req, res))
+                    .thenApply(
+                            res -> {
+                                try (InputStream is = res.getEntity().getContent()) {
+                                    return mapper.readValue(is, PluginInfo.class);
+                                } catch (IOException e) {
+                                    log.error("Unable to parse response as JSON", e);
+                                    throw new RegistrationException(e);
+                                }
+                            })
+                    .whenComplete((v, t) -> req.reset())
+                    .whenComplete((v, t) -> Arrays.fill(body, (byte) 0));
+        } catch (JsonProcessingException e) {
+            return CompletableFuture.failedFuture(e);
+        }
+    }
+
     public CompletableFuture<PluginInfo> register(
             URI callback, CredentialsSnapshot credentials, Collection<DiscoveryNode> subtree) {
         byte[] passwordCopy = credentials.pass();
@@ -495,6 +551,54 @@ public class CryostatClient {
 
         public Map<String, String> getContext() {
             return context;
+        }
+    }
+
+    static class RegistrationRefresh {
+        private final String id;
+        private final String token;
+        private final String realm;
+        private final URI callback;
+
+        RegistrationRefresh(String id, String token, String realm, URI callback) {
+            this.id = id;
+            this.token = token;
+            this.realm = realm;
+            this.callback = callback;
+        }
+
+        public String getId() {
+            return id;
+        }
+
+        public String getToken() {
+            return token;
+        }
+
+        public String getRealm() {
+            return realm;
+        }
+
+        public URI getCallback() {
+            return callback;
+        }
+    }
+
+    static class RegistrationActivation {
+        private final String realm;
+        private final URI callback;
+
+        RegistrationActivation(String realm, URI callback) {
+            this.realm = realm;
+            this.callback = callback;
+        }
+
+        public String getRealm() {
+            return realm;
+        }
+
+        public URI getCallback() {
+            return callback;
         }
     }
 

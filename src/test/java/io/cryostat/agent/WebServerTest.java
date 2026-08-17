@@ -173,6 +173,74 @@ class WebServerTest {
     }
 
     @Test
+    void testPostPromptsRegistrationRefreshWhileGetOnlyPings() throws Exception {
+        URI callback = URI.create("http://agent.example.com:9977");
+        HttpServer httpServer =
+                HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+        WebServer liveWebServer =
+                new WebServer(
+                        new SecureRandom(),
+                        Set::of,
+                        httpServer,
+                        MessageDigest.getInstance("SHA-256"),
+                        "testuser",
+                        16,
+                        () -> registration);
+
+        try {
+            liveWebServer.generateCredentials(callback).get();
+            try (WebServer.CredentialsSnapshot credentials =
+                    liveWebServer.getCredentialsSnapshot()) {
+                liveWebServer.clearPlaintextCredentials();
+                liveWebServer.commitPendingCredentials();
+                liveWebServer.start();
+
+                URI pingUri =
+                        new URI(
+                                "http",
+                                null,
+                                httpServer.getAddress().getHostString(),
+                                httpServer.getAddress().getPort(),
+                                "/",
+                                null,
+                                null);
+                String authorization =
+                        "Basic "
+                                + Base64.getEncoder()
+                                        .encodeToString(
+                                                (credentials.user()
+                                                                + ":"
+                                                                + new String(
+                                                                        credentials.pass(),
+                                                                        StandardCharsets.US_ASCII))
+                                                        .getBytes(StandardCharsets.US_ASCII));
+                HttpClient client = HttpClient.newHttpClient();
+
+                HttpRequest get =
+                        HttpRequest.newBuilder(pingUri)
+                                .header("Authorization", authorization)
+                                .GET()
+                                .build();
+                assertEquals(
+                        204, client.send(get, HttpResponse.BodyHandlers.discarding()).statusCode());
+                verify(registration, never()).notify(any());
+
+                HttpRequest post =
+                        HttpRequest.newBuilder(pingUri)
+                                .header("Authorization", authorization)
+                                .POST(HttpRequest.BodyPublishers.noBody())
+                                .build();
+                assertEquals(
+                        204,
+                        client.send(post, HttpResponse.BodyHandlers.discarding()).statusCode());
+                verify(registration).notify(Registration.RegistrationEvent.State.REFRESHING);
+            }
+        } finally {
+            liveWebServer.stop();
+        }
+    }
+
+    @Test
     void testPendingCredentialsAreCommittedOrDiscardedAtomically() throws Exception {
         SecureRandom random = mock(SecureRandom.class);
         when(random.nextInt(anyInt())).thenReturn(0, 1);

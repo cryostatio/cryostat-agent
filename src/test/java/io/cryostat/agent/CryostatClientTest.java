@@ -137,6 +137,91 @@ class CryostatClientTest {
     }
 
     @Test
+    void testRefreshRegistrationPostsOnlyExistingRegistrationIdentity() throws Exception {
+        URI callback = URI.create("http://agent.example.com:9977");
+        AtomicReference<String> submittedRequestBody = new AtomicReference<>();
+
+        when(http.execute(any(HttpHost.class), any(HttpPost.class)))
+                .thenAnswer(
+                        invocation -> {
+                            HttpPost request = invocation.getArgument(1);
+                            ByteArrayOutputStream out = new ByteArrayOutputStream();
+                            request.getEntity().writeTo(out);
+                            submittedRequestBody.set(out.toString(StandardCharsets.UTF_8));
+                            return response;
+                        });
+        when(response.getCode()).thenReturn(200);
+        when(response.getEntity()).thenReturn(responseEntity);
+        when(responseEntity.getContent())
+                .thenReturn(
+                        new StringEntity(
+                                        "{\"id\":\"plugin-id\",\"token\":\"new-token\",\"env\":[]}")
+                                .getContent());
+
+        PluginInfo refreshed =
+                client.refreshRegistration(
+                                callback, new PluginInfo("plugin-id", "current-token", List.of()))
+                        .get();
+
+        assertEquals("plugin-id", refreshed.getId());
+        assertEquals("new-token", refreshed.getToken());
+
+        ArgumentCaptor<HttpPost> requestCaptor = ArgumentCaptor.forClass(HttpPost.class);
+        verify(http).execute(any(HttpHost.class), requestCaptor.capture());
+        assertEquals("/api/v4/discovery", requestCaptor.getValue().getUri().getPath());
+
+        JsonNode requestBody = mapper.readTree(submittedRequestBody.get());
+        assertEquals("plugin-id", requestBody.get("id").asText());
+        assertEquals("current-token", requestBody.get("token").asText());
+        assertEquals(REALM, requestBody.get("realm").asText());
+        assertEquals(callback.toString(), requestBody.get("callback").asText());
+        assertEquals(4, requestBody.size());
+        assertFalse(requestBody.has("credential"));
+        assertFalse(requestBody.has("nodes"));
+    }
+
+    @Test
+    void testActivateRegistrationRefreshPostsOnlyCallbackIdentity() throws Exception {
+        URI callback = URI.create("http://agent.example.com:9977");
+        AtomicReference<String> submittedRequestBody = new AtomicReference<>();
+
+        when(http.execute(any(HttpHost.class), any(HttpPost.class)))
+                .thenAnswer(
+                        invocation -> {
+                            HttpPost request = invocation.getArgument(1);
+                            ByteArrayOutputStream out = new ByteArrayOutputStream();
+                            request.getEntity().writeTo(out);
+                            submittedRequestBody.set(out.toString(StandardCharsets.UTF_8));
+                            return response;
+                        });
+        when(response.getCode()).thenReturn(200);
+        when(response.getEntity()).thenReturn(responseEntity);
+        when(responseEntity.getContent())
+                .thenReturn(
+                        new StringEntity(
+                                        "{\"id\":\"plugin-id\",\"token\":\"new-token\",\"env\":[]}")
+                                .getContent());
+
+        PluginInfo activated = client.activateRegistrationRefresh(callback).get();
+
+        assertEquals("plugin-id", activated.getId());
+        assertEquals("new-token", activated.getToken());
+
+        ArgumentCaptor<HttpPost> requestCaptor = ArgumentCaptor.forClass(HttpPost.class);
+        verify(http).execute(any(HttpHost.class), requestCaptor.capture());
+        assertEquals("/api/v4/discovery", requestCaptor.getValue().getUri().getPath());
+
+        JsonNode requestBody = mapper.readTree(submittedRequestBody.get());
+        assertEquals(REALM, requestBody.get("realm").asText());
+        assertEquals(callback.toString(), requestBody.get("callback").asText());
+        assertEquals(2, requestBody.size());
+        assertFalse(requestBody.has("id"));
+        assertFalse(requestBody.has("token"));
+        assertFalse(requestBody.has("credential"));
+        assertFalse(requestBody.has("nodes"));
+    }
+
+    @Test
     void testRegisterIncludesRealmInCredentialMatchExpression() throws Exception {
         URI callback = URI.create("http://agent.example.com:9977");
         JsonNode requestBody = captureRegistrationRequest(client, callback);

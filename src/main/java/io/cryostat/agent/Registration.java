@@ -22,9 +22,11 @@ import java.net.UnknownHostException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashSet;
+import java.util.Objects;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -75,6 +77,7 @@ public class Registration {
 
     private final PluginInfo pluginInfo = new PluginInfo();
     private final Set<Consumer<RegistrationEvent>> listeners = new HashSet<>();
+    private volatile boolean refreshCallbacksEnabled;
 
     private volatile URI callback;
     private ScheduledFuture<?> registrationCheckTask;
@@ -184,11 +187,10 @@ public class Registration {
                                                                     if (t != null
                                                                             || !Boolean.TRUE.equals(
                                                                                     v)) {
-                                                                        this.pluginInfo.clear();
                                                                         notify(
                                                                                 RegistrationEvent
                                                                                         .State
-                                                                                        .UNREGISTERED);
+                                                                                        .REFRESHING);
                                                                     }
                                                                     return null;
                                                                 })
@@ -289,97 +291,188 @@ public class Registration {
             }
         }
 
-        currentRegistration =
-                webServer
-                        .generateCredentials(callback)
-                        .thenCompose(v -> cryostat.serverHealth())
-                        .thenCompose(
-                                health -> {
-                                    Semver cryostatSemver = health.cryostatSemver();
-                                    log.debug(
-                                            "Connected to Cryostat server: version {} , build {}",
+        if (!pluginInfo.isInitialized()) {
+            currentRegistration = registerAgent();
+        } else if (!refreshCallbacksEnabled) {
+            currentRegistration = activateRegistrationRefresh();
+        } else {
+            currentRegistration = refreshRegistration();
+        }
+    }
+
+    private CompletableFuture<Void> registerAgent() {
+        return webServer
+                .generateCredentials(callback)
+                .thenCompose(v -> cryostat.serverHealth())
+                .thenCompose(
+                        health -> {
+                            Semver cryostatSemver = health.cryostatSemver();
+                            log.debug(
+                                    "Connected to Cryostat server: version {} , build {}",
+                                    cryostatSemver,
+                                    health.buildInfo().git().hash());
+                            try {
+                                VersionInfo version = VersionInfo.load();
+                                if (!version.validateServerVersion(cryostatSemver)) {
+                                    log.warn(
+                                            "Cryostat server version {} is outside of expected"
+                                                    + " range [{}, {})",
                                             cryostatSemver,
-                                            health.buildInfo().git().hash());
-                                    try {
-                                        VersionInfo version = VersionInfo.load();
-                                        if (!version.validateServerVersion(cryostatSemver)) {
-                                            log.warn(
-                                                    "Cryostat server version {} is outside of"
-                                                            + " expected range [{}, {})",
-                                                    cryostatSemver,
-                                                    version.getServerMin(),
-                                                    version.getServerMax());
-                                        }
-                                    } catch (IOException ioe) {
-                                        log.error("Unable to read versions.properties file", ioe);
-                                    }
+                                            version.getServerMin(),
+                                            version.getServerMax());
+                                }
+                            } catch (IOException ioe) {
+                                log.error("Unable to read versions.properties file", ioe);
+                            }
 
-                                    try (var credentials = webServer.getCredentialsSnapshot()) {
-                                        Set<DiscoveryNode> selfNodes = defineSelf();
-                                        log.trace(
-                                                "registering and publishing self as {}",
-                                                selfNodes.stream()
-                                                        .map(n -> n.getTarget().getConnectUrl())
-                                                        .collect(Collectors.toList()));
-                                        return cryostat.register(callback, credentials, selfNodes);
-                                    } catch (UnknownHostException | URISyntaxException e) {
-                                        return CompletableFuture.failedFuture(e);
-                                    }
-                                })
-                        .whenComplete((plugin, t) -> webServer.clearPlaintextCredentials())
-                        .handle(
-                                (plugin, t) -> {
-                                    if (t != null) {
-                                        return completeRegistrationFailure(t);
-                                    }
+                            try (var credentials = webServer.getCredentialsSnapshot()) {
+                                Set<DiscoveryNode> selfNodes = defineSelf();
+                                log.trace(
+                                        "registering and publishing self as {}",
+                                        selfNodes.stream()
+                                                .map(n -> n.getTarget().getConnectUrl())
+                                                .collect(Collectors.toList()));
+                                return cryostat.register(callback, credentials, selfNodes);
+                            } catch (UnknownHostException | URISyntaxException e) {
+                                return CompletableFuture.failedFuture(e);
+                            }
+                        })
+                .whenComplete((plugin, t) -> webServer.clearPlaintextCredentials())
+                .handle(
+                        (plugin, t) -> {
+                            if (t != null) {
+                                return completeRegistrationFailure(t);
+                            }
+                            if (!isValidRegistration(plugin)) {
+                                return completeRegistrationFailure(
+                                        new IllegalStateException(
+                                                "agent registration returned incomplete plugin"
+                                                        + " information"));
+                            }
 
-                                    webServer.commitPendingCredentials();
-                                    boolean previouslyRegistered = this.pluginInfo.isInitialized();
-                                    this.pluginInfo.copyFrom(plugin);
-                                    log.debug("Registered as {}", this.pluginInfo.getId());
+                            // Cryostat has acknowledged these credentials, so promote them before
+                            // enabling its generic refresh callbacks. If that second request fails,
+                            // the acknowledged credentials must remain valid.
+                            webServer.commitPendingCredentials();
+                            this.pluginInfo.copyFrom(plugin);
+                            this.refreshCallbacksEnabled = false;
+                            log.debug("Registered as {}", this.pluginInfo.getId());
+                            completeRegistrationSuccess();
+                            notify(RegistrationEvent.State.REGISTERED);
+                            notify(RegistrationEvent.State.PUBLISHED);
 
-                                    lastSuccessfulRegistration = Instant.now();
-                                    consecutiveFailures.set(0);
+                            // The Agent endpoint initially schedules GET health pings. Registering
+                            // the same callback through the generic endpoint reuses this plugin and
+                            // changes its existing job to POST token-refresh prompts without
+                            // replacing credentials or publishing discovery nodes.
+                            return activateRegistrationRefresh();
+                        })
+                .thenCompose(f -> f);
+    }
 
-                                    if (circuitState == CircuitState.HALF_OPEN) {
-                                        log.debug("Circuit breaker transitioning to CLOSED");
-                                    }
-                                    circuitState = CircuitState.CLOSED;
+    private CompletableFuture<Void> activateRegistrationRefresh() {
+        return cryostat.activateRegistrationRefresh(callback)
+                .handle(
+                        (plugin, t) -> {
+                            if (t != null) {
+                                if (isRetryableRefreshFailure(t)) {
+                                    return completeRefreshFailure(t);
+                                }
+                                return completeRegistrationFailure(t);
+                            }
+                            if (!isValidRefresh(plugin)) {
+                                return completeRegistrationFailure(
+                                        new IllegalStateException(
+                                                "registration refresh activation returned"
+                                                        + " unexpected plugin information"));
+                            }
 
-                                    log.debug(
-                                            "Registration successful at {}, next attempt"
-                                                    + " allowed after {}",
-                                            lastSuccessfulRegistration,
-                                            lastSuccessfulRegistration.plus(minCooldownDuration));
+                            this.pluginInfo.setToken(plugin.getToken());
+                            this.refreshCallbacksEnabled = true;
+                            log.debug(
+                                    "Enabled registration refresh callbacks for {}",
+                                    this.pluginInfo.getId());
+                            completeRegistrationSuccess();
+                            notify(RegistrationEvent.State.REFRESHED);
+                            return CompletableFuture.<Void>completedFuture(null);
+                        })
+                .thenCompose(f -> f);
+    }
 
-                                    if (previouslyRegistered) {
-                                        notify(RegistrationEvent.State.REFRESHED);
-                                    } else {
-                                        notify(RegistrationEvent.State.REGISTERED);
-                                    }
-                                    notify(RegistrationEvent.State.PUBLISHED);
-                                    return CompletableFuture.<Void>completedFuture(null);
-                                })
-                        .thenCompose(f -> f);
+    private CompletableFuture<Void> refreshRegistration() {
+        return cryostat.refreshRegistration(callback, pluginInfo)
+                .handle(
+                        (plugin, t) -> {
+                            if (t != null) {
+                                if (isRetryableRefreshFailure(t)) {
+                                    return completeRefreshFailure(t);
+                                }
+                                return completeRegistrationFailure(t);
+                            }
+                            if (!isValidRefresh(plugin)) {
+                                return completeRegistrationFailure(
+                                        new IllegalStateException(
+                                                "registration refresh returned no token"));
+                            }
+
+                            this.pluginInfo.setToken(plugin.getToken());
+                            log.debug(
+                                    "Refreshed registration token for {}", this.pluginInfo.getId());
+                            completeRegistrationSuccess();
+                            notify(RegistrationEvent.State.REFRESHED);
+                            return CompletableFuture.<Void>completedFuture(null);
+                        })
+                .thenCompose(f -> f);
+    }
+
+    private boolean isValidRegistration(PluginInfo plugin) {
+        return plugin != null
+                && StringUtils.isNotBlank(plugin.getId())
+                && StringUtils.isNotBlank(plugin.getToken());
+    }
+
+    private boolean isValidRefresh(PluginInfo plugin) {
+        return isValidRegistration(plugin) && Objects.equals(pluginInfo.getId(), plugin.getId());
+    }
+
+    private boolean isRetryableRefreshFailure(Throwable t) {
+        Throwable cause = t;
+        while (cause instanceof CompletionException && cause.getCause() != null) {
+            cause = cause.getCause();
+        }
+        if (!(cause instanceof HttpException)) {
+            return true;
+        }
+        HttpException httpException = (HttpException) cause;
+        int statusCode = httpException.statusCode();
+        return statusCode == 408 || statusCode == 425 || statusCode == 429 || statusCode >= 500;
+    }
+
+    private void completeRegistrationSuccess() {
+        lastSuccessfulRegistration = Instant.now();
+        consecutiveFailures.set(0);
+
+        if (circuitState == CircuitState.HALF_OPEN) {
+            log.debug("Circuit breaker transitioning to CLOSED");
+        }
+        circuitState = CircuitState.CLOSED;
+
+        log.debug(
+                "Registration successful at {}, next attempt allowed after {}",
+                lastSuccessfulRegistration,
+                lastSuccessfulRegistration.plus(minCooldownDuration));
     }
 
     private CompletableFuture<Void> completeRegistrationFailure(Throwable t) {
         webServer.discardPendingCredentials();
+        this.refreshCallbacksEnabled = false;
         this.pluginInfo.clear();
 
         int failures = consecutiveFailures.incrementAndGet();
         long backoffMs = calculateBackoffMs();
         Duration cooldown = Duration.ofMillis(backoffMs);
 
-        if (circuitState == CircuitState.CLOSED && failures >= circuitBreakerThreshold) {
-            log.warn("Circuit breaker transitioning to OPEN after {} failures", failures);
-            circuitState = CircuitState.OPEN;
-            circuitOpenedAt = Instant.now();
-        } else if (circuitState == CircuitState.HALF_OPEN) {
-            log.warn("Circuit breaker transitioning back to OPEN");
-            circuitState = CircuitState.OPEN;
-            circuitOpenedAt = Instant.now();
-        }
+        updateCircuitAfterFailure(failures);
 
         log.error(
                 "Registration failure (attempt {}, circuit state: {}, cooldown: {})",
@@ -394,6 +487,45 @@ public class Registration {
             enterCooldown(cooldown);
         }
         return CompletableFuture.completedFuture(null);
+    }
+
+    private void updateCircuitAfterFailure(int failures) {
+        if (circuitState == CircuitState.CLOSED && failures >= circuitBreakerThreshold) {
+            log.warn("Circuit breaker transitioning to OPEN after {} failures", failures);
+            circuitState = CircuitState.OPEN;
+            circuitOpenedAt = Instant.now();
+        } else if (circuitState == CircuitState.HALF_OPEN) {
+            log.warn("Circuit breaker transitioning back to OPEN");
+            circuitState = CircuitState.OPEN;
+            circuitOpenedAt = Instant.now();
+        }
+    }
+
+    private CompletableFuture<Void> completeRefreshFailure(Throwable t) {
+        int failures = consecutiveFailures.incrementAndGet();
+        long backoffMs = calculateRefreshBackoffMs();
+
+        updateCircuitAfterFailure(failures);
+        log.warn(
+                "Registration refresh failure (attempt {}, circuit state: {}, retry in {} ms)",
+                failures,
+                circuitState,
+                backoffMs,
+                t);
+        executor.schedule(
+                () -> notify(RegistrationEvent.State.REFRESHING), backoffMs, TimeUnit.MILLISECONDS);
+        return CompletableFuture.completedFuture(null);
+    }
+
+    private long calculateRefreshBackoffMs() {
+        int failures = consecutiveFailures.get();
+        double jitter = 1.0 + (random.nextDouble() * 2 - 1) * retryBackoffJitterFactor;
+        long backoff =
+                (long)
+                        (registrationRetryMs
+                                * Math.pow(backoffMultiplier, Math.min(failures - 1, 10)));
+        backoff = Math.min(backoff, maxBackoffMs);
+        return (long) (backoff * jitter);
     }
 
     private long calculateBackoffMs() {
@@ -609,6 +741,7 @@ public class Registration {
                                         "Deregistered from Cryostat discovery plugin [{}]",
                                         this.pluginInfo.getId());
                             }
+                            this.refreshCallbacksEnabled = false;
                             this.pluginInfo.clear();
                             notify(RegistrationEvent.State.UNREGISTERED);
                             return null;
