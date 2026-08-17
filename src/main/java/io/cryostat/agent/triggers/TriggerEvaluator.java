@@ -146,7 +146,7 @@ public class TriggerEvaluator {
         return t.getID();
     }
 
-    private void refresh() {
+    private synchronized void refresh() {
         this.stop();
         if (this.triggers.isEmpty()) {
             return;

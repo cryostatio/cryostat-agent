@@ -258,8 +258,6 @@ public abstract class ConfigModule {
             "cryostat.agent.smart-trigger.evaluation.period-ms";
     public static final String CRYOSTAT_AGENT_SMART_TRIGGER_CONFIG_PATH =
             "cryostat.agent.smart-trigger.config.path";
-    public static final String CRYOSTAT_AGENT_SMART_TRIGGER_BETA_FORMAT =
-            "cryostat.agent.smart-trigger.beta.format";
 
     public static final String CRYOSTAT_AGENT_CALLBACK_SCHEME = "cryostat.agent.callback.scheme";
     public static final String CRYOSTAT_AGENT_CALLBACK_HOST_NAME =
