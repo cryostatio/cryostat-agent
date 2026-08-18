@@ -87,7 +87,6 @@ class TriggerParserTest {
         String in =
                 "[{"
                         + "\"condition\" : \"ProcessCpuLoad>0.2\","
-                        + "\"duration\" : \"\","
                         + "\"recordingTemplate\" : \"profile\""
                         + "}]";
 
@@ -125,6 +124,28 @@ class TriggerParserTest {
         Mockito.when(helper.isValidTemplate(Mockito.anyString())).thenReturn(true);
         String in =
                 "[{\"condition\":\"ProcessCpuLoad>0.2\",\"duration\":0,\"recordingTemplate\":\"profile\"}]";
+        List<SmartTrigger> out = parser.parseFromJson(in);
+
+        MatcherAssert.assertThat(out, Matchers.hasSize(1));
+        SmartTrigger trigger = out.get(0);
+
+        MatcherAssert.assertThat(trigger.getExpression(), Matchers.equalTo("ProcessCpuLoad>0.2"));
+        MatcherAssert.assertThat(trigger.getRecordingTemplateName(), Matchers.equalTo("profile"));
+        MatcherAssert.assertThat(trigger.getDurationConstraint(), Matchers.emptyString());
+        MatcherAssert.assertThat(
+                trigger.getTriggerCondition(), Matchers.equalTo("ProcessCpuLoad>0.2"));
+        MatcherAssert.assertThat(trigger.getState(), Matchers.equalTo(TriggerState.NEW));
+        MatcherAssert.assertThat(
+                trigger.getTargetDuration(), Matchers.equalTo(Duration.ofSeconds(0)));
+        MatcherAssert.assertThat(
+                trigger.getTimeConditionFirstMet().getTime(), Matchers.equalTo(0L));
+    }
+
+    @Test
+    void testSingleSimpleTriggerWithoutSpecifiedDuration() {
+        Mockito.when(helper.isValidTemplate(Mockito.anyString())).thenReturn(true);
+        String in =
+                "[{\"condition\":\"ProcessCpuLoad>0.2\",\"recordingTemplate\":\"profile\"}]";
         List<SmartTrigger> out = parser.parseFromJson(in);
 
         MatcherAssert.assertThat(out, Matchers.hasSize(1));
