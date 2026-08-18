@@ -94,6 +94,12 @@ public class TriggerEvaluator {
     // for requests that come in later through the api since existing triggers
     // are already stored.
     public List<String> append(SmartTriggerReq[] reqs) {
+        for (SmartTriggerReq req : reqs) {
+            if (!parser.isValid(req)) {
+                log.warn("Invalid Trigger definition");
+                return Collections.emptyList();
+            }
+        }
         this.stop();
         var returnVal = new ArrayList<String>();
         for (SmartTriggerReq req : reqs) {

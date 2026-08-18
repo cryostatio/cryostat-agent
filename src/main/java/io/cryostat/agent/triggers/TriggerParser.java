@@ -18,7 +18,6 @@ package io.cryostat.agent.triggers;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Duration;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -122,7 +121,8 @@ public class TriggerParser {
             try {
                 return new SmartTrigger(
                         UUID.randomUUID().toString(),
-                        constructExprFromParams(req),
+                        req.getCondition(),
+                        req.getDuration(),
                         req.getRecordingTemplate());
             } catch (DateTimeParseException dtpe) {
                 log.error("Failed to parse trigger duration constraint", dtpe);
@@ -170,22 +170,5 @@ public class TriggerParser {
             return false;
         }
         return true;
-    }
-
-    // The CEL internal representation doesn't need to be exposed
-    // to users, we can construct the expression to evaulate
-    // from a simple set of properties.
-    private String constructExprFromParams(SmartTriggerReq req) {
-        return req.getCondition() + constructDurationExprFromRequest(req);
-    }
-
-    // Blank Duration indicates the trigger should fire immediately
-    // when the condition is met.
-    private String constructDurationExprFromRequest(SmartTriggerReq req) {
-        return req.getDuration() == 0
-                ? ""
-                : ";TargetDuration>duration(\""
-                        + Duration.ofMillis(req.getDuration()).toSeconds()
-                        + "s\")";
     }
 }
