@@ -97,6 +97,8 @@ The general form of a Smart Trigger expression is as follows:
 }
 ```
 
+The duration field may be omitted or set to 0 if the Smart Trigger should fire immediately when the condition is met.
+
 Either the filename or label XML tag of the `${templateName}.jfc` may be used to specify the event template to use. For
 example, the JDK distribution ships with a `default.jfc` file containing the top-level
 `<configuration label="Continuous">` element. This template may be specified in the Smart Trigger definition as any of
