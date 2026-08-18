@@ -18,7 +18,6 @@ package io.cryostat.agent.remote;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.util.ArrayList;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -68,14 +67,10 @@ public class SmartTriggersContext implements RemoteContext {
                     break;
                 case "POST":
                     try (InputStream body = exchange.getRequestBody()) {
-                        SmartTriggerReq req = mapper.readValue(body, SmartTriggerReq.class);
-                        var triggerIds = new ArrayList<String>();
-                        // Internally the duration expression still follows
-                        // a strict format for CEL, we need to reconstruct this here
-                        triggerIds.add(evaluator.append(req));
+                        SmartTriggerReq[] reqs = mapper.readValue(body, SmartTriggerReq[].class);
                         exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
                         try (OutputStream responseStream = exchange.getResponseBody()) {
-                            mapper.writeValue(responseStream, triggerIds);
+                            mapper.writeValue(responseStream, evaluator.append(reqs));
                         }
                     } catch (Exception e) {
                         log.warn("Smart trigger serialization failure", e);
