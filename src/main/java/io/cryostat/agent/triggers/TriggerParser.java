@@ -35,15 +35,13 @@ import io.cryostat.libcryostat.triggers.SmartTrigger;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
-import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class TriggerParser {
 
-    private static final String EXPRESSION_PATTERN_STRING =
-            "\\[(.*(&&)*|(\\|\\|)*)\\]~([\\w\\-]+)(?:\\.jfc)?";
-    private static final Pattern EXPRESSION_PATTERN = Pattern.compile(EXPRESSION_PATTERN_STRING);
+    private static final String TEMPLATE_PATTERN_STRING = "([\\w\\-]+)(?:\\.jfc)?";
+    private static final Pattern TEMPLATE_PATTERN = Pattern.compile(TEMPLATE_PATTERN_STRING);
     private final FlightRecorderHelper flightRecorderHelper;
     private final ObjectMapper mapper;
     private final Optional<Path> triggerPath;
@@ -98,51 +96,43 @@ public class TriggerParser {
                 && Files.isDirectory(triggerPath.get());
     }
 
-    public List<SmartTrigger> parse(SmartTriggerReq req) {
-        return parse(constructDefinitionFromParams(req));
-    }
-
-    public List<SmartTrigger> parse(String str) {
-        List<SmartTrigger> triggers = new ArrayList<>();
-        if (StringUtils.isBlank(str)) {
-            return triggers;
-        }
-
-        String[] expressions = str.split(",");
-        for (String s : expressions) {
-            s = s.replaceAll("\\s", "");
-            Matcher m = EXPRESSION_PATTERN.matcher(s);
-            if (m.matches()) {
-                String constraintString = m.group(1);
-                String templateName = m.group(4);
-                if (flightRecorderHelper.isValidTemplate(templateName)) {
-                    try {
-                        SmartTrigger trigger =
-                                new SmartTrigger(
-                                        UUID.randomUUID().toString(),
-                                        constraintString,
-                                        templateName);
-                        triggers.add(trigger);
-                    } catch (DateTimeParseException dtpe) {
-                        log.error("Failed to parse trigger duration constraint", dtpe);
-                    }
-                } else {
-                    log.warn("Template " + templateName + " not found. Skipping trigger.");
-                }
+    public SmartTrigger parse(SmartTriggerReq req) {
+        try {
+            if (Objects.isNull(req)) {
+                log.warn("Trigger request was null");
             }
-        }
-        return triggers;
-    }
-
-    public boolean isValid(String definition) {
-        String[] expressions = definition.split(",");
-        for (String s : expressions) {
-            Matcher m = EXPRESSION_PATTERN.matcher(s);
+            // non-provided fields will already be caught by the
+            // ObjectMapper, check their values are valid
+            var template = req.getRecordingTemplate().replaceAll("\\s", "");
+            Matcher m = TEMPLATE_PATTERN.matcher(template);
             if (!m.matches()) {
-                return false;
+                log.warn("Malformed template: {}", req.getRecordingTemplate());
+                return null;
             }
+            req.setRecordingTemplate(m.group(1));
+            if (!isValid(req)) {
+                // Log and skip invalid triggers
+                log.warn(
+                        "Trigger failed validation: {} {} {}",
+                        req.getCondition(),
+                        req.getDuration(),
+                        req.getRecordingTemplate());
+                return null;
+            }
+            try {
+                return new SmartTrigger(
+                        UUID.randomUUID().toString(),
+                        constructExprFromParams(req),
+                        req.getRecordingTemplate());
+            } catch (DateTimeParseException dtpe) {
+                log.error("Failed to parse trigger duration constraint", dtpe);
+            }
+        } catch (Exception e) {
+            log.warn("Exception thrown while parsing triggers");
+            log.warn(e.toString());
+            return null;
         }
-        return true;
+        return null;
     }
 
     public List<SmartTrigger> parseFromJson(String req) {
@@ -150,26 +140,12 @@ public class TriggerParser {
             SmartTriggerReq[] reqs = mapper.readValue(req, SmartTriggerReq[].class);
             var returnVal = new ArrayList<SmartTrigger>();
             for (SmartTriggerReq r : reqs) {
-                if (Objects.isNull(r)) {
-                    log.warn("Trigger request was null");
+                var parsedRequest = parse(r);
+                if (Objects.isNull(parsedRequest)) {
+                    log.warn("Trigger request failed to parse");
                     continue;
                 }
-                // non-provided fields will already be caught by the
-                // ObjectMapper, check their values are valid
-                if (!isValid(r)) {
-                    // Log and skip invalid triggers
-                    log.warn(
-                            "Trigger failed validation: {} {} {}",
-                            r.getCondition(),
-                            r.getDuration(),
-                            r.getRecordingTemplate());
-                    continue;
-                }
-                try {
-                    returnVal.addAll(parse(constructDefinitionFromParams(r)));
-                } catch (DateTimeParseException dtpe) {
-                    log.error("Failed to parse trigger duration constraint", dtpe);
-                }
+                returnVal.add(parsedRequest);
             }
             return returnVal;
         } catch (Exception e) {
@@ -201,10 +177,6 @@ public class TriggerParser {
     // from a simple set of properties.
     private String constructExprFromParams(SmartTriggerReq req) {
         return req.getCondition() + constructDurationExprFromRequest(req);
-    }
-
-    private String constructDefinitionFromParams(SmartTriggerReq req) {
-        return "[" + constructExprFromParams(req) + "]~" + req.getRecordingTemplate();
     }
 
     // Blank Duration indicates the trigger should fire immediately

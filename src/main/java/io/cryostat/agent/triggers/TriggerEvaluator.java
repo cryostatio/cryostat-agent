@@ -93,8 +93,8 @@ public class TriggerEvaluator {
     // start(args) will re-parse the triggers directory, we don't need to do that
     // for requests that come in later through the api since existing triggers
     // are already stored.
-    public List<String> append(SmartTriggerReq req) {
-        // Sanity check the trigger definitions before we stop/start the evaluation
+    public String append(SmartTriggerReq req) {
+        // Sanity check the trigger definition before we stop/start the evaluation
         if (!parser.isValid(req)) {
             log.warn(
                     "Invalid Trigger definition {}, {}, {}",
@@ -103,22 +103,14 @@ public class TriggerEvaluator {
                     req.getRecordingTemplate());
             throw new IllegalArgumentException();
         }
-        ArrayList<String> uuids = new ArrayList<String>();
         this.stop();
-        parser.parse(req)
-                .forEach(
-                        (SmartTrigger t) -> {
-                            String uuid = registerTrigger(t);
-                            if (Objects.isNull(uuid)) {
-                                log.warn(
-                                        "Duplicate smart trigger definition: {0}",
-                                        t.getExpression());
-                            } else {
-                                uuids.add(uuid);
-                            }
-                        });
+        var trigger = parser.parse(req);
+        String uuid = registerTrigger(trigger);
+        if (Objects.isNull(uuid)) {
+            log.warn("Duplicate smart trigger definition: {0}", trigger.getExpression());
+        }
         this.refresh();
-        return uuids;
+        return uuid;
     }
 
     public boolean remove(String uuid) {

@@ -76,7 +76,8 @@ class TriggerParserTest {
     @NullSource
     void testEmptyCases(List<String> args) {
         MatcherAssert.assertThat(
-                parser.parse(args == null ? null : String.join(",", args.toArray(new String[0]))),
+                parser.parseFromJson(
+                        args == null ? null : String.join(",", args.toArray(new String[0]))),
                 Matchers.equalTo(List.of()));
     }
 
@@ -122,8 +123,9 @@ class TriggerParserTest {
     @Test
     void testSingleSimpleTrigger() {
         Mockito.when(helper.isValidTemplate(Mockito.anyString())).thenReturn(true);
-        String in = "[ProcessCpuLoad>0.2]~profile";
-        List<SmartTrigger> out = parser.parse(in);
+        String in =
+                "[{\"condition\":\"ProcessCpuLoad>0.2\",\"duration\":0,\"recordingTemplate\":\"profile\"}]";
+        List<SmartTrigger> out = parser.parseFromJson(in);
 
         MatcherAssert.assertThat(out, Matchers.hasSize(1));
         SmartTrigger trigger = out.get(0);
@@ -143,8 +145,9 @@ class TriggerParserTest {
     @Test
     void testSingleComplexTrigger() {
         Mockito.when(helper.isValidTemplate(Mockito.anyString())).thenReturn(true);
-        String in = "[ProcessCpuLoad>0.2;TargetDuration>duration(\"30s\")]~profile";
-        List<SmartTrigger> out = parser.parse(in);
+        String in =
+                "[{\"condition\":\"ProcessCpuLoad>0.2\",\"duration\":30000,\"recordingTemplate\":\"profile\"}]";
+        List<SmartTrigger> out = parser.parseFromJson(in);
 
         MatcherAssert.assertThat(out, Matchers.hasSize(1));
         SmartTrigger trigger = out.get(0);
@@ -152,31 +155,6 @@ class TriggerParserTest {
         MatcherAssert.assertThat(
                 trigger.getExpression(),
                 Matchers.equalTo("ProcessCpuLoad>0.2;TargetDuration>duration(\"30s\")"));
-        MatcherAssert.assertThat(trigger.getRecordingTemplateName(), Matchers.equalTo("profile"));
-        MatcherAssert.assertThat(
-                trigger.getDurationConstraint(),
-                Matchers.equalTo("TargetDuration>duration(\"30s\")"));
-        MatcherAssert.assertThat(
-                trigger.getTriggerCondition(), Matchers.equalTo("ProcessCpuLoad>0.2"));
-        MatcherAssert.assertThat(trigger.getState(), Matchers.equalTo(TriggerState.NEW));
-        MatcherAssert.assertThat(
-                trigger.getTargetDuration(), Matchers.equalTo(Duration.ofSeconds(30)));
-        MatcherAssert.assertThat(
-                trigger.getTimeConditionFirstMet().getTime(), Matchers.equalTo(0L));
-    }
-
-    @Test
-    void testSingleComplexTriggerSingleQuoted() {
-        Mockito.when(helper.isValidTemplate(Mockito.anyString())).thenReturn(true);
-        String in = "[ProcessCpuLoad>0.2;TargetDuration>duration('30s')]~profile";
-        List<SmartTrigger> out = parser.parse(in);
-
-        MatcherAssert.assertThat(out, Matchers.hasSize(1));
-        SmartTrigger trigger = out.get(0);
-
-        MatcherAssert.assertThat(
-                trigger.getExpression(),
-                Matchers.equalTo("ProcessCpuLoad>0.2;TargetDuration>duration('30s')"));
         MatcherAssert.assertThat(trigger.getRecordingTemplateName(), Matchers.equalTo("profile"));
         MatcherAssert.assertThat(
                 trigger.getDurationConstraint(),
@@ -193,15 +171,16 @@ class TriggerParserTest {
     @Test
     void testSingleComplexTriggerWithWhitespace() {
         Mockito.when(helper.isValidTemplate(Mockito.anyString())).thenReturn(true);
-        String in = "[ProcessCpuLoad > 0.2 ; TargetDuration > duration(\"30s\")]~profile";
-        List<SmartTrigger> out = parser.parse(in);
+        String in =
+                "[{\"condition\":\"ProcessCpuLoad > 0.2\", \"duration\":30000,"
+                        + " \"recordingTemplate\":\"profile\"}]";
+        List<SmartTrigger> out = parser.parseFromJson(in);
 
         MatcherAssert.assertThat(out, Matchers.hasSize(1));
         SmartTrigger trigger = out.get(0);
-
         MatcherAssert.assertThat(
                 trigger.getExpression(),
-                Matchers.equalTo("ProcessCpuLoad>0.2;TargetDuration>duration(\"30s\")"));
+                Matchers.equalTo("ProcessCpuLoad > 0.2;TargetDuration>duration(\"30s\")"));
         MatcherAssert.assertThat(trigger.getRecordingTemplateName(), Matchers.equalTo("profile"));
         MatcherAssert.assertThat(
                 trigger.getDurationConstraint(),
@@ -219,10 +198,12 @@ class TriggerParserTest {
     void testMultipleComplexTriggerWithWhitespace() {
         Mockito.when(helper.isValidTemplate(Mockito.anyString())).thenReturn(true);
         String in =
-                "[ProcessCpuLoad>0.2 ; TargetDuration>duration(\"30s\")]~profile,"
-                        + " [(HeapMemoryUsagePercent > 50 && NonHeapMemoryUsage > 1) ||"
-                        + " SystemCpuLoad > 4 ; TargetDuration > duration(\"2m\")]~default.jfc";
-        List<SmartTrigger> out = parser.parse(in);
+                "[{\"condition\":\"ProcessCpuLoad>0.2\", \"duration\":30000,"
+                    + " \"recordingTemplate\":\"profile\"},"
+                    + " {\"condition\":\"(HeapMemoryUsagePercent > 50 && NonHeapMemoryUsage > 1) ||"
+                    + " SystemCpuLoad > 4\",\"duration\":120000,"
+                    + " \"recordingTemplate\":\"default.jfc\"}]";
+        List<SmartTrigger> out = parser.parseFromJson(in);
 
         MatcherAssert.assertThat(out, Matchers.hasSize(2));
 
@@ -246,11 +227,12 @@ class TriggerParserTest {
         MatcherAssert.assertThat(
                 trigger2.getExpression(),
                 Matchers.equalTo(
-                        "(HeapMemoryUsagePercent>50&&NonHeapMemoryUsage>1)||SystemCpuLoad>4;TargetDuration>duration(\"2m\")"));
+                        "(HeapMemoryUsagePercent > 50 && NonHeapMemoryUsage > 1) || SystemCpuLoad >"
+                                + " 4;TargetDuration>duration(\"120s\")"));
         MatcherAssert.assertThat(trigger2.getRecordingTemplateName(), Matchers.equalTo("default"));
         MatcherAssert.assertThat(
                 trigger2.getDurationConstraint(),
-                Matchers.equalTo("TargetDuration>duration(\"2m\")"));
+                Matchers.equalTo("TargetDuration>duration(\"120s\")"));
         MatcherAssert.assertThat(
                 trigger2.getTriggerCondition(),
                 Matchers.equalTo(
@@ -268,10 +250,12 @@ class TriggerParserTest {
                 .thenReturn(true)
                 .thenReturn(false);
         String in =
-                "[ProcessCpuLoad>0.2 ; TargetDuration>duration(\"30s\")]~profile,"
-                        + " [(HeapMemoryUsagePercent > 50 && NonHeapMemoryUsage > 1) ||"
-                        + " SystemCpuLoad > 4 ; TargetDuration > duration(\"2m\")]~default.jfc";
-        List<SmartTrigger> out = parser.parse(in);
+                "[{\"condition\":\"ProcessCpuLoad>0.2\","
+                        + " \"duration\":30000,\"recordingTemplate\":\"profile\"},{"
+                        + " \"condition\":\"(HeapMemoryUsagePercent > 50 && NonHeapMemoryUsage > 1)"
+                        + " ||SystemCpuLoad > 4\",\"duration\":120000,"
+                        + "\"recordingTemplate\":\"default.jfc\"}]";
+        List<SmartTrigger> out = parser.parseFromJson(in);
 
         MatcherAssert.assertThat(out, Matchers.hasSize(1));
 
@@ -294,9 +278,11 @@ class TriggerParserTest {
 
     @Test
     void testTriggerValidation() {
-        assertEquals(false, parser.isValid("foo"));
-        assertEquals(false, parser.isValid("foo~bar"));
-        assertEquals(true, parser.isValid("[ProcessCpuLoad>0.2]~profile"));
+        Mockito.when(helper.isValidTemplate("profile")).thenReturn(true);
+        Mockito.when(helper.isValidTemplate("bar")).thenReturn(false);
+        assertEquals(false, parser.isValid(new SmartTriggerReq(null, 0, null)));
+        assertEquals(false, parser.isValid(new SmartTriggerReq("foo", 0, "bar")));
+        assertEquals(true, parser.isValid(new SmartTriggerReq("ProcessCpuLoad>0.2", 0, "profile")));
     }
 
     @Test
