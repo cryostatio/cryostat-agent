@@ -71,8 +71,6 @@ In this dynamic attachment mode, the agent [configuration](#configuration) optio
 arguments to the agent launcher - if they are passed *before* the `-jar` then they will be used by the `java` process
 as system properties on the agent launcher itself, rather than having them passed on to the injected instances.
 
-[Smart triggers](#smart-triggers) can be specified using `--smartTrigger`.
-
 The optional PID is a positional argument and may be ignored or set to: `0` to request that the Agent launcher attempt
 to find exactly one candidate JVM application to dynamically attach to, exiting if zero or more than one applications
 are found; `*` to request that the Agent launch attempt to dynamically attach to every JVM application it finds; or a
@@ -93,8 +91,13 @@ on a set of constraints specified by the user.
 The general form of a Smart Trigger expression is as follows:
 
 ```
-[constraint1(&&/||)constraint2...constraintN;durationConstraint]~recordingTemplateNameOrLabel
+{ "condition": "constraint1(&&/||)constraint2...constraintN" ,
+  "duration": "number of milliseconds" ,
+  "recordingTemplate": "recordingTemplateNameOrLabel"
+}
 ```
+
+The duration field may be omitted or set to 0 if the Smart Trigger should fire immediately when the condition is met.
 
 Either the filename or label XML tag of the `${templateName}.jfc` may be used to specify the event template to use. For
 example, the JDK distribution ships with a `default.jfc` file containing the top-level
@@ -104,51 +107,46 @@ example, the JDK distribution ships with a `default.jfc` file containing the top
 An example for listening to CPU Usage and starting a recording using the Profiling template when it exceeds 0.2%:
 
 ```
-[ProcessCpuLoad>0.2]~profile
+{
+  "condition": "ProcessCpuLoad>0.2",
+  "duration": "0",
+  "recordingTemplate": "profile"
+}
 ```
 
 An example for watching for the Thread Count to exceed 20 for longer than 10 seconds and starting a recording using the
 Continuous template:
 
 ```
-[ThreadCount>20;TargetDuration>duration("10s")]~Continuous
+{
+  "condition": "ThreadCount>20",
+  "duration": "10000",
+  "recordingTemplate": "Continuous"
+}
 ```
-
-The first part of the condition before the semicolon is a [Common Expression Language](https://github.com/google/cel-spec)
-expression for testing
-[various MBean metrics](https://github.com/cryostatio/cryostat-agent/blob/main/src/main/java/io/cryostat/agent/model/MBeanInfo.java)
-. The second part after the semicolon references a special variable, `TargetDuration`, which tracks the length of time
-that the first part of the condition has tested `true` for. This is converted to a `java.time.Duration` object and
-compared to `duration("10s")`, a special construct that is also converted into a `java.time.Duration` object
-representing the time threshold before this trigger activates. The `duration()` construct requires a `String` argument,
-which may be enclosed in single `'` or double `"` quotation marks.
 
 Smart Triggers may define more complex conditions that test multiple metrics:
 
 ```
-[(ProcessCpuLoad>0.5||SystemCpuLoad>0.25)&&HeapMemoryUsagePercent>0.1;TargetDuration>duration('1m')]~Continuous
+{
+  "condition": "(ProcessCpuLoad>0.5||SystemCpuLoad>0.25)&&"HeapMemoryUsagePercent">0.1",
+  "duration": "60000",
+  "recordingTemplate": "Continuous"
+}
 ```
 
-These may be passed as an argument to the Cryostat Agent, for example:
+These may be passed as a [configuration property](#configuration):
 
 ```
-JAVA_OPTIONS="-javaagent:/deployments/app/cryostat-agent-${CRYOSTAT_AGENT_VERSION}.jar=-Dcryostat.agent.baseuri=http://cryostat.local![ProcessCpuLoad>0.2]~profile
-```
+CRYOSTAT_AGENT_SMART_TRIGGER_DEFINITIONS="[{\"condition\":\"ProcessCpuLoad>0.2\",\"duration\":\"60000\",\"recordingTemplate\":\"default.jfc\"}]"
 
-(note the '!' separator between system properties overrides and Smart Triggers)
-
-or as a [configuration property](#configuration):
-
-```
-CRYOSTAT_AGENT_SMART_TRIGGER_DEFINITIONS="[ProcessCpuLoad>0.2&&TargetDuration>duration(\"1m\")]~default.jfc"
-
--Dcryostat.agent.smart-trigger.definitions="[ProcessCpuLoad>0.2&&TargetDuration>duration(\"1m\")]~default.jfc"
+-Dcryostat.agent.smart-trigger.definitions="[{condition:\"ProcessCpuLoad>0.2\",\"duration\":\"60000\",\"recordingTemplate\":\"default.jfc\"}]"
 ```
 
 Multiple Smart Trigger definitions may be specified and separated by commas, for example:
 
 ```
-[ProcessCpuLoad>0.2]~profile,[ThreadCount>30]~Continuous
+[{\"condition\":\"ProcessCpuLoad>0.2\",duration:\"60000\",recordingTemplate:\"default.jfc\"},{\"condition\":\"ThreadCount>30\",\"duration\":\"120000\",\"recordingTemplate\":\"profiling\"}]
 ```
 
 **NOTE**: Smart Triggers are evaluated on a polling basis. The poll period is configurable (see list below). This means

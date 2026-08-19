@@ -18,11 +18,11 @@ package io.cryostat.agent.remote;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.util.List;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import io.cryostat.agent.triggers.SmartTriggerReq;
 import io.cryostat.agent.triggers.TriggerEvaluator;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -37,7 +37,7 @@ public class SmartTriggersContext implements RemoteContext {
 
     private Logger log = LoggerFactory.getLogger(getClass());
     private TriggerEvaluator evaluator;
-    private ObjectMapper mapper;
+    private final ObjectMapper mapper;
     private final SmallRyeConfig config;
 
     private static final String PATH = "/smart-triggers/";
@@ -60,7 +60,6 @@ public class SmartTriggersContext implements RemoteContext {
             }
             switch (mtd) {
                 case "GET":
-                    // Query the currently loaded smart triggers
                     exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
                     try (OutputStream response = exchange.getResponseBody()) {
                         mapper.writeValue(response, evaluator.getDefinitions());
@@ -68,11 +67,10 @@ public class SmartTriggersContext implements RemoteContext {
                     break;
                 case "POST":
                     try (InputStream body = exchange.getRequestBody()) {
-                        SmartTriggerRequest req = mapper.readValue(body, SmartTriggerRequest.class);
-                        List<String> respUUID = evaluator.append(req.definitions);
+                        SmartTriggerReq[] reqs = mapper.readValue(body, SmartTriggerReq[].class);
                         exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
                         try (OutputStream responseStream = exchange.getResponseBody()) {
-                            mapper.writeValue(responseStream, respUUID);
+                            mapper.writeValue(responseStream, evaluator.append(reqs));
                         }
                     } catch (Exception e) {
                         log.warn("Smart trigger serialization failure", e);
@@ -88,7 +86,7 @@ public class SmartTriggersContext implements RemoteContext {
                                     HttpStatus.SC_BAD_REQUEST, BODY_LENGTH_NONE);
                         }
                         String uuid = m.group(1);
-                        log.trace("Extracted uuid: " + uuid);
+                        log.trace("Extracted uuid: {}", uuid);
                         boolean resp = evaluator.remove(uuid);
                         if (!resp) {
                             exchange.sendResponseHeaders(
@@ -129,12 +127,5 @@ public class SmartTriggersContext implements RemoteContext {
     @Override
     public String path() {
         return PATH;
-    }
-
-    static class SmartTriggerRequest {
-
-        // This is fine as one string, the TriggerParser can handle it
-        // if there are multiple triggers defined.
-        public String definitions;
     }
 }

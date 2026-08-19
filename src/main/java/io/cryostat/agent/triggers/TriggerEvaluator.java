@@ -48,15 +48,13 @@ import org.slf4j.LoggerFactory;
 public class TriggerEvaluator {
 
     private final ScheduledExecutorService scheduler;
-    private final List<String> definitions;
+    private final String definitions;
     private final TriggerParser parser;
     private final ScriptHost scriptHost;
     private final FlightRecorderHelper flightRecorderHelper;
     private final Harvester harvester;
     private final long evaluationPeriodMs;
     private final ConcurrentHashMap<SmartTrigger, Script> conditionScriptCache =
-            new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<SmartTrigger, Script> durationScriptCache =
             new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, SmartTrigger> triggers = new ConcurrentHashMap<>();
     private Future<?> task;
@@ -67,14 +65,14 @@ public class TriggerEvaluator {
     public TriggerEvaluator(
             ScheduledExecutorService scheduler,
             ScriptHost scriptHost,
-            List<String> definitions,
+            String definitions,
             TriggerParser parser,
             FlightRecorderHelper flightRecorderHelper,
             Harvester harvester,
             long evaluationPeriodMs,
             CryostatClient client) {
         this.scheduler = scheduler;
-        this.definitions = Collections.unmodifiableList(definitions);
+        this.definitions = definitions;
         this.parser = parser;
         this.scriptHost = scriptHost;
         this.flightRecorderHelper = flightRecorderHelper;
@@ -83,39 +81,39 @@ public class TriggerEvaluator {
         this.client = client;
     }
 
-    public void start(String args) {
+    public void start() {
         this.stop();
         parser.parseFromFiles().forEach(this::registerTrigger);
-        parser.parse(args).forEach(this::registerTrigger);
-        parser.parse(String.join(",", definitions)).forEach(this::registerTrigger);
-        this.start();
+        parser.parseFromJson(definitions).forEach(this::registerTrigger);
+        this.refresh();
     }
 
     // start(args) will re-parse the triggers directory, we don't need to do that
     // for requests that come in later through the api since existing triggers
     // are already stored.
-    public List<String> append(String definitions) {
-        // Sanity check the trigger definitions before we stop/start the evaluation
-        if (!parser.isValid(definitions)) {
-            log.warn("Invalid Trigger definition {}", definitions);
-            throw new IllegalArgumentException();
+    public List<String> append(SmartTriggerReq[] reqs) {
+        for (SmartTriggerReq req : reqs) {
+            if (!parser.isValid(req)) {
+                log.warn("Invalid Trigger definition");
+                return Collections.emptyList();
+            }
         }
-        ArrayList<String> uuids = new ArrayList<String>();
         this.stop();
-        parser.parse(definitions)
-                .forEach(
-                        (SmartTrigger t) -> {
-                            String uuid = registerTrigger(t);
-                            if (Objects.isNull(uuid)) {
-                                log.warn(
-                                        "Duplicate smart trigger definition: {0}",
-                                        t.getExpression());
-                            } else {
-                                uuids.add(uuid);
-                            }
-                        });
-        this.start();
-        return uuids;
+        var returnVal = new ArrayList<String>();
+        for (SmartTriggerReq req : reqs) {
+            var trigger = parser.parse(req);
+            String uuid = registerTrigger(trigger);
+            if (Objects.isNull(uuid)) {
+                log.warn(
+                        "Duplicate smart trigger definition: {} {} {}",
+                        trigger.getTriggerCondition(),
+                        trigger.getTargetDuration().toMillis(),
+                        trigger.getRecordingTemplateName());
+            }
+            returnVal.add(uuid);
+        }
+        this.refresh();
+        return returnVal;
     }
 
     public boolean remove(String uuid) {
@@ -127,7 +125,7 @@ public class TriggerEvaluator {
 
         this.stop();
         this.triggers.remove(uuid);
-        this.start();
+        this.refresh();
         return true;
     }
 
@@ -145,7 +143,7 @@ public class TriggerEvaluator {
         return t.getID();
     }
 
-    private void start() {
+    private synchronized void refresh() {
         this.stop();
         if (this.triggers.isEmpty()) {
             return;
@@ -170,7 +168,6 @@ public class TriggerEvaluator {
                         log.trace("Completed {} , removing", t);
                         triggers.values().remove(t);
                         conditionScriptCache.remove(t);
-                        durationScriptCache.remove(t);
                         break;
                     case NEW:
                         // Simple Constraint, no duration specified so condition only needs to be
@@ -246,7 +243,7 @@ public class TriggerEvaluator {
                                             + " \"{}\"",
                                     recordingName,
                                     t.getRecordingTemplateName(),
-                                    t.getExpression());
+                                    t.getTriggerCondition());
                         });
     }
 
@@ -258,12 +255,12 @@ public class TriggerEvaluator {
                     buildConditionScript(trigger, conditionVars)
                             .execute(Boolean.class, conditionVars);
 
-            Map<String, Object> durationVar = Map.of("TargetDuration", targetDuration);
-            Boolean durationResult =
-                    Duration.ZERO.equals(targetDuration)
-                            ? Boolean.TRUE
-                            : buildDurationScript(trigger, durationVar)
-                                    .execute(Boolean.class, durationVar);
+            var durationResult = Boolean.FALSE;
+            if (targetDuration.equals(Duration.ZERO)) {
+                durationResult = Boolean.TRUE;
+            } else if (targetDuration.toMillis() >= trigger.getTargetDuration().toMillis()) {
+                durationResult = Boolean.TRUE;
+            }
 
             return Boolean.TRUE.equals(conditionResult) && Boolean.TRUE.equals(durationResult);
         } catch (Exception e) {
@@ -275,11 +272,6 @@ public class TriggerEvaluator {
     private Script buildConditionScript(SmartTrigger trigger, Map<String, Object> scriptVars) {
         return conditionScriptCache.computeIfAbsent(
                 trigger, t -> buildScript(t.getTriggerCondition(), scriptVars));
-    }
-
-    private Script buildDurationScript(SmartTrigger trigger, Map<String, Object> scriptVars) {
-        return durationScriptCache.computeIfAbsent(
-                trigger, t -> buildScript(t.getDurationConstraint(), scriptVars));
     }
 
     private Script buildScript(String script, Map<String, Object> scriptVars) {

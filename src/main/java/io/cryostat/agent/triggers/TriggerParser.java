@@ -20,9 +20,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.regex.Matcher;
@@ -32,22 +32,28 @@ import java.util.stream.Collectors;
 import io.cryostat.agent.FlightRecorderHelper;
 import io.cryostat.libcryostat.triggers.SmartTrigger;
 
-import org.apache.commons.lang3.StringUtils;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class TriggerParser {
 
-    private static final String EXPRESSION_PATTERN_STRING =
-            "\\[(.*(&&)*|(\\|\\|)*)\\]~([\\w\\-]+)(?:\\.jfc)?";
-    private static final Pattern EXPRESSION_PATTERN = Pattern.compile(EXPRESSION_PATTERN_STRING);
+    private static final String TEMPLATE_PATTERN_STRING = "([\\w\\-]+)(?:\\.jfc)?";
+    private static final Pattern TEMPLATE_PATTERN = Pattern.compile(TEMPLATE_PATTERN_STRING);
     private final FlightRecorderHelper flightRecorderHelper;
+    private final ObjectMapper mapper;
     private final Optional<Path> triggerPath;
     private final Logger log = LoggerFactory.getLogger(getClass());
 
-    public TriggerParser(FlightRecorderHelper flightRecorderHelper, Optional<Path> triggerPath) {
+    @SuppressFBWarnings("EI_EXPOSE_REP2")
+    public TriggerParser(
+            FlightRecorderHelper flightRecorderHelper,
+            Optional<Path> triggerPath,
+            ObjectMapper mapper) {
         this.flightRecorderHelper = flightRecorderHelper;
         this.triggerPath = triggerPath;
+        this.mapper = mapper;
     }
 
     public List<SmartTrigger> parseFromFiles() {
@@ -64,7 +70,7 @@ public class TriggerParser {
             return Files.walk(triggerPath.get())
                     .filter(Files::isRegularFile)
                     .filter(Files::isReadable)
-                    .flatMap(path -> createFromFile(path).stream())
+                    .flatMap(path -> parseJsonFromFiles(path).stream())
                     .collect(Collectors.toList());
         } catch (IOException e) {
             log.error(e.getMessage());
@@ -72,13 +78,10 @@ public class TriggerParser {
         }
     }
 
-    private List<SmartTrigger> createFromFile(Path path) {
+    private List<SmartTrigger> parseJsonFromFiles(Path path) {
         try {
             String triggerDefinitions = Files.readString(path);
-            return Arrays.asList(triggerDefinitions.split(System.lineSeparator())).stream()
-                    .map(String::strip)
-                    .flatMap(definition -> parse(definition).stream())
-                    .collect(Collectors.toList());
+            return parseFromJson(triggerDefinitions);
         } catch (IOException ioe) {
             log.error(ioe.getMessage());
             return Collections.emptyList();
@@ -92,45 +95,79 @@ public class TriggerParser {
                 && Files.isDirectory(triggerPath.get());
     }
 
-    public List<SmartTrigger> parse(String str) {
-        List<SmartTrigger> triggers = new ArrayList<>();
-        if (StringUtils.isBlank(str)) {
-            return triggers;
-        }
-
-        String[] expressions = str.split(",");
-        for (String s : expressions) {
-            s = s.replaceAll("\\s", "");
-            Matcher m = EXPRESSION_PATTERN.matcher(s);
-            if (m.matches()) {
-                String constraintString = m.group(1);
-                String templateName = m.group(4);
-                if (flightRecorderHelper.isValidTemplate(templateName)) {
-                    try {
-                        SmartTrigger trigger =
-                                new SmartTrigger(
-                                        UUID.randomUUID().toString(),
-                                        constraintString,
-                                        templateName);
-                        triggers.add(trigger);
-                    } catch (DateTimeParseException dtpe) {
-                        log.error("Failed to parse trigger duration constraint", dtpe);
-                    }
-                } else {
-                    log.warn("Template " + templateName + " not found. Skipping trigger.");
-                }
+    public SmartTrigger parse(SmartTriggerReq req) {
+        try {
+            if (Objects.isNull(req)) {
+                log.warn("Trigger request was null");
             }
+            // non-provided fields will already be caught by the
+            // ObjectMapper, check their values are valid
+            var template = req.getRecordingTemplate().replaceAll("\\s", "");
+            Matcher m = TEMPLATE_PATTERN.matcher(template);
+            if (!m.matches()) {
+                log.warn("Malformed template: {}", req.getRecordingTemplate());
+                return null;
+            }
+            req.setRecordingTemplate(m.group(1));
+            if (!isValid(req)) {
+                // Log and skip invalid triggers
+                log.warn(
+                        "Trigger failed validation: {} {} {}",
+                        req.getCondition(),
+                        req.getDuration(),
+                        req.getRecordingTemplate());
+                return null;
+            }
+            try {
+                return new SmartTrigger(
+                        UUID.randomUUID().toString(),
+                        req.getCondition(),
+                        req.getDuration(),
+                        req.getRecordingTemplate());
+            } catch (DateTimeParseException dtpe) {
+                log.error("Failed to parse trigger duration constraint", dtpe);
+            }
+        } catch (Exception e) {
+            log.warn("Exception thrown while parsing triggers");
+            log.warn(e.toString());
+            return null;
         }
-        return triggers;
+        return null;
     }
 
-    public boolean isValid(String definition) {
-        String[] expressions = definition.split(",");
-        for (String s : expressions) {
-            Matcher m = EXPRESSION_PATTERN.matcher(s);
-            if (!m.matches()) {
-                return false;
+    public List<SmartTrigger> parseFromJson(String req) {
+        try {
+            SmartTriggerReq[] reqs = mapper.readValue(req, SmartTriggerReq[].class);
+            var returnVal = new ArrayList<SmartTrigger>();
+            for (SmartTriggerReq r : reqs) {
+                var parsedRequest = parse(r);
+                if (Objects.isNull(parsedRequest)) {
+                    log.warn("Trigger request failed to parse");
+                    continue;
+                }
+                returnVal.add(parsedRequest);
             }
+            return returnVal;
+        } catch (Exception e) {
+            log.warn("Exception thrown while parsing triggers");
+            log.warn(e.toString());
+            return Collections.emptyList();
+        }
+    }
+
+    public boolean isValid(SmartTriggerReq r) {
+        if (Objects.isNull(r.getCondition()) || r.getCondition().isBlank()) {
+            log.warn("Trigger condition was blank. Skipping Trigger.");
+            return false;
+        } else if (Objects.isNull(r.getRecordingTemplate()) || r.getRecordingTemplate().isBlank()) {
+            log.warn("Template was blank. Skipping Trigger.");
+            return false;
+        } else if (Objects.isNull(r.getDuration())) {
+            log.warn("Duration expression was null. Skipping Trigger.");
+            return false;
+        } else if (!flightRecorderHelper.isValidTemplate(r.getRecordingTemplate())) {
+            log.warn("Template was invalid. Skipping Trigger.");
+            return false;
         }
         return true;
     }

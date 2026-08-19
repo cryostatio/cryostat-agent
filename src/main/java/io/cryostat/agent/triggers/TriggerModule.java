@@ -16,7 +16,6 @@
 package io.cryostat.agent.triggers;
 
 import java.nio.file.Path;
-import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -29,6 +28,7 @@ import io.cryostat.agent.CryostatClient;
 import io.cryostat.agent.FlightRecorderHelper;
 import io.cryostat.agent.harvest.Harvester;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import dagger.Module;
 import dagger.Provides;
 import org.projectnessie.cel.tools.ScriptHost;
@@ -50,8 +50,9 @@ public abstract class TriggerModule {
     public static TriggerParser provideTriggerParser(
             FlightRecorderHelper helper,
             @Named(ConfigModule.CRYOSTAT_AGENT_SMART_TRIGGER_CONFIG_PATH)
-                    Optional<Path> triggerPath) {
-        return new TriggerParser(helper, triggerPath);
+                    Optional<Path> triggerPath,
+            ObjectMapper mapper) {
+        return new TriggerParser(helper, triggerPath, mapper);
     }
 
     @Provides
@@ -59,7 +60,7 @@ public abstract class TriggerModule {
     public static TriggerEvaluator provideTriggerEvaluatorFactory(
             @Named(TRIGGER_SCHEDULER) ScheduledExecutorService scheduler,
             ScriptHost scriptHost,
-            @Named(ConfigModule.CRYOSTAT_AGENT_SMART_TRIGGER_DEFINITIONS) List<String> definitions,
+            @Named(ConfigModule.CRYOSTAT_AGENT_SMART_TRIGGER_DEFINITIONS) String definitions,
             TriggerParser parser,
             FlightRecorderHelper helper,
             Harvester harvester,
