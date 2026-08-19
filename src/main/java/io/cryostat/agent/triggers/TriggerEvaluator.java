@@ -256,11 +256,6 @@ public class TriggerEvaluator {
                             .execute(Boolean.class, conditionVars);
 
             var durationResult = Boolean.FALSE;
-            log.warn(
-                    "Evaluating durations: "
-                            + targetDuration.toMillis()
-                            + ", "
-                            + trigger.getTargetDuration().toMillis());
             if (targetDuration.equals(Duration.ZERO)) {
                 durationResult = Boolean.TRUE;
             } else if (targetDuration.toMillis() >= trigger.getTargetDuration().toMillis()) {
