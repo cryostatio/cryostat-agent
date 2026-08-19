@@ -56,8 +56,6 @@ public class TriggerEvaluator {
     private final long evaluationPeriodMs;
     private final ConcurrentHashMap<SmartTrigger, Script> conditionScriptCache =
             new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<SmartTrigger, Script> durationScriptCache =
-            new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, SmartTrigger> triggers = new ConcurrentHashMap<>();
     private Future<?> task;
     private final Logger log = LoggerFactory.getLogger(getClass());
@@ -106,7 +104,11 @@ public class TriggerEvaluator {
             var trigger = parser.parse(req);
             String uuid = registerTrigger(trigger);
             if (Objects.isNull(uuid)) {
-                log.warn("Duplicate smart trigger definition: {0}", trigger.getExpression());
+                log.warn(
+                        "Duplicate smart trigger definition: {} {} {}",
+                        trigger.getTriggerCondition(),
+                        trigger.getTargetDuration().toMillis(),
+                        trigger.getRecordingTemplateName());
             }
             returnVal.add(uuid);
         }
@@ -166,7 +168,6 @@ public class TriggerEvaluator {
                         log.trace("Completed {} , removing", t);
                         triggers.values().remove(t);
                         conditionScriptCache.remove(t);
-                        durationScriptCache.remove(t);
                         break;
                     case NEW:
                         // Simple Constraint, no duration specified so condition only needs to be
@@ -242,7 +243,7 @@ public class TriggerEvaluator {
                                             + " \"{}\"",
                                     recordingName,
                                     t.getRecordingTemplateName(),
-                                    t.getExpression());
+                                    t.getTriggerCondition());
                         });
     }
 
@@ -254,12 +255,17 @@ public class TriggerEvaluator {
                     buildConditionScript(trigger, conditionVars)
                             .execute(Boolean.class, conditionVars);
 
-            Map<String, Object> durationVar = Map.of("TargetDuration", targetDuration);
-            Boolean durationResult =
-                    Duration.ZERO.equals(targetDuration)
-                            ? Boolean.TRUE
-                            : buildDurationScript(trigger, durationVar)
-                                    .execute(Boolean.class, durationVar);
+            var durationResult = Boolean.FALSE;
+            log.warn(
+                    "Evaluating durations: "
+                            + targetDuration.toMillis()
+                            + ", "
+                            + trigger.getTargetDuration().toMillis());
+            if (targetDuration.equals(Duration.ZERO)) {
+                durationResult = Boolean.TRUE;
+            } else if (targetDuration.toMillis() >= trigger.getTargetDuration().toMillis()) {
+                durationResult = Boolean.TRUE;
+            }
 
             return Boolean.TRUE.equals(conditionResult) && Boolean.TRUE.equals(durationResult);
         } catch (Exception e) {
@@ -271,11 +277,6 @@ public class TriggerEvaluator {
     private Script buildConditionScript(SmartTrigger trigger, Map<String, Object> scriptVars) {
         return conditionScriptCache.computeIfAbsent(
                 trigger, t -> buildScript(t.getTriggerCondition(), scriptVars));
-    }
-
-    private Script buildDurationScript(SmartTrigger trigger, Map<String, Object> scriptVars) {
-        return durationScriptCache.computeIfAbsent(
-                trigger, t -> buildScript(t.getDurationConstraint(), scriptVars));
     }
 
     private Script buildScript(String script, Map<String, Object> scriptVars) {

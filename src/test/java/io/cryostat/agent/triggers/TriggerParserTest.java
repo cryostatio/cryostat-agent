@@ -107,9 +107,8 @@ class TriggerParserTest {
         MatcherAssert.assertThat(out, Matchers.hasSize(1));
         SmartTrigger trigger = out.get(0);
 
-        MatcherAssert.assertThat(trigger.getExpression(), Matchers.equalTo("ProcessCpuLoad>0.2"));
         MatcherAssert.assertThat(trigger.getRecordingTemplateName(), Matchers.equalTo("profile"));
-        MatcherAssert.assertThat(trigger.getDurationConstraint(), Matchers.emptyString());
+        MatcherAssert.assertThat(trigger.getTargetDuration().toMillis(), Matchers.equalTo(0L));
         MatcherAssert.assertThat(
                 trigger.getTriggerCondition(), Matchers.equalTo("ProcessCpuLoad>0.2"));
         MatcherAssert.assertThat(trigger.getState(), Matchers.equalTo(TriggerState.NEW));
@@ -129,9 +128,8 @@ class TriggerParserTest {
         MatcherAssert.assertThat(out, Matchers.hasSize(1));
         SmartTrigger trigger = out.get(0);
 
-        MatcherAssert.assertThat(trigger.getExpression(), Matchers.equalTo("ProcessCpuLoad>0.2"));
         MatcherAssert.assertThat(trigger.getRecordingTemplateName(), Matchers.equalTo("profile"));
-        MatcherAssert.assertThat(trigger.getDurationConstraint(), Matchers.emptyString());
+        MatcherAssert.assertThat(trigger.getTargetDuration().toMillis(), Matchers.equalTo(0L));
         MatcherAssert.assertThat(
                 trigger.getTriggerCondition(), Matchers.equalTo("ProcessCpuLoad>0.2"));
         MatcherAssert.assertThat(trigger.getState(), Matchers.equalTo(TriggerState.NEW));
@@ -144,16 +142,13 @@ class TriggerParserTest {
     @Test
     void testSingleSimpleTriggerWithoutSpecifiedDuration() {
         Mockito.when(helper.isValidTemplate(Mockito.anyString())).thenReturn(true);
-        String in =
-                "[{\"condition\":\"ProcessCpuLoad>0.2\",\"recordingTemplate\":\"profile\"}]";
+        String in = "[{\"condition\":\"ProcessCpuLoad>0.2\",\"recordingTemplate\":\"profile\"}]";
         List<SmartTrigger> out = parser.parseFromJson(in);
 
         MatcherAssert.assertThat(out, Matchers.hasSize(1));
         SmartTrigger trigger = out.get(0);
 
-        MatcherAssert.assertThat(trigger.getExpression(), Matchers.equalTo("ProcessCpuLoad>0.2"));
         MatcherAssert.assertThat(trigger.getRecordingTemplateName(), Matchers.equalTo("profile"));
-        MatcherAssert.assertThat(trigger.getDurationConstraint(), Matchers.emptyString());
         MatcherAssert.assertThat(
                 trigger.getTriggerCondition(), Matchers.equalTo("ProcessCpuLoad>0.2"));
         MatcherAssert.assertThat(trigger.getState(), Matchers.equalTo(TriggerState.NEW));
@@ -173,13 +168,8 @@ class TriggerParserTest {
         MatcherAssert.assertThat(out, Matchers.hasSize(1));
         SmartTrigger trigger = out.get(0);
 
-        MatcherAssert.assertThat(
-                trigger.getExpression(),
-                Matchers.equalTo("ProcessCpuLoad>0.2;TargetDuration>duration(\"30000ms\")"));
         MatcherAssert.assertThat(trigger.getRecordingTemplateName(), Matchers.equalTo("profile"));
-        MatcherAssert.assertThat(
-                trigger.getDurationConstraint(),
-                Matchers.equalTo("TargetDuration>duration(\"30000ms\")"));
+        MatcherAssert.assertThat(trigger.getTargetDuration().toMillis(), Matchers.equalTo(30000L));
         MatcherAssert.assertThat(
                 trigger.getTriggerCondition(), Matchers.equalTo("ProcessCpuLoad>0.2"));
         MatcherAssert.assertThat(trigger.getState(), Matchers.equalTo(TriggerState.NEW));
@@ -199,13 +189,8 @@ class TriggerParserTest {
 
         MatcherAssert.assertThat(out, Matchers.hasSize(1));
         SmartTrigger trigger = out.get(0);
-        MatcherAssert.assertThat(
-                trigger.getExpression(),
-                Matchers.equalTo("ProcessCpuLoad > 0.2;TargetDuration>duration(\"30000ms\")"));
         MatcherAssert.assertThat(trigger.getRecordingTemplateName(), Matchers.equalTo("profile"));
-        MatcherAssert.assertThat(
-                trigger.getDurationConstraint(),
-                Matchers.equalTo("TargetDuration>duration(\"30000ms\")"));
+        MatcherAssert.assertThat(trigger.getTargetDuration().toMillis(), Matchers.equalTo(30000L));
         MatcherAssert.assertThat(
                 trigger.getTriggerCondition(), Matchers.equalTo("ProcessCpuLoad > 0.2"));
         MatcherAssert.assertThat(trigger.getState(), Matchers.equalTo(TriggerState.NEW));
@@ -229,13 +214,8 @@ class TriggerParserTest {
         MatcherAssert.assertThat(out, Matchers.hasSize(2));
 
         SmartTrigger trigger1 = out.get(0);
-        MatcherAssert.assertThat(
-                trigger1.getExpression(),
-                Matchers.equalTo("ProcessCpuLoad>0.2;TargetDuration>duration(\"30000ms\")"));
         MatcherAssert.assertThat(trigger1.getRecordingTemplateName(), Matchers.equalTo("profile"));
-        MatcherAssert.assertThat(
-                trigger1.getDurationConstraint(),
-                Matchers.equalTo("TargetDuration>duration(\"30000ms\")"));
+        MatcherAssert.assertThat(trigger1.getTargetDuration().toMillis(), Matchers.equalTo(30000L));
         MatcherAssert.assertThat(
                 trigger1.getTriggerCondition(), Matchers.equalTo("ProcessCpuLoad>0.2"));
         MatcherAssert.assertThat(trigger1.getState(), Matchers.equalTo(TriggerState.NEW));
@@ -245,15 +225,9 @@ class TriggerParserTest {
                 trigger1.getTimeConditionFirstMet().getTime(), Matchers.equalTo(0L));
 
         SmartTrigger trigger2 = out.get(1);
-        MatcherAssert.assertThat(
-                trigger2.getExpression(),
-                Matchers.equalTo(
-                        "(HeapMemoryUsagePercent > 50 && NonHeapMemoryUsage > 1) || SystemCpuLoad >"
-                                + " 4;TargetDuration>duration(\"120000ms\")"));
         MatcherAssert.assertThat(trigger2.getRecordingTemplateName(), Matchers.equalTo("default"));
         MatcherAssert.assertThat(
-                trigger2.getDurationConstraint(),
-                Matchers.equalTo("TargetDuration>duration(\"120000ms\")"));
+                trigger2.getTargetDuration().toMillis(), Matchers.equalTo(120000L));
         MatcherAssert.assertThat(
                 trigger2.getTriggerCondition(),
                 Matchers.equalTo(
@@ -282,13 +256,8 @@ class TriggerParserTest {
         MatcherAssert.assertThat(out, Matchers.hasSize(1));
 
         SmartTrigger trigger1 = out.get(0);
-        MatcherAssert.assertThat(
-                trigger1.getExpression(),
-                Matchers.equalTo("ProcessCpuLoad>0.2;TargetDuration>duration(\"30000ms\")"));
         MatcherAssert.assertThat(trigger1.getRecordingTemplateName(), Matchers.equalTo("profile"));
-        MatcherAssert.assertThat(
-                trigger1.getDurationConstraint(),
-                Matchers.equalTo("TargetDuration>duration(\"30000ms\")"));
+        MatcherAssert.assertThat(trigger1.getTargetDuration().toMillis(), Matchers.equalTo(30000L));
         MatcherAssert.assertThat(
                 trigger1.getTriggerCondition(), Matchers.equalTo("ProcessCpuLoad>0.2"));
         MatcherAssert.assertThat(trigger1.getState(), Matchers.equalTo(TriggerState.NEW));
@@ -320,13 +289,8 @@ class TriggerParserTest {
         MatcherAssert.assertThat(out, Matchers.hasSize(1));
 
         var trigger = out.get(0);
-        MatcherAssert.assertThat(
-                trigger.getExpression(),
-                Matchers.equalTo("ProcessCpuLoad>0.2;TargetDuration>duration(\"30000ms\")"));
         MatcherAssert.assertThat(trigger.getRecordingTemplateName(), Matchers.equalTo("default"));
-        MatcherAssert.assertThat(
-                trigger.getDurationConstraint(),
-                Matchers.equalTo("TargetDuration>duration(\"30000ms\")"));
+        MatcherAssert.assertThat(trigger.getTargetDuration().toMillis(), Matchers.equalTo(30000L));
         MatcherAssert.assertThat(
                 trigger.getTriggerCondition(), Matchers.equalTo("ProcessCpuLoad>0.2"));
         MatcherAssert.assertThat(trigger.getState(), Matchers.equalTo(TriggerState.NEW));
@@ -395,9 +359,8 @@ class TriggerParserTest {
         MatcherAssert.assertThat(out, Matchers.hasSize(1));
 
         var trigger = out.get(0);
-        MatcherAssert.assertThat(trigger.getExpression(), Matchers.equalTo("ProcessCpuLoad>0.2"));
         MatcherAssert.assertThat(trigger.getRecordingTemplateName(), Matchers.equalTo("default"));
-        MatcherAssert.assertThat(trigger.getDurationConstraint(), Matchers.equalTo(""));
+        MatcherAssert.assertThat(trigger.getTargetDuration().toMillis(), Matchers.equalTo(0L));
         MatcherAssert.assertThat(
                 trigger.getTriggerCondition(), Matchers.equalTo("ProcessCpuLoad>0.2"));
         MatcherAssert.assertThat(trigger.getState(), Matchers.equalTo(TriggerState.NEW));
