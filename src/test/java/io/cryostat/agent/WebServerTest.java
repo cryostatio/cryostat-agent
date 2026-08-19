@@ -233,7 +233,8 @@ class WebServerTest {
                 assertEquals(
                         204,
                         client.send(post, HttpResponse.BodyHandlers.discarding()).statusCode());
-                verify(registration).notify(Registration.RegistrationEvent.State.REFRESHING);
+                verify(registration, timeout(5000))
+                        .notify(Registration.RegistrationEvent.State.REFRESHING);
             }
         } finally {
             liveWebServer.stop();

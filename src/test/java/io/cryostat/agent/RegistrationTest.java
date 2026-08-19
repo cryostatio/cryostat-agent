@@ -529,9 +529,14 @@ class RegistrationTest {
 
         assertEquals("plugin-id", registration.getPluginInfo().getId());
         assertEquals("new-token", registration.getPluginInfo().getToken());
-        verify(cryostat).checkRegistration(any(PluginInfo.class));
+        ArgumentCaptor<PluginInfo> checkedPlugin = ArgumentCaptor.forClass(PluginInfo.class);
+        verify(cryostat).checkRegistration(checkedPlugin.capture());
         verify(cryostat).activateRegistrationRefresh(callback);
-        verify(cryostat).refreshRegistration(eq(callback), any(PluginInfo.class));
+        ArgumentCaptor<PluginInfo> refreshedPlugin = ArgumentCaptor.forClass(PluginInfo.class);
+        verify(cryostat).refreshRegistration(eq(callback), refreshedPlugin.capture());
+        assertEquals("bootstrap-token", checkedPlugin.getValue().getToken());
+        assertEquals("bootstrap-token", refreshedPlugin.getValue().getToken());
+        assertNotSame(checkedPlugin.getValue(), refreshedPlugin.getValue());
         verify(cryostat, times(1)).register(eq(callback), any(), anyCollection());
         verify(cryostat, times(1)).serverHealth();
         verify(webServer, times(1)).generateCredentials(callback);
@@ -624,6 +629,87 @@ class RegistrationTest {
     }
 
     @Test
+    void testRepeatedRetryableRefreshFailuresFallBackToFullRegistration() throws Exception {
+        URI callback = URI.create("http://agent.example.com:9977");
+        Registration recoveringRegistration =
+                new Registration(
+                        executor,
+                        cryostat,
+                        callbackResolver,
+                        webServer,
+                        appNameResolver,
+                        INSTANCE_ID,
+                        JVM_ID,
+                        APP_NAME,
+                        REALM,
+                        HOSTNAME,
+                        JMX_PORT,
+                        REGISTRATION_RETRY_MS,
+                        REGISTRATION_CHECK_MS,
+                        false,
+                        true,
+                        MAX_BACKOFF_MS,
+                        BACKOFF_MULTIPLIER,
+                        2,
+                        Duration.ZERO,
+                        MIN_COOLDOWN_DURATION,
+                        COOLDOWN_JITTER_FACTOR,
+                        RETRY_BACKOFF_JITTER_FACTOR,
+                        MIN_REGISTRATION_INTERVAL,
+                        random);
+        when(callbackResolver.determineSelfCallback()).thenReturn(callback);
+        when(appNameResolver.extractFromJavaCommand()).thenReturn("test.Main");
+        when(cryostat.serverHealth()).thenReturn(CompletableFuture.completedFuture(serverHealth()));
+        when(cryostat.register(eq(callback), any(), anyCollection()))
+                .thenReturn(
+                        CompletableFuture.completedFuture(
+                                new PluginInfo("plugin-id", "initial-token", List.of())),
+                        CompletableFuture.completedFuture(
+                                new PluginInfo("recovered-id", "recovered-token", List.of())));
+        when(cryostat.activateRegistrationRefresh(callback))
+                .thenReturn(
+                        CompletableFuture.completedFuture(
+                                new PluginInfo("plugin-id", "bootstrap-token", List.of())),
+                        CompletableFuture.completedFuture(
+                                new PluginInfo(
+                                        "recovered-id", "recovered-bootstrap-token", List.of())));
+        when(cryostat.refreshRegistration(eq(callback), any(PluginInfo.class)))
+                .thenReturn(
+                        CompletableFuture.failedFuture(new RuntimeException("connection reset")),
+                        CompletableFuture.failedFuture(new RuntimeException("connection reset")));
+        when(random.nextDouble()).thenReturn(0.5);
+        List<Runnable> scheduledTasks = new ArrayList<>();
+        doAnswer(
+                        invocation -> {
+                            scheduledTasks.add(invocation.getArgument(0, Runnable.class));
+                            return scheduledFuture;
+                        })
+                .when(executor)
+                .schedule(any(Runnable.class), anyLong(), any(TimeUnit.class));
+        runSubmittedTasksImmediately();
+
+        recoveringRegistration.start();
+        recoveringRegistration.notify(State.REFRESHING);
+
+        assertEquals("plugin-id", recoveringRegistration.getPluginInfo().getId());
+        assertEquals(1, scheduledTasks.size());
+        scheduledTasks.remove(0).run();
+
+        assertFalse(recoveringRegistration.getPluginInfo().isInitialized());
+        assertEquals(1, scheduledTasks.size());
+        scheduledTasks.remove(0).run();
+
+        assertEquals("recovered-id", recoveringRegistration.getPluginInfo().getId());
+        assertEquals(
+                "recovered-bootstrap-token", recoveringRegistration.getPluginInfo().getToken());
+        verify(callbackResolver, times(2)).determineSelfCallback();
+        verify(cryostat, times(2)).refreshRegistration(eq(callback), any(PluginInfo.class));
+        verify(cryostat, times(2)).register(eq(callback), any(), anyCollection());
+        verify(webServer, times(2)).generateCredentials(callback);
+        verify(webServer, times(2)).commitPendingCredentials();
+    }
+
+    @Test
     void testTerminalRefreshFailureFallsBackToFullRecoveryRegistration() throws Exception {
         URI callback = URI.create("http://agent.example.com:9977");
         when(callbackResolver.determineSelfCallback()).thenReturn(callback);
@@ -679,13 +765,9 @@ class RegistrationTest {
     }
 
     @Test
-    void testOverlappingRefreshAttemptsAreSerialized() {
+    void testOverlappingRefreshAttemptsAreSerialized() throws Exception {
         URI callback = URI.create("http://agent.example.com:9977");
-        try {
-            stubSuccessfulInitialRegistration(callback, "plugin-id", "old-token");
-        } catch (Exception e) {
-            throw new AssertionError(e);
-        }
+        stubSuccessfulInitialRegistration(callback, "plugin-id", "old-token");
         runSubmittedTasksImmediately();
         registration.start();
 

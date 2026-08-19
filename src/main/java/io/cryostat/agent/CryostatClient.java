@@ -158,55 +158,14 @@ public class CryostatClient {
             return CompletableFuture.failedFuture(
                     new IllegalStateException("registration has not been initialized"));
         }
-        try {
-            RegistrationRefresh refresh =
-                    new RegistrationRefresh(
-                            pluginInfo.getId(), pluginInfo.getToken(), realm, callback);
-            HttpPost req = new HttpPost(baseUri.resolve(DISCOVERY_API_PATH));
-            log.trace("{}", req);
-            byte[] body = mapper.writeValueAsBytes(refresh);
-            req.setEntity(new ByteArrayEntity(body, ContentType.APPLICATION_JSON));
-            return supply(req, res -> logResponse(req, res))
-                    .thenApply(res -> assertOkStatus(req, res))
-                    .thenApply(
-                            res -> {
-                                try (InputStream is = res.getEntity().getContent()) {
-                                    return mapper.readValue(is, PluginInfo.class);
-                                } catch (IOException e) {
-                                    log.error("Unable to parse response as JSON", e);
-                                    throw new RegistrationException(e);
-                                }
-                            })
-                    .whenComplete((v, t) -> req.reset())
-                    .whenComplete((v, t) -> Arrays.fill(body, (byte) 0));
-        } catch (JsonProcessingException e) {
-            return CompletableFuture.failedFuture(e);
-        }
+        RegistrationRefresh refresh =
+                new RegistrationRefresh(pluginInfo.getId(), pluginInfo.getToken(), realm, callback);
+        return postForPluginInfo(baseUri.resolve(DISCOVERY_API_PATH), refresh);
     }
 
     public CompletableFuture<PluginInfo> activateRegistrationRefresh(URI callback) {
-        try {
-            RegistrationActivation activation = new RegistrationActivation(realm, callback);
-            HttpPost req = new HttpPost(baseUri.resolve(DISCOVERY_API_PATH));
-            log.trace("{}", req);
-            byte[] body = mapper.writeValueAsBytes(activation);
-            req.setEntity(new ByteArrayEntity(body, ContentType.APPLICATION_JSON));
-            return supply(req, res -> logResponse(req, res))
-                    .thenApply(res -> assertOkStatus(req, res))
-                    .thenApply(
-                            res -> {
-                                try (InputStream is = res.getEntity().getContent()) {
-                                    return mapper.readValue(is, PluginInfo.class);
-                                } catch (IOException e) {
-                                    log.error("Unable to parse response as JSON", e);
-                                    throw new RegistrationException(e);
-                                }
-                            })
-                    .whenComplete((v, t) -> req.reset())
-                    .whenComplete((v, t) -> Arrays.fill(body, (byte) 0));
-        } catch (JsonProcessingException e) {
-            return CompletableFuture.failedFuture(e);
-        }
+        RegistrationActivation activation = new RegistrationActivation(realm, callback);
+        return postForPluginInfo(baseUri.resolve(DISCOVERY_API_PATH), activation);
     }
 
     public CompletableFuture<PluginInfo> register(
@@ -226,25 +185,7 @@ public class CryostatClient {
                             publication.getNodes(),
                             publication.getFillStrategy(),
                             publication.getContext());
-            HttpPost req = new HttpPost(baseUri.resolve(AGENT_REGISTRATION_API_PATH));
-            log.trace("{}", req);
-            byte[] body = mapper.writeValueAsBytes(registration);
-            req.setEntity(new ByteArrayEntity(body, ContentType.APPLICATION_JSON));
-            return supply(req, (res) -> logResponse(req, res))
-                    .thenApply(res -> assertOkStatus(req, res))
-                    .thenApply(
-                            res -> {
-                                try (InputStream is = res.getEntity().getContent()) {
-                                    return mapper.readValue(is, PluginInfo.class);
-                                } catch (IOException e) {
-                                    log.error("Unable to parse response as JSON", e);
-                                    throw new RegistrationException(e);
-                                }
-                            })
-                    .whenComplete((v, t) -> req.reset())
-                    .whenComplete((v, t) -> Arrays.fill(body, (byte) 0));
-        } catch (JsonProcessingException e) {
-            return CompletableFuture.failedFuture(e);
+            return postForPluginInfo(baseUri.resolve(AGENT_REGISTRATION_API_PATH), registration);
         } finally {
             // the serialized request body holds its own copy of the password, so the
             // buffer can be cleared as soon as serialization has happened (or failed)
@@ -453,6 +394,31 @@ public class CryostatClient {
                             }
                             req.reset();
                         });
+    }
+
+    private CompletableFuture<PluginInfo> postForPluginInfo(URI uri, Object payload) {
+        try {
+            HttpPost req = new HttpPost(uri);
+            log.trace("{}", req);
+            byte[] body = mapper.writeValueAsBytes(payload);
+            req.setEntity(new ByteArrayEntity(body, ContentType.APPLICATION_JSON));
+            return supply(req, res -> logResponse(req, res))
+                    .thenApply(res -> assertOkStatus(req, res))
+                    .thenApply(this::parsePluginInfo)
+                    .whenComplete((v, t) -> req.reset())
+                    .whenComplete((v, t) -> Arrays.fill(body, (byte) 0));
+        } catch (JsonProcessingException e) {
+            return CompletableFuture.failedFuture(e);
+        }
+    }
+
+    private PluginInfo parsePluginInfo(ClassicHttpResponse response) {
+        try (InputStream is = response.getEntity().getContent()) {
+            return mapper.readValue(is, PluginInfo.class);
+        } catch (IOException e) {
+            log.error("Unable to parse response as JSON", e);
+            throw new RegistrationException(e);
+        }
     }
 
     private ClassicHttpResponse logResponse(HttpUriRequestBase req, ClassicHttpResponse res) {

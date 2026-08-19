@@ -76,6 +76,7 @@ public class Registration {
     private final Random random;
 
     private final PluginInfo pluginInfo = new PluginInfo();
+    private final Object pluginInfoLock = new Object();
     private final Set<Consumer<RegistrationEvent>> listeners = new HashSet<>();
     private volatile boolean refreshCallbacksEnabled;
 
@@ -181,7 +182,8 @@ public class Registration {
                             this.registrationCheckTask =
                                     executor.scheduleAtFixedRate(
                                             () -> {
-                                                cryostat.checkRegistration(pluginInfo)
+                                                PluginInfo registeredPlugin = pluginInfoSnapshot();
+                                                cryostat.checkRegistration(registeredPlugin)
                                                         .handle(
                                                                 (v, t) -> {
                                                                     if (t != null
@@ -291,12 +293,13 @@ public class Registration {
             }
         }
 
-        if (!pluginInfo.isInitialized()) {
+        PluginInfo registeredPlugin = pluginInfoSnapshot();
+        if (!registeredPlugin.isInitialized()) {
             currentRegistration = registerAgent();
         } else if (!refreshCallbacksEnabled) {
             currentRegistration = activateRegistrationRefresh();
         } else {
-            currentRegistration = refreshRegistration();
+            currentRegistration = refreshRegistration(registeredPlugin);
         }
     }
 
@@ -354,9 +357,9 @@ public class Registration {
                             // enabling its generic refresh callbacks. If that second request fails,
                             // the acknowledged credentials must remain valid.
                             webServer.commitPendingCredentials();
-                            this.pluginInfo.copyFrom(plugin);
+                            copyPluginInfo(plugin);
                             this.refreshCallbacksEnabled = false;
-                            log.debug("Registered as {}", this.pluginInfo.getId());
+                            log.debug("Registered as {}", plugin.getId());
                             completeRegistrationSuccess();
                             notify(RegistrationEvent.State.REGISTERED);
                             notify(RegistrationEvent.State.PUBLISHED);
@@ -380,18 +383,17 @@ public class Registration {
                                 }
                                 return completeRegistrationFailure(t);
                             }
-                            if (!isValidRefresh(plugin)) {
+                            if (!updatePluginInfoToken(plugin)) {
                                 return completeRegistrationFailure(
                                         new IllegalStateException(
                                                 "registration refresh activation returned"
                                                         + " unexpected plugin information"));
                             }
 
-                            this.pluginInfo.setToken(plugin.getToken());
                             this.refreshCallbacksEnabled = true;
                             log.debug(
                                     "Enabled registration refresh callbacks for {}",
-                                    this.pluginInfo.getId());
+                                    plugin.getId());
                             completeRegistrationSuccess();
                             notify(RegistrationEvent.State.REFRESHED);
                             return CompletableFuture.<Void>completedFuture(null);
@@ -399,8 +401,8 @@ public class Registration {
                 .thenCompose(f -> f);
     }
 
-    private CompletableFuture<Void> refreshRegistration() {
-        return cryostat.refreshRegistration(callback, pluginInfo)
+    private CompletableFuture<Void> refreshRegistration(PluginInfo registeredPlugin) {
+        return cryostat.refreshRegistration(callback, registeredPlugin)
                 .handle(
                         (plugin, t) -> {
                             if (t != null) {
@@ -409,15 +411,13 @@ public class Registration {
                                 }
                                 return completeRegistrationFailure(t);
                             }
-                            if (!isValidRefresh(plugin)) {
+                            if (!updatePluginInfoToken(plugin)) {
                                 return completeRegistrationFailure(
                                         new IllegalStateException(
                                                 "registration refresh returned no token"));
                             }
 
-                            this.pluginInfo.setToken(plugin.getToken());
-                            log.debug(
-                                    "Refreshed registration token for {}", this.pluginInfo.getId());
+                            log.debug("Refreshed registration token for {}", plugin.getId());
                             completeRegistrationSuccess();
                             notify(RegistrationEvent.State.REFRESHED);
                             return CompletableFuture.<Void>completedFuture(null);
@@ -431,8 +431,37 @@ public class Registration {
                 && StringUtils.isNotBlank(plugin.getToken());
     }
 
-    private boolean isValidRefresh(PluginInfo plugin) {
-        return isValidRegistration(plugin) && Objects.equals(pluginInfo.getId(), plugin.getId());
+    private boolean updatePluginInfoToken(PluginInfo plugin) {
+        if (!isValidRegistration(plugin)) {
+            return false;
+        }
+        synchronized (pluginInfoLock) {
+            if (!Objects.equals(pluginInfo.getId(), plugin.getId())) {
+                return false;
+            }
+            pluginInfo.setToken(plugin.getToken());
+            return true;
+        }
+    }
+
+    private void copyPluginInfo(PluginInfo plugin) {
+        synchronized (pluginInfoLock) {
+            pluginInfo.copyFrom(plugin);
+        }
+    }
+
+    private void clearPluginInfo() {
+        synchronized (pluginInfoLock) {
+            pluginInfo.clear();
+        }
+    }
+
+    private PluginInfo pluginInfoSnapshot() {
+        synchronized (pluginInfoLock) {
+            PluginInfo snapshot = new PluginInfo();
+            snapshot.copyFrom(pluginInfo);
+            return snapshot;
+        }
     }
 
     private boolean isRetryableRefreshFailure(Throwable t) {
@@ -464,12 +493,15 @@ public class Registration {
     }
 
     private CompletableFuture<Void> completeRegistrationFailure(Throwable t) {
+        return completeRegistrationFailure(t, consecutiveFailures.incrementAndGet());
+    }
+
+    private CompletableFuture<Void> completeRegistrationFailure(Throwable t, int failures) {
         webServer.discardPendingCredentials();
         this.refreshCallbacksEnabled = false;
-        this.pluginInfo.clear();
+        clearPluginInfo();
 
-        int failures = consecutiveFailures.incrementAndGet();
-        long backoffMs = calculateBackoffMs();
+        long backoffMs = calculateBackoffMs(failures, true);
         Duration cooldown = Duration.ofMillis(backoffMs);
 
         updateCircuitAfterFailure(failures);
@@ -482,7 +514,10 @@ public class Registration {
                 t);
 
         if (minCooldownDuration.isZero()) {
-            executor.schedule(this::tryRegister, backoffMs, TimeUnit.MILLISECONDS);
+            executor.schedule(
+                    () -> notify(RegistrationEvent.State.UNREGISTERED),
+                    backoffMs,
+                    TimeUnit.MILLISECONDS);
         } else {
             enterCooldown(cooldown);
         }
@@ -503,7 +538,15 @@ public class Registration {
 
     private CompletableFuture<Void> completeRefreshFailure(Throwable t) {
         int failures = consecutiveFailures.incrementAndGet();
-        long backoffMs = calculateRefreshBackoffMs();
+        if (failures >= circuitBreakerThreshold) {
+            log.warn(
+                    "Registration refresh failed {} consecutive times, falling back to full"
+                            + " registration",
+                    failures);
+            return completeRegistrationFailure(t, failures);
+        }
+
+        long backoffMs = calculateBackoffMs(failures, false);
 
         updateCircuitAfterFailure(failures);
         log.warn(
@@ -517,19 +560,7 @@ public class Registration {
         return CompletableFuture.completedFuture(null);
     }
 
-    private long calculateRefreshBackoffMs() {
-        int failures = consecutiveFailures.get();
-        double jitter = 1.0 + (random.nextDouble() * 2 - 1) * retryBackoffJitterFactor;
-        long backoff =
-                (long)
-                        (registrationRetryMs
-                                * Math.pow(backoffMultiplier, Math.min(failures - 1, 10)));
-        backoff = Math.min(backoff, maxBackoffMs);
-        return (long) (backoff * jitter);
-    }
-
-    private long calculateBackoffMs() {
-        int failures = consecutiveFailures.get();
+    private long calculateBackoffMs(int failures, boolean applyCooldownFloor) {
         if (failures == 0) {
             return registrationRetryMs;
         }
@@ -541,7 +572,9 @@ public class Registration {
                                 * Math.pow(backoffMultiplier, Math.min(failures - 1, 10)));
         backoff = Math.min(backoff, maxBackoffMs);
         backoff = (long) (backoff * jitter);
-        backoff = Math.max(backoff, minCooldownDuration.toMillis());
+        if (applyCooldownFloor) {
+            backoff = Math.max(backoff, minCooldownDuration.toMillis());
+        }
 
         return backoff;
     }
@@ -725,24 +758,25 @@ public class Registration {
     }
 
     CompletableFuture<Void> deregister() {
-        if (!this.pluginInfo.isInitialized()) {
+        PluginInfo registeredPlugin = pluginInfoSnapshot();
+        if (!registeredPlugin.isInitialized()) {
             log.warn("Deregistration requested before registration complete!");
             return CompletableFuture.completedFuture(null);
         }
-        return cryostat.deregister(pluginInfo)
+        return cryostat.deregister(registeredPlugin)
                 .handle(
                         (n, t) -> {
                             if (t != null) {
                                 log.warn(
                                         "Failed to deregister as Cryostat discovery plugin [{}]",
-                                        this.pluginInfo.getId());
+                                        registeredPlugin.getId());
                             } else {
                                 log.debug(
                                         "Deregistered from Cryostat discovery plugin [{}]",
-                                        this.pluginInfo.getId());
+                                        registeredPlugin.getId());
                             }
                             this.refreshCallbacksEnabled = false;
-                            this.pluginInfo.clear();
+                            clearPluginInfo();
                             notify(RegistrationEvent.State.UNREGISTERED);
                             return null;
                         });
@@ -772,6 +806,6 @@ public class Registration {
     }
 
     PluginInfo getPluginInfo() {
-        return pluginInfo;
+        return pluginInfoSnapshot();
     }
 }
