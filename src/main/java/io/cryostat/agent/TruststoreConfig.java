@@ -17,6 +17,11 @@ package io.cryostat.agent;
 
 import java.util.Objects;
 
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+
+@SuppressFBWarnings(
+        value = "CT_CONSTRUCTOR_THROW",
+        justification = "Private builder-based constructor only validates required fields")
 public class TruststoreConfig {
     private final String alias;
     private final String path;
