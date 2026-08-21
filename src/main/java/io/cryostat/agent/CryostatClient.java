@@ -68,6 +68,7 @@ import org.apache.hc.client5.http.entity.mime.MultipartEntityBuilder;
 import org.apache.hc.client5.http.entity.mime.StringBody;
 import org.apache.hc.core5.http.ClassicHttpResponse;
 import org.apache.hc.core5.http.ContentType;
+import org.apache.hc.core5.http.HttpEntity;
 import org.apache.hc.core5.http.HttpHost;
 import org.apache.hc.core5.http.io.entity.ByteArrayEntity;
 import org.apache.hc.core5.http.io.entity.StringEntity;
@@ -413,7 +414,15 @@ public class CryostatClient {
     }
 
     private PluginInfo parsePluginInfo(ClassicHttpResponse response) {
-        try (InputStream is = response.getEntity().getContent()) {
+        HttpEntity entity = response.getEntity();
+        if (entity == null) {
+            throw new RegistrationException(
+                    new IOException(
+                            String.format(
+                                    "Response (%d) contained no plugin information",
+                                    response.getCode())));
+        }
+        try (InputStream is = entity.getContent()) {
             return mapper.readValue(is, PluginInfo.class);
         } catch (IOException e) {
             log.error("Unable to parse response as JSON", e);

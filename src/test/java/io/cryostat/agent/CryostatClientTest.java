@@ -20,12 +20,14 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -185,6 +187,29 @@ class CryostatClientTest {
         assertFalse(requestBody.has("token"));
         assertFalse(requestBody.has("credential"));
         assertFalse(requestBody.has("nodes"));
+    }
+
+    @Test
+    void testRefreshRegistrationRejectsResponseWithoutPluginInfo() throws Exception {
+        URI callback = URI.create("http://agent.example.com:9977");
+        when(http.execute(any(HttpHost.class), any(HttpPost.class))).thenReturn(response);
+        when(response.getCode()).thenReturn(204);
+        when(response.getEntity()).thenReturn(null);
+
+        ExecutionException exception =
+                assertThrows(
+                        ExecutionException.class,
+                        () ->
+                                client.refreshRegistration(
+                                                callback,
+                                                new PluginInfo(
+                                                        "plugin-id", "current-token", List.of()))
+                                        .get());
+
+        RegistrationException registrationException =
+                assertInstanceOf(RegistrationException.class, exception.getCause());
+        IOException cause = assertInstanceOf(IOException.class, registrationException.getCause());
+        assertEquals("Response (204) contained no plugin information", cause.getMessage());
     }
 
     @Test

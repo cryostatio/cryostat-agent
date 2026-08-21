@@ -651,7 +651,7 @@ class RegistrationTest {
                         MAX_BACKOFF_MS,
                         BACKOFF_MULTIPLIER,
                         2,
-                        Duration.ZERO,
+                        Duration.ofMillis(-1),
                         MIN_COOLDOWN_DURATION,
                         COOLDOWN_JITTER_FACTOR,
                         RETRY_BACKOFF_JITTER_FACTOR,
