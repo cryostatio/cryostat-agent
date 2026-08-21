@@ -20,11 +20,14 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -93,40 +96,30 @@ class CryostatClientTest {
     @Test
     void testRegisterPostsAgentRegistration() throws Exception {
         URI callback = URI.create("http://agent.example.com:9977");
-        AtomicReference<String> submittedRequestBody = new AtomicReference<>();
-
-        when(http.execute(any(HttpHost.class), any(HttpPost.class)))
-                .thenAnswer(
-                        invocation -> {
-                            HttpPost request = invocation.getArgument(1);
-                            ByteArrayOutputStream out = new ByteArrayOutputStream();
-                            request.getEntity().writeTo(out);
-                            submittedRequestBody.set(out.toString(StandardCharsets.UTF_8));
-                            return response;
+        JsonNode requestBody =
+                capturePostBody(
+                        "{\"id\":\"plugin-id\",\"token\":\"token\",\"env\":[]}",
+                        () -> {
+                            PluginInfo pluginInfo =
+                                    client.register(
+                                                    callback,
+                                                    new CredentialsSnapshot(
+                                                            "testuser",
+                                                            "testpass"
+                                                                    .getBytes(
+                                                                            StandardCharsets
+                                                                                    .US_ASCII)),
+                                                    List.of(discoveryNode(callback)))
+                                            .get();
+                            assertEquals("plugin-id", pluginInfo.getId());
+                            assertEquals("token", pluginInfo.getToken());
+                            return pluginInfo;
                         });
-        when(response.getCode()).thenReturn(200);
-        when(response.getEntity()).thenReturn(responseEntity);
-        when(responseEntity.getContent())
-                .thenReturn(
-                        new StringEntity("{\"id\":\"plugin-id\",\"token\":\"token\",\"env\":[]}")
-                                .getContent());
-
-        PluginInfo pluginInfo =
-                client.register(
-                                callback,
-                                new CredentialsSnapshot(
-                                        "testuser", "testpass".getBytes(StandardCharsets.US_ASCII)),
-                                List.of(discoveryNode(callback)))
-                        .get();
-
-        assertEquals("plugin-id", pluginInfo.getId());
-        assertEquals("token", pluginInfo.getToken());
 
         ArgumentCaptor<HttpPost> requestCaptor = ArgumentCaptor.forClass(HttpPost.class);
         verify(http).execute(any(HttpHost.class), requestCaptor.capture());
         assertEquals("/api/v4.3/discovery/agents", requestCaptor.getValue().getUri().getPath());
 
-        JsonNode requestBody = mapper.readTree(submittedRequestBody.get());
         assertEquals(REALM, requestBody.get("realm").asText());
         assertEquals(callback.toString(), requestBody.get("callback").asText());
         assertEquals("MERGE", requestBody.get("fillStrategy").asText());
@@ -134,6 +127,89 @@ class CryostatClientTest {
         assertEquals("testuser", requestBody.get("credential").get("username").asText());
         assertEquals("testpass", requestBody.get("credential").get("password").asText());
         assertEquals("agent-node", requestBody.get("nodes").get(0).get("name").asText());
+    }
+
+    @Test
+    void testRefreshRegistrationPostsOnlyExistingRegistrationIdentity() throws Exception {
+        URI callback = URI.create("http://agent.example.com:9977");
+        JsonNode requestBody =
+                capturePostBody(
+                        "{\"id\":\"plugin-id\",\"token\":\"new-token\",\"env\":[]}",
+                        () -> {
+                            PluginInfo refreshed =
+                                    client.refreshRegistration(
+                                                    callback,
+                                                    new PluginInfo(
+                                                            "plugin-id",
+                                                            "current-token",
+                                                            List.of()))
+                                            .get();
+                            assertEquals("plugin-id", refreshed.getId());
+                            assertEquals("new-token", refreshed.getToken());
+                            return refreshed;
+                        });
+
+        ArgumentCaptor<HttpPost> requestCaptor = ArgumentCaptor.forClass(HttpPost.class);
+        verify(http).execute(any(HttpHost.class), requestCaptor.capture());
+        assertEquals("/api/v4/discovery", requestCaptor.getValue().getUri().getPath());
+
+        assertEquals("plugin-id", requestBody.get("id").asText());
+        assertEquals("current-token", requestBody.get("token").asText());
+        assertEquals(REALM, requestBody.get("realm").asText());
+        assertEquals(callback.toString(), requestBody.get("callback").asText());
+        assertEquals(4, requestBody.size());
+        assertFalse(requestBody.has("credential"));
+        assertFalse(requestBody.has("nodes"));
+    }
+
+    @Test
+    void testActivateRegistrationRefreshPostsOnlyCallbackIdentity() throws Exception {
+        URI callback = URI.create("http://agent.example.com:9977");
+        JsonNode requestBody =
+                capturePostBody(
+                        "{\"id\":\"plugin-id\",\"token\":\"new-token\",\"env\":[]}",
+                        () -> {
+                            PluginInfo activated =
+                                    client.activateRegistrationRefresh(callback).get();
+                            assertEquals("plugin-id", activated.getId());
+                            assertEquals("new-token", activated.getToken());
+                            return activated;
+                        });
+
+        ArgumentCaptor<HttpPost> requestCaptor = ArgumentCaptor.forClass(HttpPost.class);
+        verify(http).execute(any(HttpHost.class), requestCaptor.capture());
+        assertEquals("/api/v4/discovery", requestCaptor.getValue().getUri().getPath());
+
+        assertEquals(REALM, requestBody.get("realm").asText());
+        assertEquals(callback.toString(), requestBody.get("callback").asText());
+        assertEquals(2, requestBody.size());
+        assertFalse(requestBody.has("id"));
+        assertFalse(requestBody.has("token"));
+        assertFalse(requestBody.has("credential"));
+        assertFalse(requestBody.has("nodes"));
+    }
+
+    @Test
+    void testRefreshRegistrationRejectsResponseWithoutPluginInfo() throws Exception {
+        URI callback = URI.create("http://agent.example.com:9977");
+        when(http.execute(any(HttpHost.class), any(HttpPost.class))).thenReturn(response);
+        when(response.getCode()).thenReturn(204);
+        when(response.getEntity()).thenReturn(null);
+
+        ExecutionException exception =
+                assertThrows(
+                        ExecutionException.class,
+                        () ->
+                                client.refreshRegistration(
+                                                callback,
+                                                new PluginInfo(
+                                                        "plugin-id", "current-token", List.of()))
+                                        .get());
+
+        RegistrationException registrationException =
+                assertInstanceOf(RegistrationException.class, exception.getCause());
+        IOException cause = assertInstanceOf(IOException.class, registrationException.getCause());
+        assertEquals("Response (204) contained no plugin information", cause.getMessage());
     }
 
     @Test
@@ -176,6 +252,19 @@ class CryostatClientTest {
 
     private JsonNode captureRegistrationRequest(CryostatClient client, URI callback)
             throws Exception {
+        return capturePostBody(
+                "{\"id\":\"plugin-id\",\"token\":\"token\",\"env\":[]}",
+                () ->
+                        client.register(
+                                        callback,
+                                        new CredentialsSnapshot(
+                                                "testuser",
+                                                "testpass".getBytes(StandardCharsets.US_ASCII)),
+                                        List.of(discoveryNode(callback)))
+                                .get());
+    }
+
+    private JsonNode capturePostBody(String responseJson, Callable<?> operation) throws Exception {
         AtomicReference<String> submittedRequestBody = new AtomicReference<>();
 
         when(http.execute(any(HttpHost.class), any(HttpPost.class)))
@@ -189,17 +278,9 @@ class CryostatClientTest {
                         });
         when(response.getCode()).thenReturn(200);
         when(response.getEntity()).thenReturn(responseEntity);
-        when(responseEntity.getContent())
-                .thenReturn(
-                        new StringEntity("{\"id\":\"plugin-id\",\"token\":\"token\",\"env\":[]}")
-                                .getContent());
+        when(responseEntity.getContent()).thenReturn(new StringEntity(responseJson).getContent());
 
-        client.register(
-                        callback,
-                        new CredentialsSnapshot(
-                                "testuser", "testpass".getBytes(StandardCharsets.US_ASCII)),
-                        List.of(discoveryNode(callback)))
-                .get();
+        operation.call();
 
         return mapper.readTree(submittedRequestBody.get());
     }

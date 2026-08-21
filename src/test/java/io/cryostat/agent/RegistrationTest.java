@@ -21,6 +21,7 @@ import static org.mockito.Mockito.*;
 
 import java.net.URI;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.CompletableFuture;
@@ -28,6 +29,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
+import io.cryostat.agent.Registration.RegistrationEvent.State;
 import io.cryostat.agent.model.PluginInfo;
 import io.cryostat.agent.model.ServerHealth;
 import io.cryostat.agent.util.AppNameResolver;
@@ -487,32 +489,300 @@ class RegistrationTest {
     @Test
     void testSuccessfulRegistrationCommitsPendingCredentials() throws Exception {
         URI callback = URI.create("http://agent.example.com:9977");
-        when(callbackResolver.determineSelfCallback()).thenReturn(callback);
-        when(appNameResolver.extractFromJavaCommand()).thenReturn("test.Main");
-        when(cryostat.serverHealth())
-                .thenReturn(
-                        CompletableFuture.completedFuture(
-                                new ServerHealth(
-                                        "4.3.0",
-                                        new ServerHealth.BuildInfo(
-                                                new ServerHealth.GitInfo("test-hash")))));
-        when(cryostat.register(eq(callback), any(), anyCollection()))
-                .thenReturn(
-                        CompletableFuture.completedFuture(
-                                new PluginInfo("plugin-id", "plugin-token", List.of())));
-        doAnswer(
-                        invocation -> {
-                            invocation.getArgument(0, Runnable.class).run();
-                            return scheduledFuture;
-                        })
-                .when(executor)
-                .submit(any(Runnable.class));
+        stubSuccessfulInitialRegistration(callback, "plugin-id", "plugin-token");
+        runSubmittedTasksImmediately();
 
         registration.start();
 
         verify(webServer).commitPendingCredentials();
         verify(webServer, never()).discardPendingCredentials();
+        verify(cryostat).activateRegistrationRefresh(callback);
+        verify(cryostat, never()).refreshRegistration(any(), any());
         assertEquals("plugin-id", registration.getPluginInfo().getId());
+        assertEquals("bootstrap-token", registration.getPluginInfo().getToken());
+    }
+
+    @Test
+    void testInvalidPeriodicCheckRefreshesTokenWithoutReplacingCredentials() throws Exception {
+        URI callback = URI.create("http://agent.example.com:9977");
+        stubSuccessfulInitialRegistration(callback, "plugin-id", "expired-token");
+        when(cryostat.checkRegistration(any(PluginInfo.class)))
+                .thenReturn(CompletableFuture.completedFuture(false));
+        when(cryostat.refreshRegistration(eq(callback), any(PluginInfo.class)))
+                .thenReturn(
+                        CompletableFuture.completedFuture(
+                                new PluginInfo("plugin-id", "new-token", List.of())));
+        runSubmittedTasksImmediately();
+        List<State> events = new ArrayList<>();
+        registration.addRegistrationListener(evt -> events.add(evt.state));
+
+        registration.start();
+        ArgumentCaptor<Runnable> checkTask = ArgumentCaptor.forClass(Runnable.class);
+        verify(executor)
+                .scheduleAtFixedRate(
+                        checkTask.capture(),
+                        eq((long) REGISTRATION_CHECK_MS),
+                        eq((long) REGISTRATION_CHECK_MS),
+                        eq(TimeUnit.MILLISECONDS));
+
+        checkTask.getValue().run();
+
+        assertEquals("plugin-id", registration.getPluginInfo().getId());
+        assertEquals("new-token", registration.getPluginInfo().getToken());
+        ArgumentCaptor<PluginInfo> checkedPlugin = ArgumentCaptor.forClass(PluginInfo.class);
+        verify(cryostat).checkRegistration(checkedPlugin.capture());
+        verify(cryostat).activateRegistrationRefresh(callback);
+        ArgumentCaptor<PluginInfo> refreshedPlugin = ArgumentCaptor.forClass(PluginInfo.class);
+        verify(cryostat).refreshRegistration(eq(callback), refreshedPlugin.capture());
+        assertEquals("bootstrap-token", checkedPlugin.getValue().getToken());
+        assertEquals("bootstrap-token", refreshedPlugin.getValue().getToken());
+        assertNotSame(checkedPlugin.getValue(), refreshedPlugin.getValue());
+        verify(cryostat, times(1)).register(eq(callback), any(), anyCollection());
+        verify(cryostat, times(1)).serverHealth();
+        verify(webServer, times(1)).generateCredentials(callback);
+        verify(webServer, times(1)).commitPendingCredentials();
+        verify(webServer, never()).discardPendingCredentials();
+        assertTrue(events.contains(State.REFRESHING));
+        assertTrue(events.contains(State.REFRESHED));
+        assertEquals(2, events.stream().filter(State.REFRESHED::equals).count());
+    }
+
+    @Test
+    void testRetryableActivationFailurePreservesRegistrationAndRetriesActivationOnly()
+            throws Exception {
+        URI callback = URI.create("http://agent.example.com:9977");
+        stubSuccessfulInitialRegistration(callback, "plugin-id", "initial-token");
+        when(cryostat.activateRegistrationRefresh(callback))
+                .thenReturn(
+                        CompletableFuture.failedFuture(new HttpException(503, callback)),
+                        CompletableFuture.completedFuture(
+                                new PluginInfo("plugin-id", "retried-token", List.of())));
+        when(random.nextDouble()).thenReturn(0.5);
+        doReturn(scheduledFuture)
+                .when(executor)
+                .schedule(any(Runnable.class), anyLong(), any(TimeUnit.class));
+        runSubmittedTasksImmediately();
+
+        registration.start();
+
+        assertEquals("plugin-id", registration.getPluginInfo().getId());
+        assertEquals("initial-token", registration.getPluginInfo().getToken());
+        verify(webServer, times(1)).generateCredentials(callback);
+        verify(cryostat, times(1)).register(eq(callback), any(), anyCollection());
+        verify(webServer, never()).discardPendingCredentials();
+
+        ArgumentCaptor<Runnable> retryTask = ArgumentCaptor.forClass(Runnable.class);
+        verify(executor)
+                .schedule(
+                        retryTask.capture(),
+                        eq((long) REGISTRATION_RETRY_MS),
+                        eq(TimeUnit.MILLISECONDS));
+        retryTask.getValue().run();
+
+        assertEquals("plugin-id", registration.getPluginInfo().getId());
+        assertEquals("retried-token", registration.getPluginInfo().getToken());
+        verify(cryostat, times(2)).activateRegistrationRefresh(callback);
+        verify(cryostat, never()).refreshRegistration(any(), any());
+        verify(webServer, times(1)).generateCredentials(callback);
+        verify(cryostat, times(1)).register(eq(callback), any(), anyCollection());
+    }
+
+    @Test
+    void testRetryableTokenRefreshFailurePreservesRegistrationAndRetriesRefreshOnly()
+            throws Exception {
+        URI callback = URI.create("http://agent.example.com:9977");
+        stubSuccessfulInitialRegistration(callback, "plugin-id", "initial-token");
+        when(cryostat.refreshRegistration(eq(callback), any(PluginInfo.class)))
+                .thenReturn(
+                        CompletableFuture.failedFuture(new HttpException(503, callback)),
+                        CompletableFuture.completedFuture(
+                                new PluginInfo("plugin-id", "retried-token", List.of())));
+        when(random.nextDouble()).thenReturn(0.5);
+        doReturn(scheduledFuture)
+                .when(executor)
+                .schedule(any(Runnable.class), anyLong(), any(TimeUnit.class));
+        runSubmittedTasksImmediately();
+
+        registration.start();
+        registration.notify(State.REFRESHING);
+
+        assertEquals("plugin-id", registration.getPluginInfo().getId());
+        assertEquals("bootstrap-token", registration.getPluginInfo().getToken());
+        verify(webServer, times(1)).generateCredentials(callback);
+        verify(cryostat, times(1)).register(eq(callback), any(), anyCollection());
+        verify(webServer, never()).discardPendingCredentials();
+
+        ArgumentCaptor<Runnable> retryTask = ArgumentCaptor.forClass(Runnable.class);
+        verify(executor)
+                .schedule(
+                        retryTask.capture(),
+                        eq((long) REGISTRATION_RETRY_MS),
+                        eq(TimeUnit.MILLISECONDS));
+        retryTask.getValue().run();
+
+        assertEquals("plugin-id", registration.getPluginInfo().getId());
+        assertEquals("retried-token", registration.getPluginInfo().getToken());
+        verify(cryostat).activateRegistrationRefresh(callback);
+        verify(cryostat, times(2)).refreshRegistration(eq(callback), any(PluginInfo.class));
+        verify(webServer, times(1)).generateCredentials(callback);
+        verify(cryostat, times(1)).register(eq(callback), any(), anyCollection());
+    }
+
+    @Test
+    void testRepeatedRetryableRefreshFailuresFallBackToFullRegistration() throws Exception {
+        URI callback = URI.create("http://agent.example.com:9977");
+        Registration recoveringRegistration =
+                new Registration(
+                        executor,
+                        cryostat,
+                        callbackResolver,
+                        webServer,
+                        appNameResolver,
+                        INSTANCE_ID,
+                        JVM_ID,
+                        APP_NAME,
+                        REALM,
+                        HOSTNAME,
+                        JMX_PORT,
+                        REGISTRATION_RETRY_MS,
+                        REGISTRATION_CHECK_MS,
+                        false,
+                        true,
+                        MAX_BACKOFF_MS,
+                        BACKOFF_MULTIPLIER,
+                        2,
+                        Duration.ofMillis(-1),
+                        MIN_COOLDOWN_DURATION,
+                        COOLDOWN_JITTER_FACTOR,
+                        RETRY_BACKOFF_JITTER_FACTOR,
+                        MIN_REGISTRATION_INTERVAL,
+                        random);
+        when(callbackResolver.determineSelfCallback()).thenReturn(callback);
+        when(appNameResolver.extractFromJavaCommand()).thenReturn("test.Main");
+        when(cryostat.serverHealth()).thenReturn(CompletableFuture.completedFuture(serverHealth()));
+        when(cryostat.register(eq(callback), any(), anyCollection()))
+                .thenReturn(
+                        CompletableFuture.completedFuture(
+                                new PluginInfo("plugin-id", "initial-token", List.of())),
+                        CompletableFuture.completedFuture(
+                                new PluginInfo("recovered-id", "recovered-token", List.of())));
+        when(cryostat.activateRegistrationRefresh(callback))
+                .thenReturn(
+                        CompletableFuture.completedFuture(
+                                new PluginInfo("plugin-id", "bootstrap-token", List.of())),
+                        CompletableFuture.completedFuture(
+                                new PluginInfo(
+                                        "recovered-id", "recovered-bootstrap-token", List.of())));
+        when(cryostat.refreshRegistration(eq(callback), any(PluginInfo.class)))
+                .thenReturn(
+                        CompletableFuture.failedFuture(new RuntimeException("connection reset")),
+                        CompletableFuture.failedFuture(new RuntimeException("connection reset")));
+        when(random.nextDouble()).thenReturn(0.5);
+        List<Runnable> scheduledTasks = new ArrayList<>();
+        doAnswer(
+                        invocation -> {
+                            scheduledTasks.add(invocation.getArgument(0, Runnable.class));
+                            return scheduledFuture;
+                        })
+                .when(executor)
+                .schedule(any(Runnable.class), anyLong(), any(TimeUnit.class));
+        runSubmittedTasksImmediately();
+
+        recoveringRegistration.start();
+        recoveringRegistration.notify(State.REFRESHING);
+
+        assertEquals("plugin-id", recoveringRegistration.getPluginInfo().getId());
+        assertEquals(1, scheduledTasks.size());
+        scheduledTasks.remove(0).run();
+
+        assertFalse(recoveringRegistration.getPluginInfo().isInitialized());
+        assertEquals(1, scheduledTasks.size());
+        scheduledTasks.remove(0).run();
+
+        assertEquals("recovered-id", recoveringRegistration.getPluginInfo().getId());
+        assertEquals(
+                "recovered-bootstrap-token", recoveringRegistration.getPluginInfo().getToken());
+        verify(callbackResolver, times(2)).determineSelfCallback();
+        verify(cryostat, times(2)).refreshRegistration(eq(callback), any(PluginInfo.class));
+        verify(cryostat, times(2)).register(eq(callback), any(), anyCollection());
+        verify(webServer, times(2)).generateCredentials(callback);
+        verify(webServer, times(2)).commitPendingCredentials();
+    }
+
+    @Test
+    void testTerminalRefreshFailureFallsBackToFullRecoveryRegistration() throws Exception {
+        URI callback = URI.create("http://agent.example.com:9977");
+        when(callbackResolver.determineSelfCallback()).thenReturn(callback);
+        when(appNameResolver.extractFromJavaCommand()).thenReturn("test.Main");
+        when(cryostat.serverHealth()).thenReturn(CompletableFuture.completedFuture(serverHealth()));
+        when(cryostat.register(eq(callback), any(), anyCollection()))
+                .thenReturn(
+                        CompletableFuture.completedFuture(
+                                new PluginInfo("plugin-id", "expired-token", List.of())),
+                        CompletableFuture.completedFuture(
+                                new PluginInfo("recovered-id", "recovered-token", List.of())));
+        when(cryostat.checkRegistration(any(PluginInfo.class)))
+                .thenReturn(CompletableFuture.completedFuture(false));
+        when(cryostat.activateRegistrationRefresh(callback))
+                .thenReturn(
+                        CompletableFuture.completedFuture(
+                                new PluginInfo("plugin-id", "bootstrap-token", List.of())),
+                        CompletableFuture.completedFuture(
+                                new PluginInfo(
+                                        "recovered-id", "recovered-bootstrap-token", List.of())));
+        when(cryostat.refreshRegistration(eq(callback), any(PluginInfo.class)))
+                .thenReturn(CompletableFuture.failedFuture(new HttpException(400, callback)));
+        when(random.nextDouble()).thenReturn(0.5);
+        runSubmittedTasksImmediately();
+
+        registration.start();
+        ArgumentCaptor<Runnable> checkTask = ArgumentCaptor.forClass(Runnable.class);
+        verify(executor)
+                .scheduleAtFixedRate(
+                        checkTask.capture(),
+                        eq((long) REGISTRATION_CHECK_MS),
+                        eq((long) REGISTRATION_CHECK_MS),
+                        eq(TimeUnit.MILLISECONDS));
+        checkTask.getValue().run();
+
+        assertFalse(registration.getPluginInfo().isInitialized());
+        ArgumentCaptor<Runnable> recoveryTask = ArgumentCaptor.forClass(Runnable.class);
+        verify(executor)
+                .schedule(
+                        recoveryTask.capture(),
+                        eq((long) REGISTRATION_RETRY_MS),
+                        eq(TimeUnit.MILLISECONDS));
+        recoveryTask.getValue().run();
+
+        assertEquals("recovered-id", registration.getPluginInfo().getId());
+        assertEquals("recovered-bootstrap-token", registration.getPluginInfo().getToken());
+        verify(cryostat, times(2)).activateRegistrationRefresh(callback);
+        verify(cryostat).refreshRegistration(eq(callback), any(PluginInfo.class));
+        verify(cryostat, times(2)).register(eq(callback), any(), anyCollection());
+        verify(webServer, times(2)).generateCredentials(callback);
+        verify(webServer, times(2)).commitPendingCredentials();
+        verify(webServer).discardPendingCredentials();
+    }
+
+    @Test
+    void testOverlappingRefreshAttemptsAreSerialized() throws Exception {
+        URI callback = URI.create("http://agent.example.com:9977");
+        stubSuccessfulInitialRegistration(callback, "plugin-id", "old-token");
+        runSubmittedTasksImmediately();
+        registration.start();
+
+        CompletableFuture<PluginInfo> refresh = new CompletableFuture<>();
+        when(cryostat.refreshRegistration(eq(callback), any(PluginInfo.class))).thenReturn(refresh);
+
+        registration.notify(State.REFRESHING);
+        registration.notify(State.REFRESHING);
+
+        verify(cryostat, times(1)).refreshRegistration(eq(callback), any(PluginInfo.class));
+        verify(webServer, times(1)).generateCredentials(callback);
+        verify(cryostat, times(1)).register(eq(callback), any(), anyCollection());
+
+        refresh.complete(new PluginInfo("plugin-id", "new-token", List.of()));
+        assertEquals("new-token", registration.getPluginInfo().getToken());
     }
 
     @Test
@@ -577,5 +847,36 @@ class RegistrationTest {
 
         verify(webServer).exitCooldownMode();
         verify(cryostat, times(1)).serverHealth();
+    }
+
+    private void stubSuccessfulInitialRegistration(
+            URI callback, String pluginId, String pluginToken) throws Exception {
+        when(callbackResolver.determineSelfCallback()).thenReturn(callback);
+        when(appNameResolver.extractFromJavaCommand()).thenReturn("test.Main");
+        when(cryostat.serverHealth()).thenReturn(CompletableFuture.completedFuture(serverHealth()));
+        when(cryostat.register(eq(callback), any(), anyCollection()))
+                .thenReturn(
+                        CompletableFuture.completedFuture(
+                                new PluginInfo(pluginId, pluginToken, List.of())));
+        lenient()
+                .when(cryostat.activateRegistrationRefresh(callback))
+                .thenReturn(
+                        CompletableFuture.completedFuture(
+                                new PluginInfo(pluginId, "bootstrap-token", List.of())));
+    }
+
+    private ServerHealth serverHealth() {
+        return new ServerHealth(
+                "4.3.0", new ServerHealth.BuildInfo(new ServerHealth.GitInfo("test-hash")));
+    }
+
+    private void runSubmittedTasksImmediately() {
+        doAnswer(
+                        invocation -> {
+                            invocation.getArgument(0, Runnable.class).run();
+                            return scheduledFuture;
+                        })
+                .when(executor)
+                .submit(any(Runnable.class));
     }
 }
