@@ -271,9 +271,11 @@ class TriggerParserTest {
     void testTriggerValidation() {
         Mockito.when(helper.isValidTemplate("profile")).thenReturn(true);
         Mockito.when(helper.isValidTemplate("bar")).thenReturn(false);
-        assertEquals(false, parser.isValid(new SmartTriggerReq(null, 0, null)));
-        assertEquals(false, parser.isValid(new SmartTriggerReq("foo", 0, "bar")));
-        assertEquals(true, parser.isValid(new SmartTriggerReq("ProcessCpuLoad>0.2", 0, "profile")));
+        assertEquals(false, parser.isValid(new SmartTriggerReq(null, 0, null, 0, 0, null)));
+        assertEquals(false, parser.isValid(new SmartTriggerReq("foo", 0, "baz", 0, 0, "bar")));
+        assertEquals(
+                true,
+                parser.isValid(new SmartTriggerReq("ProcessCpuLoad>0.2", 0, "", 0, 10, "profile")));
     }
 
     @Test
