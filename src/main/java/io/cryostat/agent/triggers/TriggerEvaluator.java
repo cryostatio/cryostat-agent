@@ -232,6 +232,10 @@ public class TriggerEvaluator {
                         break;
                     case RECORDING_ACTIVE:
                         log.trace("Trigger {} in RECORDING_ACTIVE, monitoring conditions", t);
+                        // If no stopping condition was provided, no need to take any action.
+                        if (t.getStopCondition().isBlank()) {
+                            break;
+                        }
                         if (evaluateTriggerStopConstraint(t, Duration.ZERO)) {
                             log.trace(
                                     "Trigger {} met stopping condition, transitioning to"
