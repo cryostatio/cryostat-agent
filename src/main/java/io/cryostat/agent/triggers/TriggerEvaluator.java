@@ -277,7 +277,12 @@ public class TriggerEvaluator {
                 "Recording {} stopped, delegating to harvester",
                 recording.getRecording().getName());
         harvester.recordingStateChanged(recording.getRecording());
-        t.setState(TriggerState.COMPLETE);
+        if (activationCounts.get(t) <= t.getExecutionTarget()) {
+            t.setState(TriggerState.COMPLETE);
+        } else {
+            // Trigger can keep firing, reset the state
+            t.setState(TriggerState.NEW);
+        }
     }
 
     private TemplatedRecording startRecording(SmartTrigger t) {
