@@ -24,11 +24,23 @@ public class SmartTriggerReq {
     private String condition;
     private long duration;
     private String recordingTemplate;
+    private long stopDuration;
+    private String stopCondition;
+    private long executionTarget;
 
-    public SmartTriggerReq(String condition, long duration, String recordingTemplate) {
+    public SmartTriggerReq(
+            String condition,
+            long duration,
+            String stopCondition,
+            long stopDuration,
+            long executionTarget,
+            String recordingTemplate) {
         this.condition = condition;
         this.duration = duration;
         this.recordingTemplate = recordingTemplate;
+        this.stopDuration = stopDuration;
+        this.stopCondition = stopCondition;
+        this.executionTarget = executionTarget;
     }
 
     // 0-arg constructor for serializer
@@ -36,6 +48,10 @@ public class SmartTriggerReq {
         this.duration = 0;
         this.condition = "";
         this.recordingTemplate = "";
+        this.stopCondition = "";
+        this.stopDuration = 0;
+        // Default to continuous monitoring
+        this.executionTarget = Long.MAX_VALUE;
     }
 
     public long getDuration() {
@@ -60,5 +76,29 @@ public class SmartTriggerReq {
 
     public void setRecordingTemplate(String recordingTemplate) {
         this.recordingTemplate = recordingTemplate;
+    }
+
+    public long getStopDuration() {
+        return stopDuration;
+    }
+
+    public void setStopDuration(long stopDuration) {
+        this.stopDuration = stopDuration;
+    }
+
+    public String getStopCondition() {
+        return stopCondition;
+    }
+
+    public void setStopCondition(String stopCondition) {
+        this.stopCondition = stopCondition;
+    }
+
+    public long getExecutionTarget() {
+        return executionTarget;
+    }
+
+    public void setExecutionTarget(long target) {
+        this.executionTarget = target;
     }
 }
