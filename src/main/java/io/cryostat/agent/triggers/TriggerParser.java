@@ -122,7 +122,10 @@ public class TriggerParser {
                 return new SmartTrigger(
                         UUID.randomUUID().toString(),
                         req.getCondition(),
+                        req.getStopCondition(),
                         req.getDuration(),
+                        req.getStopDuration(),
+                        req.getExecutionTarget(),
                         req.getRecordingTemplate());
             } catch (DateTimeParseException dtpe) {
                 log.error("Failed to parse trigger duration constraint", dtpe);
@@ -167,6 +170,11 @@ public class TriggerParser {
             return false;
         } else if (!flightRecorderHelper.isValidTemplate(r.getRecordingTemplate())) {
             log.warn("Template was invalid. Skipping Trigger.");
+            return false;
+            // A non provided value will default to max value, effectively continuous.
+            // 0 or negative is invalid.
+        } else if (r.getExecutionTarget() <= 0) {
+            log.warn("Invalid execution target. Skipping Trigger.");
             return false;
         }
         return true;

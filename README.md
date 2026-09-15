@@ -89,11 +89,13 @@ shutdown so that the cause of an unexpected JVM shutdown might be captured for l
 on a set of constraints specified by the user.
 
 The general form of a Smart Trigger expression is as follows:
-
 ```
 { "condition": "constraint1(&&/||)constraint2...constraintN" ,
   "duration": "number of milliseconds" ,
-  "recordingTemplate": "recordingTemplateNameOrLabel"
+  "stopCondition": "constraint1(&&/||)constraint2...constraintN",
+  "stopDuration": "number of milliseconds" ,
+  "recordingTemplate": "recordingTemplateNameOrLabel",
+  "invocationCountTarget": "number of triggers"
 }
 ```
 
@@ -103,6 +105,12 @@ Either the filename or label XML tag of the `${templateName}.jfc` may be used to
 example, the JDK distribution ships with a `default.jfc` file containing the top-level
 `<configuration label="Continuous">` element. This template may be specified in the Smart Trigger definition as any of
 `default.jfc`, `default`, or `Continuous`.
+
+stopCondition and stopDuration are optional fields used to defined when a trigger should stop a recording that was previously started. For instance to stop a recording when monitoring CPU Load drops below a specified value. 
+
+invocationCountTarget is an optional field that allows for finer control over the trigger lifecycle, specifying a specific number of times it should go through its lifecycle. By default smart triggers will monitor continuously and start/stop a recording each time the conditions are met.
+
+When specifying a trigger condition, triggerActivationCount, timeLastActivated, and durationSinceLastActivation are optional variables that can be used in the expression. For instance processCpuLoad > 0.2 && durationSinceLastActivation > 30000. This will activate when the CPU load exceeds 0.2 and the trigger hasn't previously activated in the last 30 seconds.
 
 An example for listening to CPU Usage and starting a recording using the Profiling template when it exceeds 0.2%:
 
