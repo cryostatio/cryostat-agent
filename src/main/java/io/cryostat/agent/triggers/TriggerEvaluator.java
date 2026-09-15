@@ -30,7 +30,6 @@ import java.util.concurrent.TimeUnit;
 import io.cryostat.agent.CryostatClient;
 import io.cryostat.agent.FlightRecorderHelper;
 import io.cryostat.agent.harvest.Harvester;
-import io.cryostat.agent.model.MBeanInfo;
 import io.cryostat.libcryostat.triggers.SmartTrigger;
 import io.cryostat.libcryostat.triggers.SmartTrigger.TriggerState;
 
@@ -57,9 +56,15 @@ public class TriggerEvaluator {
     private final ConcurrentHashMap<SmartTrigger, Script> conditionScriptCache =
             new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, SmartTrigger> triggers = new ConcurrentHashMap<>();
+    // Multiple triggers can monitor the same attribute, but we only need
+    // one listener for that attribute. Track how many are using each one
+    // to decide when to deregister.
+    private final ConcurrentHashMap<String, Integer> monitoredAttributeCount =
+            new ConcurrentHashMap<>();
     private Future<?> task;
     private final Logger log = LoggerFactory.getLogger(getClass());
     private final CryostatClient client;
+    private final MBeanCache cache;
 
     @SuppressFBWarnings("EI_EXPOSE_REP2")
     public TriggerEvaluator(
@@ -79,6 +84,7 @@ public class TriggerEvaluator {
         this.harvester = harvester;
         this.evaluationPeriodMs = evaluationPeriodMs;
         this.client = client;
+        this.cache = new MBeanCache();
     }
 
     public void start() {
@@ -137,6 +143,17 @@ public class TriggerEvaluator {
 
     private String registerTrigger(SmartTrigger t) {
         log.trace("Registering Smart Trigger: {}", t);
+        try {
+            for (String s : parser.parseAttributesFromCondition(t.getTriggerCondition())) {
+                cache.monitorAttribute(s);
+                monitoredAttributeCount.merge(s, 1, Integer::sum);
+            }
+        } catch (Exception e) {
+            log.warn(
+                    "Invalid Attribute referenced in Trigger condition {}, skipping trigger",
+                    t.getTriggerCondition());
+            return null;
+        }
         if (!triggers.values().contains(t)) {
             triggers.put(t.getID(), t);
         }
@@ -203,6 +220,15 @@ public class TriggerEvaluator {
                                             Collections.emptyList(),
                                             List.of(t.getID()),
                                             Collections.emptyList()));
+                            for (String c :
+                                    parser.parseAttributesFromCondition(t.getTriggerCondition())) {
+                                monitoredAttributeCount.merge(c, -1, Integer::sum);
+                                // If no further triggers are monitoring this attribute
+                                // we can remove it.
+                                if (monitoredAttributeCount.get(c) == 0) {
+                                    cache.deregister(c);
+                                }
+                            }
                         } else if (evaluateTriggerConstraint(t, Duration.ZERO)) {
                             log.trace("Trigger {} satisfied, waiting for duration...", t);
                         } else {
@@ -249,7 +275,7 @@ public class TriggerEvaluator {
 
     private boolean evaluateTriggerConstraint(SmartTrigger trigger, Duration targetDuration) {
         try {
-            Map<String, Object> conditionVars = new MBeanInfo().getSimplifiedMetrics();
+            Map<String, Object> conditionVars = cache.snapshot();
             log.trace("evaluating mbean map:\n{}", conditionVars);
             Boolean conditionResult =
                     buildConditionScript(trigger, conditionVars)
