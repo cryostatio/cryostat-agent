@@ -20,7 +20,7 @@ jobs:
       - name: Java setup
         uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
-          java-version: '11'
+          java-version: '11.0.32+101'
           distribution: 'temurin'
           cache: maven
       - name: Run a build of the code base before release
