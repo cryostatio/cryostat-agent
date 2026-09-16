@@ -40,7 +40,7 @@ import org.slf4j.LoggerFactory;
 public class TriggerParser {
 
     private static final String TEMPLATE_PATTERN_STRING = "([\\w\\-]+)(?:\\.jfc)?";
-    private static final String CONDITION_PATTERN_STRING = "(([aA-zZ]+)[\\<\\>\\=]+\\d+\\.?\\d+)";
+    private static final String CONDITION_PATTERN_STRING = "(([aA-zZ]+)[\\<\\>\\=]+\\d+\\.?\\d?)";
     private static final Pattern TEMPLATE_PATTERN = Pattern.compile(TEMPLATE_PATTERN_STRING);
     private static final Pattern CONDITION_PATTERN = Pattern.compile(CONDITION_PATTERN_STRING);
     private final FlightRecorderHelper flightRecorderHelper;

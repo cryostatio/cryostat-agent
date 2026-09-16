@@ -222,10 +222,10 @@ public class TriggerEvaluator {
                                             Collections.emptyList()));
                             for (String c :
                                     parser.parseAttributesFromCondition(t.getTriggerCondition())) {
-                                monitoredAttributeCount.merge(c, -1, Integer::sum);
+                                var value = monitoredAttributeCount.merge(c, -1, Integer::sum);
                                 // If no further triggers are monitoring this attribute
                                 // we can remove it.
-                                if (monitoredAttributeCount.get(c) == 0) {
+                                if (value == 0) {
                                     cache.deregister(c);
                                 }
                             }

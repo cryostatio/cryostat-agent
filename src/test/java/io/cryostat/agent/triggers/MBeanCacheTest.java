@@ -52,6 +52,8 @@ public class MBeanCacheTest {
         MBeanAttributeInfo[] attrInfo = {Mockito.mock(MBeanAttributeInfo.class)};
         Mockito.when(server.getMBeanInfo(Mockito.any())).thenReturn(info);
         Mockito.when(server.queryNames(null, null)).thenReturn(Set.of(name));
+        Mockito.when(server.getAttribute(Mockito.any(ObjectName.class), Mockito.anyString()))
+                .thenReturn(1);
         Mockito.when(info.getAttributes()).thenReturn(attrInfo);
         Mockito.when(attrInfo[0].getName()).thenReturn("ProcessCpuLoad");
         String in = "ProcessCpuLoad";
@@ -69,6 +71,8 @@ public class MBeanCacheTest {
         Mockito.when(server.queryNames(null, null)).thenReturn(Set.of(name));
         Mockito.when(info.getAttributes()).thenReturn(attrInfo);
         Mockito.when(attrInfo[0].getName()).thenReturn("ProcessCpuLoad");
+        Mockito.when(server.getAttribute(Mockito.any(ObjectName.class), Mockito.anyString()))
+                .thenReturn(1);
         String in = "ProcessCpuLoad";
         cache.monitorAttribute(in);
         Mockito.verify(server)

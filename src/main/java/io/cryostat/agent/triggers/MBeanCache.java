@@ -27,6 +27,7 @@ import javax.management.InstanceNotFoundException;
 import javax.management.IntrospectionException;
 import javax.management.MBeanAttributeInfo;
 import javax.management.MBeanServer;
+import javax.management.MalformedObjectNameException;
 import javax.management.NotificationListener;
 import javax.management.ObjectName;
 import javax.management.ReflectionException;
@@ -39,9 +40,13 @@ import org.slf4j.LoggerFactory;
 public class MBeanCache {
 
     private static final String OBJECT_NAME_PREFIX = "io.cryostat:type=GaugeMonitor,name=";
+    // Read/Written by JMX Threads
     private ConcurrentHashMap<String, Object> monitoredAttributes = new ConcurrentHashMap<>();
-    private Map<String, GaugeMonitor> gauges = new HashMap<>();
+    // Read/Written by evaluation thread and HTTP thread
+    // Read/Writes protected by registrationLock
+    private HashMap<String, GaugeMonitor> gauges = new HashMap<>();
     private final Logger log = LoggerFactory.getLogger(getClass());
+    private final Object registrationLock = new Object();
     private MBeanServer server = ManagementFactory.getPlatformMBeanServer();
 
     public MBeanCache() {}
@@ -51,6 +56,12 @@ public class MBeanCache {
     }
 
     public void monitorAttribute(String attr) throws Exception {
+        synchronized (registrationLock) {
+            if (gauges.containsKey(attr)) {
+                log.warn("Attribute {} is already being monitored.", attr);
+                return;
+            }
+        }
         GaugeMonitor monitor = new GaugeMonitor();
         ObjectName objectName = getObjectName(attr);
         monitor.addObservedObject(objectName);
@@ -70,23 +81,28 @@ public class MBeanCache {
                 };
         monitor.addNotificationListener(listener, null, monitor);
 
-        ObjectName monitorName = new ObjectName(OBJECT_NAME_PREFIX + attr + "Monitor");
-        log.warn("Registering monitor");
-        log.warn(server.toString());
+        ObjectName monitorName = generateObjectName(attr);
+        log.trace("Registering monitor: {}", monitorName.toString());
+        // Pre-populate cache with the current value
+        monitoredAttributes.put(attr, server.getAttribute(objectName, attr));
         server.registerMBean(monitor, monitorName);
-        gauges.put(attr, monitor);
+        synchronized (registrationLock) {
+            gauges.put(attr, monitor);
+        }
         monitor.start();
     }
 
     public void deregister(String attr) throws Exception {
-        if (!gauges.containsKey(attr)) {
-            log.warn("Attempt to deregister non-monitored attribute: {}", attr);
-            return;
+        synchronized (registrationLock) {
+            if (!gauges.containsKey(attr)) {
+                log.warn("Attempt to deregister non-monitored attribute: {}", attr);
+                return;
+            }
+            gauges.get(attr).stop();
+            server.unregisterMBean(generateObjectName(attr));
+            monitoredAttributes.remove(attr);
+            gauges.remove(attr);
         }
-        gauges.get(attr).stop();
-        server.unregisterMBean(new ObjectName(OBJECT_NAME_PREFIX + attr + "Monitor"));
-        monitoredAttributes.remove(attr);
-        gauges.remove(attr);
     }
 
     private ObjectName getObjectName(String attr)
@@ -102,5 +118,9 @@ public class MBeanCache {
             }
         }
         return null;
+    }
+
+    private ObjectName generateObjectName(String attr) throws MalformedObjectNameException {
+        return new ObjectName(OBJECT_NAME_PREFIX + attr + "Monitor");
     }
 }

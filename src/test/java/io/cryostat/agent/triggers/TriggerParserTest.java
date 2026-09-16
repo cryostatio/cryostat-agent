@@ -382,6 +382,11 @@ class TriggerParserTest {
         MatcherAssert.assertThat(out, Matchers.hasSize(2));
         MatcherAssert.assertThat(out.get(0), Matchers.equalTo("ProcessCpuLoad"));
         MatcherAssert.assertThat(out.get(1), Matchers.equalTo("ThreadCount"));
+
+        in = "ThreadCount>1";
+        out = parser.parseAttributesFromCondition(in);
+        MatcherAssert.assertThat(out, Matchers.hasSize(1));
+        MatcherAssert.assertThat(out.get(0), Matchers.equalTo("ThreadCount"));
     }
 
     static List<List<String>> emptyCases() {
