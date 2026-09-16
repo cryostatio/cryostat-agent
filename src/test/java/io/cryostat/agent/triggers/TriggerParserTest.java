@@ -153,7 +153,7 @@ class TriggerParserTest {
                         + //
                         "  \"recordingTemplate\": \"someTemplate\","
                         + //
-                        "  \"executionTarget\": \"10\""
+                        "  \"invocationCountTarget\": \"10\""
                         + //
                         "}]";
         List<SmartTrigger> out = parser.parseFromJson(in);
@@ -170,7 +170,7 @@ class TriggerParserTest {
                 trigger.getStopCondition(),
                 Matchers.equalTo("ProcessCpuLoad<0.1&&timeLastActivated>30000"));
         MatcherAssert.assertThat(trigger.getStopDuration(), Matchers.equalTo(10000L));
-        MatcherAssert.assertThat(trigger.getExecutionTarget(), Matchers.equalTo(10L));
+        MatcherAssert.assertThat(trigger.getInvocationCountTarget(), Matchers.equalTo(10L));
         MatcherAssert.assertThat(trigger.getState(), Matchers.equalTo(TriggerState.NEW));
         MatcherAssert.assertThat(
                 trigger.getTargetDuration(), Matchers.equalTo(Duration.ofSeconds(30)));

@@ -19,6 +19,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -169,6 +170,7 @@ public class TriggerEvaluator {
         try {
             for (SmartTrigger t : triggers.values()) {
                 log.trace("Evaluating {}", t);
+                log.trace("Trigger state {} ", t.getState());
                 Date currentTime = new Date(System.currentTimeMillis());
                 long difference = 0;
                 if (t.getTimeConditionFirstMet().getTime() != 0L) {
@@ -184,7 +186,7 @@ public class TriggerEvaluator {
                     case NEW:
                         // Simple Constraint, no duration specified so condition only needs to be
                         // met once
-                        if (t.isSimple() && evaluateTriggerConstraint(t, t.getTargetDuration())) {
+                        if (t.isSimple() && evaluateTrigger(t, t.getTargetDuration(), false)) {
                             log.trace("Trigger {} satisfied, starting recording...", t);
                             startRecording(t);
                             client.syncSmartTrigger(
@@ -193,7 +195,7 @@ public class TriggerEvaluator {
                                             List.of(t.getID()),
                                             Collections.emptyList()));
                         } else if (!t.isSimple()) {
-                            if (evaluateTriggerConstraint(t, Duration.ZERO)) {
+                            if (evaluateTrigger(t, Duration.ZERO, false)) {
                                 // Condition was met, set the state accordingly
                                 log.trace("Trigger {} satisfied, watching...", t);
                                 t.setState(TriggerState.WAITING_HIGH);
@@ -207,7 +209,7 @@ public class TriggerEvaluator {
                         break;
                     case WAITING_HIGH:
                         // Condition was met at last check but duration hasn't passed
-                        if (evaluateTriggerConstraint(t, Duration.ofMillis(difference))) {
+                        if (evaluateTrigger(t, Duration.ofMillis(difference), false)) {
                             log.trace("Trigger {} satisfied, completing...", t);
                             startRecording(t);
                             client.syncSmartTrigger(
@@ -215,7 +217,7 @@ public class TriggerEvaluator {
                                             Collections.emptyList(),
                                             List.of(t.getID()),
                                             Collections.emptyList()));
-                        } else if (evaluateTriggerConstraint(t, Duration.ZERO)) {
+                        } else if (evaluateTrigger(t, Duration.ZERO, false)) {
                             log.trace("Trigger {} satisfied, waiting for duration...", t);
                         } else {
                             t.setState(TriggerState.WAITING_LOW);
@@ -224,9 +226,8 @@ public class TriggerEvaluator {
                         break;
                     case WAITING_LOW:
                         log.trace("Trigger {} in WAITING_LOW, checking...", t);
-                        if (evaluateTriggerConstraint(t, Duration.ZERO)) {
-                            log.trace(
-                                    "Trigger {} met for the first time! Going to WAITING_HIGH", t);
+                        if (evaluateTrigger(t, Duration.ZERO, false)) {
+                            log.trace("Trigger {} met for the first time! Going to WAITING_HIGH", t);
                             t.setTimeConditionFirstMet(new Date(System.currentTimeMillis()));
                             t.setState(TriggerState.WAITING_HIGH);
                         }
@@ -237,7 +238,7 @@ public class TriggerEvaluator {
                         if (t.getStopCondition().isBlank()) {
                             break;
                         }
-                        if (evaluateTriggerStopConstraint(t, Duration.ZERO)) {
+                        if (evaluateTrigger(t, Duration.ZERO, true)) {
                             log.trace(
                                     "Trigger {} met stopping condition, transitioning to"
                                             + " RECORDING_STOPPING",
@@ -251,7 +252,7 @@ public class TriggerEvaluator {
                         // Condition was met at last check but duration hasn't passed
                         long stopDifference =
                                 currentTime.getTime() - t.getTimeStopConditionFirstMet().getTime();
-                        if (evaluateTriggerStopConstraint(t, Duration.ofMillis(stopDifference))) {
+                        if (evaluateTrigger(t, Duration.ofMillis(stopDifference), true)) {
                             log.trace("Trigger {} satisfied, completing...", t);
                             stopRecording(t);
                             client.syncSmartTrigger(
@@ -259,7 +260,7 @@ public class TriggerEvaluator {
                                             Collections.emptyList(),
                                             List.of(t.getID()),
                                             Collections.emptyList()));
-                        } else if (evaluateTriggerStopConstraint(t, Duration.ZERO)) {
+                        } else if (evaluateTrigger(t, Duration.ZERO, true)) {
                             log.trace("Trigger {} satisfied, waiting for duration...", t);
                         } else {
                             t.setState(TriggerState.RECORDING_ACTIVE);
@@ -284,7 +285,10 @@ public class TriggerEvaluator {
                 "Recording {} stopped, delegating to harvester",
                 recording.getRecording().getName());
         harvester.recordingStateChanged(recording.getRecording());
+        log.trace("Activation Count: {}", activationCounts.getOrDefault(t, 0L));
+        log.trace("Invocation Target: {}", t.getInvocationCountTarget());
         if (activationCounts.getOrDefault(t, 0L) >= t.getInvocationCountTarget()) {
+            log.trace("Trigger exceeded invocation target, completing");
             t.setState(TriggerState.COMPLETE);
         } else {
             // Trigger can keep firing, reset the state
@@ -316,58 +320,46 @@ public class TriggerEvaluator {
                 t.getTriggerCondition());
     }
 
-    private boolean evaluateTriggerConstraint(SmartTrigger trigger, Duration targetDuration) {
+    private boolean evaluateTrigger(SmartTrigger trigger, Duration targetDuration, boolean stop) {
         try {
-            Map<String, Object> conditionVars = new MBeanInfo().getSimplifiedMetrics();
+            long lastActivation =
+                    stop
+                            ? trigger.getTimeStopConditionFirstMet().getTime()
+                            : trigger.getTimeConditionFirstMet().getTime();
+            Map<String, Object> conditionVars = new HashMap<>();
+            conditionVars.putAll(new MBeanInfo().getSimplifiedMetrics());
             // Inject extra state to allow control over how triggers activate
             conditionVars.put(ACTIVATION_KEY, activationCounts.getOrDefault(trigger, 0l));
-            conditionVars.put(LAST_ACTIVATION_KEY, trigger.getTimeConditionFirstMet().getTime());
-            conditionVars.put(
-                    TIME_LAST_ACTIVATED_KEY,
-                    System.currentTimeMillis() - trigger.getTimeConditionFirstMet().getTime());
+            conditionVars.put(LAST_ACTIVATION_KEY, lastActivation);
+            conditionVars.put(TIME_LAST_ACTIVATED_KEY, System.currentTimeMillis() - lastActivation);
             log.trace("evaluating mbean map:\n{}", conditionVars);
+
             Boolean conditionResult =
-                    buildConditionScript(trigger, conditionVars)
-                            .execute(Boolean.class, conditionVars);
+                    stop
+                            ? stopConditionCache
+                                    .computeIfAbsent(
+                                            trigger,
+                                            t -> buildScript(t.getStopCondition(), conditionVars))
+                                    .execute(Boolean.class, conditionVars)
+                            : buildConditionScript(trigger, conditionVars)
+                                    .execute(Boolean.class, conditionVars);
 
             var durationResult = Boolean.FALSE;
             if (targetDuration.equals(Duration.ZERO)) {
                 durationResult = Boolean.TRUE;
-            } else if (targetDuration.toMillis() >= trigger.getTargetDuration().toMillis()) {
-                durationResult = Boolean.TRUE;
+            }
+            if (stop) {
+                if (targetDuration.toMillis() >= trigger.getStopDuration()) {
+                    durationResult = Boolean.TRUE;
+                }
+            } else {
+                if (targetDuration.toMillis() >= trigger.getTargetDuration().toMillis()) {
+                    durationResult = Boolean.TRUE;
+                }
             }
             boolean satisfied =
                     Boolean.TRUE.equals(conditionResult) && Boolean.TRUE.equals(durationResult);
             return satisfied;
-        } catch (Exception e) {
-            log.error("Failed to create or execute script", e);
-            return false;
-        }
-    }
-
-    private boolean evaluateTriggerStopConstraint(SmartTrigger trigger, Duration targetDuration) {
-        try {
-            Map<String, Object> conditionVars = new MBeanInfo().getSimplifiedMetrics();
-            // Inject extra state to allow control over how triggers activate
-            conditionVars.put(ACTIVATION_KEY, activationCounts.getOrDefault(trigger, 0l));
-            conditionVars.put(LAST_ACTIVATION_KEY, trigger.getTimeConditionFirstMet().getTime());
-            conditionVars.put(
-                    TIME_LAST_ACTIVATED_KEY,
-                    System.currentTimeMillis() - trigger.getTimeConditionFirstMet().getTime());
-            log.trace("evaluating mbean map:\n{}", conditionVars);
-            Boolean conditionResult =
-                    stopConditionCache
-                            .computeIfAbsent(
-                                    trigger, t -> buildScript(t.getStopCondition(), conditionVars))
-                            .execute(Boolean.class, conditionVars);
-            var durationResult = Boolean.FALSE;
-            if (targetDuration.equals(Duration.ZERO)) {
-                durationResult = Boolean.TRUE;
-            } else if (targetDuration.toMillis() >= trigger.getStopDuration()) {
-                durationResult = Boolean.TRUE;
-            }
-
-            return Boolean.TRUE.equals(conditionResult) && Boolean.TRUE.equals(durationResult);
         } catch (Exception e) {
             log.error("Failed to create or execute script", e);
             return false;

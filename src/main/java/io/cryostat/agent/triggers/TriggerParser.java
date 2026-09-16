@@ -125,7 +125,7 @@ public class TriggerParser {
                         req.getStopCondition(),
                         req.getDuration(),
                         req.getStopDuration(),
-                        req.getExecutionTarget(),
+                        req.getInvocationCountTarget(),
                         req.getRecordingTemplate());
             } catch (DateTimeParseException dtpe) {
                 log.error("Failed to parse trigger duration constraint", dtpe);
@@ -173,7 +173,7 @@ public class TriggerParser {
             return false;
             // A non provided value will default to max value, effectively continuous.
             // 0 or negative is invalid.
-        } else if (r.getExecutionTarget() <= 0) {
+        } else if (r.getInvocationCountTarget() <= 0) {
             log.warn("Invalid execution target. Skipping Trigger.");
             return false;
         }
