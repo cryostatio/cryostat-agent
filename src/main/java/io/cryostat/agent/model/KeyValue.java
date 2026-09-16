@@ -17,6 +17,11 @@ package io.cryostat.agent.model;
 
 import java.util.Objects;
 
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+
+@SuppressFBWarnings(
+        value = "CT_CONSTRUCTOR_THROW",
+        justification = "DTO constructor only validates required key field for serialized data")
 public class KeyValue {
 
     private String key;
