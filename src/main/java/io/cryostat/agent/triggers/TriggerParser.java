@@ -40,7 +40,8 @@ import org.slf4j.LoggerFactory;
 public class TriggerParser {
 
     private static final String TEMPLATE_PATTERN_STRING = "([\\w\\-]+)(?:\\.jfc)?";
-    private static final String CONDITION_PATTERN_STRING = "\\s?(([aA-zZ]+)\\s?[\\<\\>\\=]+\\s?\\d+(?:\\.\\d+)?)\\s?";
+    private static final String CONDITION_PATTERN_STRING =
+            "\\s?(([aA-zZ]+)\\s?[\\<\\>\\=]+\\s?\\d+(?:\\.\\d+)?)\\s?";
     private static final Pattern TEMPLATE_PATTERN = Pattern.compile(TEMPLATE_PATTERN_STRING);
     private static final Pattern CONDITION_PATTERN = Pattern.compile(CONDITION_PATTERN_STRING);
     private final FlightRecorderHelper flightRecorderHelper;
@@ -179,7 +180,7 @@ public class TriggerParser {
         if (c.contains("||") || c.contains("&&")) {
             for (String s : c.split("\\|\\||&&")) {
                 log.warn(s);
-                Matcher m = CONDITION_PATTERN.matcher(s.replaceAll("[()]",""));
+                Matcher m = CONDITION_PATTERN.matcher(s.replaceAll("[()]", ""));
                 if (m.matches()) {
                     log.warn("Matched: " + s);
                     extractedAttributes.add(m.group(2));

@@ -163,7 +163,7 @@ public class TriggerEvaluator {
                 var count = monitoredAttributeCount.merge(s, -1, Integer::sum);
                 if (count == 0) {
                     try {
-                    cache.deregister(s);
+                        cache.deregister(s);
                     } catch (Exception e2) {
                         log.warn("Failed to de-register attribute: {}", s);
                     }
@@ -322,8 +322,7 @@ public class TriggerEvaluator {
     }
 
     private void cleanupListeners(SmartTrigger t) throws Exception {
-        for (String c :
-            parser.parseAttributesFromCondition(t.getTriggerCondition())) {
+        for (String c : parser.parseAttributesFromCondition(t.getTriggerCondition())) {
             var value = monitoredAttributeCount.merge(c, -1, Integer::sum);
             // If no further triggers are monitoring this attribute
             // we can remove it.

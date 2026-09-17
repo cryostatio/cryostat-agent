@@ -388,7 +388,6 @@ class TriggerParserTest {
         MatcherAssert.assertThat(out, Matchers.hasSize(1));
         MatcherAssert.assertThat(out.get(0), Matchers.equalTo("ThreadCount"));
 
-
         in = "ThreadCount > 1";
         out = parser.parseAttributesFromCondition(in);
         MatcherAssert.assertThat(out, Matchers.hasSize(1));
