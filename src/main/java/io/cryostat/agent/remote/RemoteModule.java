@@ -32,6 +32,10 @@ public abstract class RemoteModule {
 
     @Binds
     @IntoSet
+    abstract RemoteContext QueryMbeansContext(QueryMbeansContext ctx);
+
+    @Binds
+    @IntoSet
     abstract RemoteContext bindEventTypesContext(EventTypesContext ctx);
 
     @Binds
