@@ -387,6 +387,20 @@ class TriggerParserTest {
         out = parser.parseAttributesFromCondition(in);
         MatcherAssert.assertThat(out, Matchers.hasSize(1));
         MatcherAssert.assertThat(out.get(0), Matchers.equalTo("ThreadCount"));
+
+
+        in = "ThreadCount > 1";
+        out = parser.parseAttributesFromCondition(in);
+        MatcherAssert.assertThat(out, Matchers.hasSize(1));
+        MatcherAssert.assertThat(out.get(0), Matchers.equalTo("ThreadCount"));
+
+        in = "(HeapMemoryUsagePercent > 50 && NonHeapMemoryUsage > 1.25) || SystemCpuLoad > 4";
+        out = parser.parseAttributesFromCondition(in);
+        MatcherAssert.assertThat(out, Matchers.hasSize(3));
+        System.out.println(out.toString());
+        MatcherAssert.assertThat(out.get(0), Matchers.equalTo("HeapMemoryUsagePercent"));
+        MatcherAssert.assertThat(out.get(1), Matchers.equalTo("NonHeapMemoryUsage"));
+        MatcherAssert.assertThat(out.get(2), Matchers.equalTo("SystemCpuLoad"));
     }
 
     static List<List<String>> emptyCases() {

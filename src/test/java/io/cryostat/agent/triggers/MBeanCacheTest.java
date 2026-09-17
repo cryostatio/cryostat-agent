@@ -23,6 +23,7 @@ import javax.management.MBeanInfo;
 import javax.management.MBeanServer;
 import javax.management.ObjectName;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -43,6 +44,11 @@ public class MBeanCacheTest {
         factoryMock = Mockito.mockStatic(ManagementFactory.class);
         factoryMock.when(ManagementFactory::getPlatformMBeanServer).thenReturn(server);
         cache = new MBeanCache();
+    }
+
+    @AfterEach
+    public void cleanup() {
+        factoryMock.close();
     }
 
     @Test

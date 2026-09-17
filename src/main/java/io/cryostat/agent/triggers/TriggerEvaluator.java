@@ -130,6 +130,11 @@ public class TriggerEvaluator {
         }
 
         this.stop();
+        try {
+            cleanupListeners(this.triggers.get(uuid));
+        } catch (Exception e) {
+            log.warn("Failed to cleanup listeners for trigger {}", uuid);
+        }
         this.triggers.remove(uuid);
         this.refresh();
         return true;
@@ -143,15 +148,27 @@ public class TriggerEvaluator {
 
     private String registerTrigger(SmartTrigger t) {
         log.trace("Registering Smart Trigger: {}", t);
+        var registeredListeners = new ArrayList<String>();
         try {
             for (String s : parser.parseAttributesFromCondition(t.getTriggerCondition())) {
                 cache.monitorAttribute(s);
                 monitoredAttributeCount.merge(s, 1, Integer::sum);
+                registeredListeners.add(s);
             }
         } catch (Exception e) {
             log.warn(
                     "Invalid Attribute referenced in Trigger condition {}, skipping trigger",
                     t.getTriggerCondition());
+            for (String s : registeredListeners) {
+                var count = monitoredAttributeCount.merge(s, -1, Integer::sum);
+                if (count == 0) {
+                    try {
+                    cache.deregister(s);
+                    } catch (Exception e2) {
+                        log.warn("Failed to de-register attribute: {}", s);
+                    }
+                }
+            }
             return null;
         }
         if (!triggers.values().contains(t)) {
@@ -185,6 +202,7 @@ public class TriggerEvaluator {
                         log.trace("Completed {} , removing", t);
                         triggers.values().remove(t);
                         conditionScriptCache.remove(t);
+                        cleanupListeners(t);
                         break;
                     case NEW:
                         // Simple Constraint, no duration specified so condition only needs to be
@@ -220,15 +238,6 @@ public class TriggerEvaluator {
                                             Collections.emptyList(),
                                             List.of(t.getID()),
                                             Collections.emptyList()));
-                            for (String c :
-                                    parser.parseAttributesFromCondition(t.getTriggerCondition())) {
-                                var value = monitoredAttributeCount.merge(c, -1, Integer::sum);
-                                // If no further triggers are monitoring this attribute
-                                // we can remove it.
-                                if (value == 0) {
-                                    cache.deregister(c);
-                                }
-                            }
                         } else if (evaluateTriggerConstraint(t, Duration.ZERO)) {
                             log.trace("Trigger {} satisfied, waiting for duration...", t);
                         } else {
@@ -309,6 +318,18 @@ public class TriggerEvaluator {
         } catch (ScriptCreateException sce) {
             log.error("Failed to create script", sce);
             throw new RuntimeException(sce);
+        }
+    }
+
+    private void cleanupListeners(SmartTrigger t) throws Exception {
+        for (String c :
+            parser.parseAttributesFromCondition(t.getTriggerCondition())) {
+            var value = monitoredAttributeCount.merge(c, -1, Integer::sum);
+            // If no further triggers are monitoring this attribute
+            // we can remove it.
+            if (value == 0) {
+                cache.deregister(c);
+            }
         }
     }
 
