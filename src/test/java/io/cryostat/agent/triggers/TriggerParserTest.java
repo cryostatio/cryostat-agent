@@ -377,7 +377,7 @@ class TriggerParserTest {
         MatcherAssert.assertThat(out, Matchers.hasSize(1));
         MatcherAssert.assertThat(out.get(0), Matchers.equalTo("ProcessCpuLoad"));
 
-        in = "ProcessCpuLoad>0.1&&ThreadCount<100";
+        in = "ProcessCpuLoad>0.1&&ThreadCount    <     100";
         out = parser.parseAttributesFromCondition(in);
         MatcherAssert.assertThat(out, Matchers.hasSize(2));
         MatcherAssert.assertThat(out.get(0), Matchers.equalTo("ProcessCpuLoad"));

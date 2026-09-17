@@ -45,6 +45,12 @@ public class MBeanCache {
     // Read/Written by evaluation thread and HTTP thread
     // Read/Writes protected by registrationLock
     private HashMap<String, GaugeMonitor> gauges = new HashMap<>();
+    // Multiple triggers can monitor the same attribute, but we only need
+    // one listener for that attribute. Track how many are using each one
+    // to decide when to deregister.
+    // Read/Written by evaluation and HTTP thread
+    // Read/Writes protected by registrationLock
+    private final HashMap<String, Integer> monitoredAttributeCount = new HashMap<>();
     private final Logger log = LoggerFactory.getLogger(getClass());
     private final Object registrationLock = new Object();
     private MBeanServer server = ManagementFactory.getPlatformMBeanServer();
@@ -88,20 +94,24 @@ public class MBeanCache {
         server.registerMBean(monitor, monitorName);
         synchronized (registrationLock) {
             gauges.put(attr, monitor);
+            monitoredAttributeCount.merge(attr, 1, Integer::sum);
         }
         monitor.start();
     }
 
     public void deregister(String attr) throws Exception {
         synchronized (registrationLock) {
-            if (!gauges.containsKey(attr)) {
-                log.warn("Attempt to deregister non-monitored attribute: {}", attr);
-                return;
+            monitoredAttributeCount.merge(attr, -1, Integer::sum);
+            if (monitoredAttributeCount.get(attr) == 0) {
+                if (!gauges.containsKey(attr)) {
+                    log.warn("Attempt to deregister non-monitored attribute: {}", attr);
+                    return;
+                }
+                gauges.get(attr).stop();
+                server.unregisterMBean(generateObjectName(attr));
+                monitoredAttributes.remove(attr);
+                gauges.remove(attr);
             }
-            gauges.get(attr).stop();
-            server.unregisterMBean(generateObjectName(attr));
-            monitoredAttributes.remove(attr);
-            gauges.remove(attr);
         }
     }
 

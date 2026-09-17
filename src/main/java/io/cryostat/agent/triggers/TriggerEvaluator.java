@@ -56,11 +56,6 @@ public class TriggerEvaluator {
     private final ConcurrentHashMap<SmartTrigger, Script> conditionScriptCache =
             new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, SmartTrigger> triggers = new ConcurrentHashMap<>();
-    // Multiple triggers can monitor the same attribute, but we only need
-    // one listener for that attribute. Track how many are using each one
-    // to decide when to deregister.
-    private final ConcurrentHashMap<String, Integer> monitoredAttributeCount =
-            new ConcurrentHashMap<>();
     private Future<?> task;
     private final Logger log = LoggerFactory.getLogger(getClass());
     private final CryostatClient client;
@@ -152,7 +147,6 @@ public class TriggerEvaluator {
         try {
             for (String s : parser.parseAttributesFromCondition(t.getTriggerCondition())) {
                 cache.monitorAttribute(s);
-                monitoredAttributeCount.merge(s, 1, Integer::sum);
                 registeredListeners.add(s);
             }
         } catch (Exception e) {
@@ -160,13 +154,10 @@ public class TriggerEvaluator {
                     "Invalid Attribute referenced in Trigger condition {}, skipping trigger",
                     t.getTriggerCondition());
             for (String s : registeredListeners) {
-                var count = monitoredAttributeCount.merge(s, -1, Integer::sum);
-                if (count == 0) {
-                    try {
-                        cache.deregister(s);
-                    } catch (Exception e2) {
-                        log.warn("Failed to de-register attribute: {}", s);
-                    }
+                try {
+                    cache.deregister(s);
+                } catch (Exception e2) {
+                    log.warn("Failed to de-register attribute: {}", s);
                 }
             }
             return null;
@@ -323,12 +314,7 @@ public class TriggerEvaluator {
 
     private void cleanupListeners(SmartTrigger t) throws Exception {
         for (String c : parser.parseAttributesFromCondition(t.getTriggerCondition())) {
-            var value = monitoredAttributeCount.merge(c, -1, Integer::sum);
-            // If no further triggers are monitoring this attribute
-            // we can remove it.
-            if (value == 0) {
-                cache.deregister(c);
-            }
+            cache.deregister(c);
         }
     }
 
