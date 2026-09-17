@@ -70,6 +70,7 @@ public class TriggerEvaluator {
     private final ConcurrentHashMap<String, SmartTrigger> triggers = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, TemplatedRecording> recordings =
             new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<SmartTrigger, Long> lastActivations = new ConcurrentHashMap<>();
     private Future<?> task;
     private final Logger log = LoggerFactory.getLogger(getClass());
     private final CryostatClient client;
@@ -227,7 +228,8 @@ public class TriggerEvaluator {
                     case WAITING_LOW:
                         log.trace("Trigger {} in WAITING_LOW, checking...", t);
                         if (evaluateTrigger(t, Duration.ZERO, false)) {
-                            log.trace("Trigger {} met for the first time! Going to WAITING_HIGH", t);
+                            log.trace(
+                                    "Trigger {} met for the first time! Going to WAITING_HIGH", t);
                             t.setTimeConditionFirstMet(new Date(System.currentTimeMillis()));
                             t.setState(TriggerState.WAITING_HIGH);
                         }
@@ -313,6 +315,7 @@ public class TriggerEvaluator {
         recordings.put(t.getID(), tr);
         t.setState(TriggerState.RECORDING_ACTIVE);
         activationCounts.merge(t, 1l, Long::sum);
+        lastActivations.put(t, System.currentTimeMillis());
         log.debug(
                 "Started recording \"{}\" using template \"{}\" due to trigger" + " \"{}\"",
                 recordingName,
@@ -322,11 +325,8 @@ public class TriggerEvaluator {
 
     private boolean evaluateTrigger(SmartTrigger trigger, Duration targetDuration, boolean stop) {
         try {
-            long lastActivation =
-                    stop
-                            ? trigger.getTimeStopConditionFirstMet().getTime()
-                            : trigger.getTimeConditionFirstMet().getTime();
             Map<String, Object> conditionVars = new HashMap<>();
+            var lastActivation = lastActivations.getOrDefault(trigger, 0l);
             conditionVars.putAll(new MBeanInfo().getSimplifiedMetrics());
             // Inject extra state to allow control over how triggers activate
             conditionVars.put(ACTIVATION_KEY, activationCounts.getOrDefault(trigger, 0l));

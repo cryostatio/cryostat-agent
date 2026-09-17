@@ -106,7 +106,7 @@ example, the JDK distribution ships with a `default.jfc` file containing the top
 `<configuration label="Continuous">` element. This template may be specified in the Smart Trigger definition as any of
 `default.jfc`, `default`, or `Continuous`.
 
-stopCondition and stopDuration are optional fields used to defined when a trigger should stop a recording that was previously started. For instance to stop a recording when monitoring CPU Load drops below a specified value. 
+stopCondition and stopDuration are optional fields used to defined when a trigger should stop a recording that was previously started. For instance to stop a recording when monitoring CPU Load drops below a specified value. If no stop condition or duration is specified, the trigger will start a continuous recording. Stopping this recording must be done manually.
 
 invocationCountTarget is an optional field that allows for finer control over the trigger lifecycle, specifying a specific number of times it should go through its lifecycle. By default smart triggers will monitor continuously and start/stop a recording each time the conditions are met.
 
