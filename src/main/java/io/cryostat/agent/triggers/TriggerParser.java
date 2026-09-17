@@ -176,11 +176,12 @@ public class TriggerParser {
     }
 
     public List<String> parseAttributesFromCondition(String c) {
+        c = c.replaceAll("[()]", "");
         List<String> extractedAttributes = new ArrayList<>();
         if (c.contains("||") || c.contains("&&")) {
             for (String s : c.split("\\|\\||&&")) {
                 log.warn(s);
-                Matcher m = CONDITION_PATTERN.matcher(s.replaceAll("[()]", ""));
+                Matcher m = CONDITION_PATTERN.matcher(s);
                 if (m.matches()) {
                     log.warn("Matched: " + s);
                     extractedAttributes.add(m.group(2));

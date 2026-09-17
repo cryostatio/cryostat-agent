@@ -86,6 +86,8 @@ public class MBeanCache {
                     }
                 };
         monitor.addNotificationListener(listener, null, monitor);
+        monitor.setNotifyHigh(true);
+        monitor.setNotifyLow(true);
 
         ObjectName monitorName = generateObjectName(attr);
         log.trace("Registering monitor: {}", monitorName.toString());
