@@ -74,6 +74,10 @@ public class MBeanCache {
             ObjectName objectName = getObjectName(attr);
             monitor.addObservedObject(objectName);
             monitor.setObservedAttribute(attr);
+            // Initially fire on any change,
+            var val = server.getAttribute(objectName, attr);
+            var threshold = generateThreshold(getAttributeType(attr, objectName), val);
+            monitor.setThresholds(threshold, threshold);
             NotificationListener listener =
                     (notification, handback) -> {
                         if (notification instanceof MonitorNotification) {
@@ -83,7 +87,6 @@ public class MBeanCache {
                                             .equals(THRESHOLD_LOW_VALUE_EXCEEDED)) {
                                 var value = monitor.getDerivedGauge(objectName);
                                 // Update the cache
-                                log.trace("Updating cached value {} : {}", attr, value);
                                 monitoredAttributes.put(attr, value);
                                 // Listen for any change to the existing value
                                 monitor.stop();
@@ -108,7 +111,7 @@ public class MBeanCache {
             monitoredAttributeCount.merge(attr, 1, Integer::sum);
             monitor.start();
             // Pre-populate cache with the current value
-            monitoredAttributes.put(attr, server.getAttribute(objectName, attr));
+            monitoredAttributes.put(attr, val);
         }
     }
 
@@ -136,7 +139,6 @@ public class MBeanCache {
                             .map(MBeanAttributeInfo::getName)
                             .collect(Collectors.toList());
             if (attrs.contains(attr)) {
-                log.warn(attr);
                 return i;
             }
         }
@@ -145,5 +147,32 @@ public class MBeanCache {
 
     private ObjectName generateObjectName(String attr) throws MalformedObjectNameException {
         return new ObjectName(OBJECT_NAME_PREFIX + attr + "Monitor");
+    }
+
+    private String getAttributeType(String attr, ObjectName name)
+            throws IntrospectionException, InstanceNotFoundException, ReflectionException {
+        List<MBeanAttributeInfo> attrs = Arrays.asList(server.getMBeanInfo(name).getAttributes());
+        for (MBeanAttributeInfo a : attrs) {
+            if (a.getName().equals(attr)) {
+                return a.getType();
+            }
+        }
+        return "";
+    }
+
+    // GaugeMonitors support only these types
+    private Number generateThreshold(String type, Object value) {
+        switch (type) {
+            case "int":
+            case "short":
+            case "long":
+            case "float":
+            case "double":
+            case "byte":
+                return (Number) value;
+            default:
+                throw new IllegalArgumentException(
+                        "Specified type cannot be used with a GaugeMonitor");
+        }
     }
 }
