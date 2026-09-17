@@ -74,8 +74,6 @@ public class MBeanCache {
             ObjectName objectName = getObjectName(attr);
             monitor.addObservedObject(objectName);
             monitor.setObservedAttribute(attr);
-            // Initially fire on any change
-            monitor.setThresholds(0, 0);
             NotificationListener listener =
                     (notification, handback) -> {
                         if (notification instanceof MonitorNotification) {
@@ -88,7 +86,9 @@ public class MBeanCache {
                                 log.trace("Updating cached value {} : {}", attr, value);
                                 monitoredAttributes.put(attr, value);
                                 // Listen for any change to the existing value
+                                monitor.stop();
                                 monitor.setThresholds(value, value);
+                                monitor.start();
                             } else {
                                 log.warn(
                                         "Monitor error {}: {}",
@@ -103,12 +103,12 @@ public class MBeanCache {
 
             ObjectName monitorName = generateObjectName(attr);
             log.trace("Registering monitor: {}", monitorName.toString());
-            // Pre-populate cache with the current value
-            monitoredAttributes.put(attr, server.getAttribute(objectName, attr));
             server.registerMBean(monitor, monitorName);
             gauges.put(attr, monitor);
             monitoredAttributeCount.merge(attr, 1, Integer::sum);
             monitor.start();
+            // Pre-populate cache with the current value
+            monitoredAttributes.put(attr, server.getAttribute(objectName, attr));
         }
     }
 
