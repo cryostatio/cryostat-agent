@@ -40,6 +40,8 @@ import org.slf4j.LoggerFactory;
 public class MBeanCache {
 
     private static final String OBJECT_NAME_PREFIX = "io.cryostat:type=GaugeMonitor,name=";
+    private static final String THRESHOLD_HIGH_VALUE_EXCEEDED = "jmx.monitor.gauge.high";
+    private static final String THRESHOLD_LOW_VALUE_EXCEEDED = "jmx.monitor.gauge.low";
     // Read/Written by JMX Threads
     private ConcurrentHashMap<String, Object> monitoredAttributes = new ConcurrentHashMap<>();
     // Read/Written by evaluation thread and HTTP thread
@@ -64,41 +66,50 @@ public class MBeanCache {
     public void monitorAttribute(String attr) throws Exception {
         synchronized (registrationLock) {
             if (gauges.containsKey(attr)) {
-                log.warn("Attribute {} is already being monitored.", attr);
+                monitoredAttributeCount.merge(attr, 1, Integer::sum);
+                log.trace("Attribute {} is already being monitored.", attr);
                 return;
             }
-        }
-        GaugeMonitor monitor = new GaugeMonitor();
-        ObjectName objectName = getObjectName(attr);
-        monitor.addObservedObject(objectName);
-        monitor.setObservedAttribute(attr);
-        // Initially fire on any change
-        monitor.setThresholds(0, 0);
-        NotificationListener listener =
-                (notification, handback) -> {
-                    if (notification instanceof MonitorNotification) {
-                        var value = monitor.getDerivedGauge(objectName);
-                        // Update the cache
-                        log.trace("Updating cached value {} : {}", attr, value);
-                        monitoredAttributes.put(attr, value);
-                        // Listen for any change to the existing value
-                        monitor.setThresholds(value, value);
-                    }
-                };
-        monitor.addNotificationListener(listener, null, monitor);
-        monitor.setNotifyHigh(true);
-        monitor.setNotifyLow(true);
+            GaugeMonitor monitor = new GaugeMonitor();
+            ObjectName objectName = getObjectName(attr);
+            monitor.addObservedObject(objectName);
+            monitor.setObservedAttribute(attr);
+            // Initially fire on any change
+            monitor.setThresholds(0, 0);
+            NotificationListener listener =
+                    (notification, handback) -> {
+                        if (notification instanceof MonitorNotification) {
+                            if (notification.getType().equals(THRESHOLD_HIGH_VALUE_EXCEEDED)
+                                    || notification
+                                            .getType()
+                                            .equals(THRESHOLD_LOW_VALUE_EXCEEDED)) {
+                                var value = monitor.getDerivedGauge(objectName);
+                                // Update the cache
+                                log.trace("Updating cached value {} : {}", attr, value);
+                                monitoredAttributes.put(attr, value);
+                                // Listen for any change to the existing value
+                                monitor.setThresholds(value, value);
+                            } else {
+                                log.warn(
+                                        "Monitor error {}: {}",
+                                        notification.getType(),
+                                        notification.getMessage());
+                            }
+                        }
+                    };
+            monitor.addNotificationListener(listener, null, monitor);
+            monitor.setNotifyHigh(true);
+            monitor.setNotifyLow(true);
 
-        ObjectName monitorName = generateObjectName(attr);
-        log.trace("Registering monitor: {}", monitorName.toString());
-        // Pre-populate cache with the current value
-        monitoredAttributes.put(attr, server.getAttribute(objectName, attr));
-        server.registerMBean(monitor, monitorName);
-        synchronized (registrationLock) {
+            ObjectName monitorName = generateObjectName(attr);
+            log.trace("Registering monitor: {}", monitorName.toString());
+            // Pre-populate cache with the current value
+            monitoredAttributes.put(attr, server.getAttribute(objectName, attr));
+            server.registerMBean(monitor, monitorName);
             gauges.put(attr, monitor);
             monitoredAttributeCount.merge(attr, 1, Integer::sum);
+            monitor.start();
         }
-        monitor.start();
     }
 
     public void deregister(String attr) throws Exception {
