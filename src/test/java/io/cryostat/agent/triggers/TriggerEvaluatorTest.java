@@ -24,7 +24,9 @@ import static org.mockito.Mockito.when;
 
 import java.nio.file.Path;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ScheduledExecutorService;
 
@@ -59,17 +61,18 @@ class TriggerEvaluatorTest {
     @Mock Path triggerPath;
     @Mock Harvester harvester;
     @Mock CryostatClient client;
+    @Mock MBeanCache cache;
     TriggerEvaluator triggerEvaluator;
 
     @BeforeEach
-    public void setup() {
+    public void setup() throws Exception {
         triggerEvaluator =
                 new TriggerEvaluator(
-                        executor, scriptHost, "", parser, helper, harvester, 1000, client);
+                        executor, scriptHost, "", parser, helper, harvester, 1000, cache, client);
     }
 
     @Test
-    public void testAppendSimple() {
+    public void testAppendSimple() throws Exception {
         SmartTriggerReq[] req = {
             new SmartTriggerReq(
                     "ProcessCpuLoad>0.1", 1000, "ProcessCpuLoad<0.2", 1000, 0, "template.jfc")
@@ -84,6 +87,8 @@ class TriggerEvaluatorTest {
                         0,
                         "template.jfc");
         when(parser.isValid(any(SmartTriggerReq.class))).thenReturn(true);
+        when(parser.parseAttributesFromCondition(anyString()))
+                .thenReturn(List.of("ProcessCpuLoad"));
         when(parser.parse(any(SmartTriggerReq.class))).thenReturn(trigger);
         MatcherAssert.assertThat(triggerEvaluator.append(req), Matchers.equalTo(List.of("foo")));
     }
@@ -115,6 +120,8 @@ class TriggerEvaluatorTest {
                         "template.jfc");
         when(parser.isValid(any(SmartTriggerReq.class))).thenReturn(true);
         when(parser.parse(any(SmartTriggerReq.class))).thenReturn(trigger);
+        when(parser.parseAttributesFromCondition(anyString()))
+                .thenReturn(List.of("ProcessCpuLoad"));
         MatcherAssert.assertThat(triggerEvaluator.append(req), Matchers.equalTo(List.of("foo")));
         MatcherAssert.assertThat(triggerEvaluator.remove("foo"), Matchers.equalTo(true));
         MatcherAssert.assertThat(triggerEvaluator.getDefinitions(), Matchers.equalTo(List.of()));
@@ -135,7 +142,12 @@ class TriggerEvaluatorTest {
         SmartTrigger trigger =
                 new SmartTrigger("foo", "ProcessCpuLoad>0.1", "", 0, 0, 1, "template.jfc");
         when(parser.isValid(any(SmartTriggerReq.class))).thenReturn(true);
+        when(parser.parseAttributesFromCondition(anyString()))
+                .thenReturn(List.of("ProcessCpuLoad"));
         when(parser.parse(any(SmartTriggerReq.class))).thenReturn(trigger);
+        Map<String, Object> snapshot = new HashMap<>();
+        snapshot.putAll(Map.of("ProcessCpuLoad", 0.5));
+        when(cache.snapshot()).thenReturn(snapshot);
 
         // Trigger should start in NEW state
         MatcherAssert.assertThat(triggerEvaluator.append(req), Matchers.equalTo(List.of("foo")));
@@ -184,7 +196,12 @@ class TriggerEvaluatorTest {
                         0,
                         "template.jfc");
         when(parser.isValid(any(SmartTriggerReq.class))).thenReturn(true);
+        when(parser.parseAttributesFromCondition(anyString()))
+                .thenReturn(List.of("ProcessCpuLoad"));
         when(parser.parse(any(SmartTriggerReq.class))).thenReturn(trigger);
+        Map<String, Object> snapshot = new HashMap<>();
+        snapshot.putAll(Map.of("ProcessCpuLoad", 0.5));
+        when(cache.snapshot()).thenReturn(snapshot);
         // Trigger should start in NEW state
         MatcherAssert.assertThat(triggerEvaluator.append(req), Matchers.equalTo(List.of("foo")));
         MatcherAssert.assertThat(trigger.getState(), Matchers.equalTo(TriggerState.NEW));
@@ -216,7 +233,12 @@ class TriggerEvaluatorTest {
                         0,
                         "template.jfc");
         when(parser.isValid(any(SmartTriggerReq.class))).thenReturn(true);
+        when(parser.parseAttributesFromCondition(anyString()))
+                .thenReturn(List.of("ProcessCpuLoad"));
         when(parser.parse(any(SmartTriggerReq.class))).thenReturn(trigger);
+        Map<String, Object> snapshot = new HashMap<>();
+        snapshot.putAll(Map.of("ProcessCpuLoad", 0.5));
+        when(cache.snapshot()).thenReturn(snapshot);
         // Trigger should start in NEW state
         MatcherAssert.assertThat(triggerEvaluator.append(req), Matchers.equalTo(List.of("foo")));
         MatcherAssert.assertThat(trigger.getState(), Matchers.equalTo(TriggerState.NEW));
@@ -253,7 +275,12 @@ class TriggerEvaluatorTest {
                         0,
                         "template.jfc");
         when(parser.isValid(any(SmartTriggerReq.class))).thenReturn(true);
+        when(parser.parseAttributesFromCondition(anyString()))
+                .thenReturn(List.of("ProcessCpuLoad"));
         when(parser.parse(any(SmartTriggerReq.class))).thenReturn(trigger);
+        Map<String, Object> snapshot = new HashMap<>();
+        snapshot.putAll(Map.of("ProcessCpuLoad", 0.5));
+        when(cache.snapshot()).thenReturn(snapshot);
 
         // Trigger should start in NEW state
         MatcherAssert.assertThat(triggerEvaluator.append(req), Matchers.equalTo(List.of("foo")));
@@ -299,7 +326,12 @@ class TriggerEvaluatorTest {
                         0,
                         "template.jfc");
         when(parser.isValid(any(SmartTriggerReq.class))).thenReturn(true);
+        when(parser.parseAttributesFromCondition(anyString()))
+                .thenReturn(List.of("ProcessCpuLoad"));
         when(parser.parse(any(SmartTriggerReq.class))).thenReturn(trigger);
+        Map<String, Object> snapshot = new HashMap<>();
+        snapshot.putAll(Map.of("ProcessCpuLoad", 0.5));
+        when(cache.snapshot()).thenReturn(snapshot);
 
         // Trigger should start in NEW state
         MatcherAssert.assertThat(triggerEvaluator.append(req), Matchers.equalTo(List.of("foo")));
@@ -351,7 +383,12 @@ class TriggerEvaluatorTest {
                         0,
                         "template.jfc");
         when(parser.isValid(any(SmartTriggerReq.class))).thenReturn(true);
+        when(parser.parseAttributesFromCondition(anyString()))
+                .thenReturn(List.of("ProcessCpuLoad"));
         when(parser.parse(any(SmartTriggerReq.class))).thenReturn(trigger);
+        Map<String, Object> snapshot = new HashMap<>();
+        snapshot.putAll(Map.of("ProcessCpuLoad", 0.5));
+        when(cache.snapshot()).thenReturn(snapshot);
 
         // Trigger should start in NEW state
         MatcherAssert.assertThat(triggerEvaluator.append(req), Matchers.equalTo(List.of("foo")));
@@ -414,7 +451,12 @@ class TriggerEvaluatorTest {
                         1,
                         "template.jfc");
         when(parser.isValid(any(SmartTriggerReq.class))).thenReturn(true);
+        when(parser.parseAttributesFromCondition(anyString()))
+                .thenReturn(List.of("ProcessCpuLoad"));
         when(parser.parse(any(SmartTriggerReq.class))).thenReturn(trigger);
+        Map<String, Object> snapshot = new HashMap<>();
+        snapshot.putAll(Map.of("ProcessCpuLoad", 0.5));
+        when(cache.snapshot()).thenReturn(snapshot);
 
         // Trigger should start in NEW state
         MatcherAssert.assertThat(triggerEvaluator.append(req), Matchers.equalTo(List.of("foo")));
@@ -488,7 +530,12 @@ class TriggerEvaluatorTest {
                         100,
                         "template.jfc");
         when(parser.isValid(any(SmartTriggerReq.class))).thenReturn(true);
+        when(parser.parseAttributesFromCondition(anyString()))
+                .thenReturn(List.of("ProcessCpuLoad"));
         when(parser.parse(any(SmartTriggerReq.class))).thenReturn(trigger);
+        Map<String, Object> snapshot = new HashMap<>();
+        snapshot.putAll(Map.of("ProcessCpuLoad", 0.5));
+        when(cache.snapshot()).thenReturn(snapshot);
 
         // Trigger should start in NEW state
         MatcherAssert.assertThat(triggerEvaluator.append(req), Matchers.equalTo(List.of("foo")));

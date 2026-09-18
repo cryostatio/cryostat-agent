@@ -40,7 +40,13 @@ import org.slf4j.LoggerFactory;
 public class TriggerParser {
 
     private static final String TEMPLATE_PATTERN_STRING = "([\\w\\-]+)(?:\\.jfc)?";
+    private static final String CONDITION_PATTERN_STRING =
+            "\\s*(([aA-zZ]+)\\s*[\\<\\>\\=]+\\s*-?\\d+(?:\\.\\d+)?)\\s*";
     private static final Pattern TEMPLATE_PATTERN = Pattern.compile(TEMPLATE_PATTERN_STRING);
+    private static final Pattern CONDITION_PATTERN = Pattern.compile(CONDITION_PATTERN_STRING);
+    private static final String ACTIVATION_KEY = "triggerActivationCount";
+    private static final String LAST_ACTIVATION_KEY = "timeLastActivated";
+    private static final String TIME_LAST_ACTIVATED_KEY = "durationSinceLastActivation";
     private final FlightRecorderHelper flightRecorderHelper;
     private final ObjectMapper mapper;
     private final Optional<Path> triggerPath;
@@ -178,5 +184,28 @@ public class TriggerParser {
             return false;
         }
         return true;
+    }
+
+    public List<String> parseAttributesFromCondition(String c) {
+        c = c.replaceAll("[()]", "");
+        List<String> extractedAttributes = new ArrayList<>();
+        if (c.contains("||") || c.contains("&&")) {
+            for (String s : c.split("\\|\\||&&")) {
+                Matcher m = CONDITION_PATTERN.matcher(s);
+                if (m.matches()) {
+                    extractedAttributes.add(m.group(2));
+                }
+            }
+        } else {
+            Matcher m = CONDITION_PATTERN.matcher(c);
+            if (m.matches()) {
+                extractedAttributes.add(m.group(2));
+            }
+        }
+        // Internal variables that can be used in a trigger expression
+        // but do not map to mbean attributes.
+        extractedAttributes.removeAll(
+                List.of(LAST_ACTIVATION_KEY, ACTIVATION_KEY, TIME_LAST_ACTIVATED_KEY));
+        return extractedAttributes;
     }
 }

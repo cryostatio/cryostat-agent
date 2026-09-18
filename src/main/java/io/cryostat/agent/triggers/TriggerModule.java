@@ -75,6 +75,7 @@ public abstract class TriggerModule {
                 helper,
                 harvester,
                 evaluationPeriodMs,
+                new MBeanCache(evaluationPeriodMs),
                 client);
     }
 }
