@@ -59,6 +59,7 @@ public class TriggerEvaluator {
     private final FlightRecorderHelper flightRecorderHelper;
     private final Harvester harvester;
     private final long evaluationPeriodMs;
+    private List<String> orphanAttributes = new ArrayList<>();
     private final ConcurrentHashMap<SmartTrigger, Script> conditionScriptCache =
             new ConcurrentHashMap<>();
     private final ConcurrentHashMap<SmartTrigger, Script> stopConditionCache =
@@ -184,6 +185,7 @@ public class TriggerEvaluator {
                     cache.deregister(s);
                 } catch (Exception e2) {
                     log.warn("Failed to de-register attribute: {}", s);
+                    orphanAttributes.add(s);
                 }
             }
             return null;
@@ -429,6 +431,16 @@ public class TriggerEvaluator {
         conditions.addAll(parser.parseAttributesFromCondition(t.getStopCondition()));
         for (String c : conditions) {
             cache.deregister(c);
+        }
+        // Attempt removal of any orphaned attributes that previously failed
+        try {
+            for (String c : orphanAttributes) {
+                cache.deregister(c);
+                orphanAttributes.remove(c);
+            }
+        } catch (Exception e) {
+            // If we failed again it will still be in the list for the next retry.
+            log.warn("Failed to remove orphaned listener, retrying later");
         }
     }
 

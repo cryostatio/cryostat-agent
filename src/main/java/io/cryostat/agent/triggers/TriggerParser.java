@@ -44,6 +44,9 @@ public class TriggerParser {
             "\\s*(([aA-zZ]+)\\s*[\\<\\>\\=]+\\s*-?\\d+(?:\\.\\d+)?)\\s*";
     private static final Pattern TEMPLATE_PATTERN = Pattern.compile(TEMPLATE_PATTERN_STRING);
     private static final Pattern CONDITION_PATTERN = Pattern.compile(CONDITION_PATTERN_STRING);
+    private static final String ACTIVATION_KEY = "triggerActivationCount";
+    private static final String LAST_ACTIVATION_KEY = "timeLastActivated";
+    private static final String TIME_LAST_ACTIVATED_KEY = "durationSinceLastActivation";
     private final FlightRecorderHelper flightRecorderHelper;
     private final ObjectMapper mapper;
     private final Optional<Path> triggerPath;
@@ -199,6 +202,10 @@ public class TriggerParser {
                 extractedAttributes.add(m.group(2));
             }
         }
+        // Internal variables that can be used in a trigger expression
+        // but do not map to mbean attributes.
+        extractedAttributes.removeAll(
+                List.of(LAST_ACTIVATION_KEY, ACTIVATION_KEY, TIME_LAST_ACTIVATED_KEY));
         return extractedAttributes;
     }
 }
