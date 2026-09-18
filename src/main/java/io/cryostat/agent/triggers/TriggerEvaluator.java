@@ -343,21 +343,20 @@ public class TriggerEvaluator {
                             : buildConditionScript(trigger, conditionVars)
                                     .execute(Boolean.class, conditionVars);
 
-            var durationResult = Boolean.FALSE;
+            var durationResult = false;
             if (targetDuration.equals(Duration.ZERO)) {
-                durationResult = Boolean.TRUE;
+                durationResult = true;
             }
             if (stop) {
                 if (targetDuration.toMillis() >= trigger.getStopDuration()) {
-                    durationResult = Boolean.TRUE;
+                    durationResult = true;
                 }
             } else {
                 if (targetDuration.toMillis() >= trigger.getTargetDuration().toMillis()) {
-                    durationResult = Boolean.TRUE;
+                    durationResult = true;
                 }
             }
-            boolean satisfied =
-                    Boolean.TRUE.equals(conditionResult) && Boolean.TRUE.equals(durationResult);
+            boolean satisfied = conditionResult && durationResult;
             return satisfied;
         } catch (Exception e) {
             log.error("Failed to create or execute script", e);
