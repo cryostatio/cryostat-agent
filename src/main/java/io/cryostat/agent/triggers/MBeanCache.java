@@ -127,9 +127,23 @@ public class MBeanCache {
             }
             if (monitoredAttributeCount.merge(attr, -1, Integer::sum) == 0) {
                 gauges.get(attr).stop();
-                server.unregisterMBean(generateObjectName(attr));
-                monitoredAttributes.remove(attr);
-                gauges.remove(attr);
+                try {
+                    server.unregisterMBean(generateObjectName(attr));
+                    monitoredAttributes.remove(attr);
+                    gauges.remove(attr);
+                } catch (Exception e) {
+                    // De-registration failed
+                    log.warn("Failed to de-register monitor for attribute {}", attr);
+                    if (server.isRegistered(generateObjectName(attr))) {
+                        // Monitor is still registered, restart and restore count
+                        gauges.get(attr).start();
+                        monitoredAttributeCount.merge(attr, 1, Integer::sum);
+                    } else {
+                        // Monitor was unregistereed, cleanup
+                        monitoredAttributes.remove(attr);
+                        gauges.remove(attr);
+                    }
+                }
             }
         }
     }

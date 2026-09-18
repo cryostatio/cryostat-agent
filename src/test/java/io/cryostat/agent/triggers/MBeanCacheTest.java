@@ -15,6 +15,7 @@
  */
 package io.cryostat.agent.triggers;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.lang.management.ManagementFactory;
@@ -89,6 +90,52 @@ public class MBeanCacheTest {
                 .registerMBean(Mockito.any(Object.class), Mockito.any(ObjectName.class));
         cache.deregister(in);
         Mockito.verify(server).unregisterMBean(Mockito.any(ObjectName.class));
+    }
+
+    @Test
+    public void testPreDeregistrationFailure() throws Exception {
+        MBeanInfo info = Mockito.mock(MBeanInfo.class);
+        ObjectName name = Mockito.mock(ObjectName.class);
+        MBeanAttributeInfo[] attrInfo = {Mockito.mock(MBeanAttributeInfo.class)};
+        Mockito.when(server.getMBeanInfo(Mockito.any())).thenReturn(info);
+        Mockito.when(server.queryNames(null, null)).thenReturn(Set.of(name));
+        Mockito.when(info.getAttributes()).thenReturn(attrInfo);
+        Mockito.when(attrInfo[0].getName()).thenReturn("ProcessCpuLoad");
+        Mockito.when(attrInfo[0].getType()).thenReturn("double");
+        Mockito.when(server.getAttribute(Mockito.any(ObjectName.class), Mockito.anyString()))
+                .thenReturn(1);
+        String in = "ProcessCpuLoad";
+        cache.monitorAttribute(in);
+        Mockito.verify(server)
+                .registerMBean(Mockito.any(Object.class), Mockito.any(ObjectName.class));
+        Mockito.doThrow(new RuntimeException()).when(server).unregisterMBean(Mockito.any());
+        Mockito.when(server.isRegistered(Mockito.any())).thenReturn(true);
+        cache.deregister(in);
+        // Expect cache entry to still be present
+        assertEquals(cache.snapshot().size(), 1);
+    }
+
+    @Test
+    public void testPostDeregistrationFailure() throws Exception {
+        MBeanInfo info = Mockito.mock(MBeanInfo.class);
+        ObjectName name = Mockito.mock(ObjectName.class);
+        MBeanAttributeInfo[] attrInfo = {Mockito.mock(MBeanAttributeInfo.class)};
+        Mockito.when(server.getMBeanInfo(Mockito.any())).thenReturn(info);
+        Mockito.when(server.queryNames(null, null)).thenReturn(Set.of(name));
+        Mockito.when(info.getAttributes()).thenReturn(attrInfo);
+        Mockito.when(attrInfo[0].getName()).thenReturn("ProcessCpuLoad");
+        Mockito.when(attrInfo[0].getType()).thenReturn("double");
+        Mockito.when(server.getAttribute(Mockito.any(ObjectName.class), Mockito.anyString()))
+                .thenReturn(1);
+        String in = "ProcessCpuLoad";
+        cache.monitorAttribute(in);
+        Mockito.verify(server)
+                .registerMBean(Mockito.any(Object.class), Mockito.any(ObjectName.class));
+        Mockito.doThrow(new RuntimeException()).when(server).unregisterMBean(Mockito.any());
+        Mockito.when(server.isRegistered(Mockito.any())).thenReturn(false);
+        cache.deregister(in);
+        // Expect cache entry to be cleaned up
+        assertEquals(cache.snapshot().size(), 0);
     }
 
     @Test
