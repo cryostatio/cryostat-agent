@@ -140,6 +140,45 @@ class TriggerParserTest {
     }
 
     @Test
+    void testTriggerWithOptionalFields() {
+        Mockito.when(helper.isValidTemplate(Mockito.anyString())).thenReturn(true);
+        String in =
+                "[{ \"condition\": \"ProcessCpuLoad>0.2\","
+                        + //
+                        "  \"duration\": \"30000\","
+                        + //
+                        "  \"stopCondition\": \"ProcessCpuLoad<0.1&&timeLastActivated>30000\","
+                        + //
+                        "  \"stopDuration\": \"10000\" ,\n"
+                        + //
+                        "  \"recordingTemplate\": \"someTemplate\","
+                        + //
+                        "  \"invocationCountTarget\": \"10\""
+                        + //
+                        "}]";
+        List<SmartTrigger> out = parser.parseFromJson(in);
+
+        MatcherAssert.assertThat(out, Matchers.hasSize(1));
+        SmartTrigger trigger = out.get(0);
+
+        MatcherAssert.assertThat(
+                trigger.getRecordingTemplateName(), Matchers.equalTo("someTemplate"));
+        MatcherAssert.assertThat(trigger.getTargetDuration().toMillis(), Matchers.equalTo(30000L));
+        MatcherAssert.assertThat(
+                trigger.getTriggerCondition(), Matchers.equalTo("ProcessCpuLoad>0.2"));
+        MatcherAssert.assertThat(
+                trigger.getStopCondition(),
+                Matchers.equalTo("ProcessCpuLoad<0.1&&timeLastActivated>30000"));
+        MatcherAssert.assertThat(trigger.getStopDuration(), Matchers.equalTo(10000L));
+        MatcherAssert.assertThat(trigger.getInvocationCountTarget(), Matchers.equalTo(10L));
+        MatcherAssert.assertThat(trigger.getState(), Matchers.equalTo(TriggerState.NEW));
+        MatcherAssert.assertThat(
+                trigger.getTargetDuration(), Matchers.equalTo(Duration.ofSeconds(30)));
+        MatcherAssert.assertThat(
+                trigger.getTimeConditionFirstMet().getTime(), Matchers.equalTo(0L));
+    }
+
+    @Test
     void testSingleSimpleTriggerWithoutSpecifiedDuration() {
         Mockito.when(helper.isValidTemplate(Mockito.anyString())).thenReturn(true);
         String in = "[{\"condition\":\"ProcessCpuLoad>0.2\",\"recordingTemplate\":\"profile\"}]";
@@ -271,9 +310,11 @@ class TriggerParserTest {
     void testTriggerValidation() {
         Mockito.when(helper.isValidTemplate("profile")).thenReturn(true);
         Mockito.when(helper.isValidTemplate("bar")).thenReturn(false);
-        assertEquals(false, parser.isValid(new SmartTriggerReq(null, 0, null)));
-        assertEquals(false, parser.isValid(new SmartTriggerReq("foo", 0, "bar")));
-        assertEquals(true, parser.isValid(new SmartTriggerReq("ProcessCpuLoad>0.2", 0, "profile")));
+        assertEquals(false, parser.isValid(new SmartTriggerReq(null, 0, null, 0, 0, null)));
+        assertEquals(false, parser.isValid(new SmartTriggerReq("foo", 0, "baz", 0, 0, "bar")));
+        assertEquals(
+                true,
+                parser.isValid(new SmartTriggerReq("ProcessCpuLoad>0.2", 0, "", 0, 10, "profile")));
     }
 
     @Test
