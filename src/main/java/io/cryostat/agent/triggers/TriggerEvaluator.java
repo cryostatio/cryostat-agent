@@ -32,7 +32,6 @@ import io.cryostat.agent.CryostatClient;
 import io.cryostat.agent.FlightRecorderHelper;
 import io.cryostat.agent.FlightRecorderHelper.TemplatedRecording;
 import io.cryostat.agent.harvest.Harvester;
-import io.cryostat.agent.model.MBeanInfo;
 import io.cryostat.libcryostat.triggers.SmartTrigger;
 import io.cryostat.libcryostat.triggers.SmartTrigger.TriggerState;
 
@@ -84,6 +83,7 @@ public class TriggerEvaluator {
             FlightRecorderHelper flightRecorderHelper,
             Harvester harvester,
             long evaluationPeriodMs,
+            MBeanCache cache,
             CryostatClient client) {
         this.scheduler = scheduler;
         this.definitions = definitions;
@@ -93,7 +93,7 @@ public class TriggerEvaluator {
         this.harvester = harvester;
         this.evaluationPeriodMs = evaluationPeriodMs;
         this.client = client;
-        this.cache = new MBeanCache(evaluationPeriodMs);
+        this.cache = cache;
     }
 
     public void start() {
@@ -160,10 +160,11 @@ public class TriggerEvaluator {
     }
 
     private String registerTrigger(SmartTrigger t) {
-        log.trace("Registering Smart Trigger: {}", t);
         var registeredListeners = new ArrayList<String>();
+        var parsedAttributes = new ArrayList<String>();
         try {
-            var parsedAttributes = parser.parseAttributesFromCondition(t.getTriggerCondition());
+            parsedAttributes.addAll(parser.parseAttributesFromCondition(t.getTriggerCondition()));
+            parsedAttributes.addAll(parser.parseAttributesFromCondition(t.getStopCondition()));
             if (parsedAttributes.isEmpty()) {
                 log.warn(
                         "No valid attributes found in expression {}, rejecting trigger",
@@ -368,7 +369,6 @@ public class TriggerEvaluator {
         try {
             Map<String, Object> conditionVars = cache.snapshot();
             var lastActivation = lastActivations.getOrDefault(trigger, 0l);
-            conditionVars.putAll(new MBeanInfo().getSimplifiedMetrics());
             // Inject extra state to allow control over how triggers activate
             conditionVars.put(ACTIVATION_KEY, activationCounts.getOrDefault(trigger, 0l));
             conditionVars.put(LAST_ACTIVATION_KEY, lastActivation);
@@ -424,7 +424,10 @@ public class TriggerEvaluator {
     }
 
     private void cleanupListeners(SmartTrigger t) throws Exception {
-        for (String c : parser.parseAttributesFromCondition(t.getTriggerCondition())) {
+        ArrayList<String> conditions = new ArrayList<>();
+        conditions.addAll(parser.parseAttributesFromCondition(t.getTriggerCondition()));
+        conditions.addAll(parser.parseAttributesFromCondition(t.getStopCondition()));
+        for (String c : conditions) {
             cache.deregister(c);
         }
     }
