@@ -145,7 +145,14 @@ public class TriggerEvaluator {
         log.trace("Registering Smart Trigger: {}", t);
         var registeredListeners = new ArrayList<String>();
         try {
-            for (String s : parser.parseAttributesFromCondition(t.getTriggerCondition())) {
+            var parsedAttributes = parser.parseAttributesFromCondition(t.getTriggerCondition());
+            if (parsedAttributes.isEmpty()) {
+                log.warn(
+                        "No valid attributes found in expression {}, rejecting trigger",
+                        t.getTriggerCondition());
+                return null;
+            }
+            for (String s : parsedAttributes) {
                 cache.monitorAttribute(s);
                 registeredListeners.add(s);
             }
