@@ -87,11 +87,15 @@ public class MBeanCache {
                                             .equals(THRESHOLD_LOW_VALUE_EXCEEDED)) {
                                 var value = monitor.getDerivedGauge(objectName);
                                 // Update the cache
-                                monitoredAttributes.put(attr, value);
-                                // Listen for any change to the existing value
-                                monitor.stop();
-                                monitor.setThresholds(value, value);
-                                monitor.start();
+                                synchronized (registrationLock) {
+                                    if (gauges.get(attr) == monitor) {
+                                        monitoredAttributes.put(attr, value);
+                                        // Listen for any change to the existing value
+                                        monitor.stop();
+                                        monitor.setThresholds(value, value);
+                                        monitor.start();
+                                    }
+                                }
                             } else {
                                 log.warn(
                                         "Monitor error {}: {}",
@@ -163,11 +167,17 @@ public class MBeanCache {
     private Number generateThreshold(String type, Object value) {
         switch (type) {
             case "int":
+            case "java.lang.Integer":
             case "short":
+            case "java.lang.Short":
             case "long":
+            case "java.lang.Long":
             case "float":
+            case "java.lang.Float":
             case "double":
+            case "java.lang.Double":
             case "byte":
+            case "java.lang.Byte":
                 return (Number) value;
             default:
                 throw new IllegalArgumentException(
