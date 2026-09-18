@@ -160,6 +160,8 @@ Multiple Smart Trigger definitions may be specified and separated by commas, for
 **NOTE**: Smart Triggers are evaluated on a polling basis. The poll period is configurable (see list below). This means
 that your conditions are subject to sampling biases.
 
+When a running Smart Trigger is removed, any recordings started by that Trigger will continue to run and must be manually stopped and retrieved. 
+
 ### Harvester Integration
 
 Any Flight Recordings created by Smart Trigger will also be tracked by the Harvester system. This data will be captured
