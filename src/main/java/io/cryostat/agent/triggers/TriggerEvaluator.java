@@ -22,6 +22,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
@@ -29,7 +30,9 @@ import java.util.concurrent.TimeUnit;
 
 import io.cryostat.agent.CryostatClient;
 import io.cryostat.agent.FlightRecorderHelper;
+import io.cryostat.agent.FlightRecorderHelper.TemplatedRecording;
 import io.cryostat.agent.harvest.Harvester;
+import io.cryostat.agent.model.MBeanInfo;
 import io.cryostat.libcryostat.triggers.SmartTrigger;
 import io.cryostat.libcryostat.triggers.SmartTrigger.TriggerState;
 
@@ -46,6 +49,10 @@ import org.slf4j.LoggerFactory;
 
 public class TriggerEvaluator {
 
+    // Keys for extra state to customize how triggers execute
+    private static final String ACTIVATION_KEY = "triggerActivationCount";
+    private static final String LAST_ACTIVATION_KEY = "timeLastActivated";
+    private static final String TIME_LAST_ACTIVATED_KEY = "durationSinceLastActivation";
     private final ScheduledExecutorService scheduler;
     private final String definitions;
     private final TriggerParser parser;
@@ -55,7 +62,14 @@ public class TriggerEvaluator {
     private final long evaluationPeriodMs;
     private final ConcurrentHashMap<SmartTrigger, Script> conditionScriptCache =
             new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<SmartTrigger, Script> stopConditionCache =
+            new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<SmartTrigger, Long> activationCounts =
+            new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, SmartTrigger> triggers = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, TemplatedRecording> recordings =
+            new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<SmartTrigger, Long> lastActivations = new ConcurrentHashMap<>();
     private Future<?> task;
     private final Logger log = LoggerFactory.getLogger(getClass());
     private final CryostatClient client;
@@ -134,7 +148,7 @@ public class TriggerEvaluator {
             this.refresh();
             return false;
         }
-        this.triggers.remove(uuid);
+        cleanupState(triggers.get(uuid));
         this.refresh();
         return true;
     }
@@ -189,10 +203,11 @@ public class TriggerEvaluator {
                         this::evaluate, 0, evaluationPeriodMs, TimeUnit.MILLISECONDS);
     }
 
-    private void evaluate() {
+    void evaluate() {
         try {
             for (SmartTrigger t : triggers.values()) {
                 log.trace("Evaluating {}", t);
+                log.trace("Trigger state {} ", t.getState());
                 Date currentTime = new Date(System.currentTimeMillis());
                 long difference = 0;
                 if (t.getTimeConditionFirstMet().getTime() != 0L) {
@@ -208,13 +223,12 @@ public class TriggerEvaluator {
                             log.warn("Failed to clean up listeners, retaining trigger");
                             break;
                         }
-                        triggers.values().remove(t);
-                        conditionScriptCache.remove(t);
+                        cleanupState(t);
                         break;
                     case NEW:
                         // Simple Constraint, no duration specified so condition only needs to be
                         // met once
-                        if (t.isSimple() && evaluateTriggerConstraint(t, t.getTargetDuration())) {
+                        if (t.isSimple() && evaluateTrigger(t, t.getTargetDuration(), false)) {
                             log.trace("Trigger {} satisfied, starting recording...", t);
                             startRecording(t);
                             client.syncSmartTrigger(
@@ -223,7 +237,7 @@ public class TriggerEvaluator {
                                             List.of(t.getID()),
                                             Collections.emptyList()));
                         } else if (!t.isSimple()) {
-                            if (evaluateTriggerConstraint(t, Duration.ZERO)) {
+                            if (evaluateTrigger(t, Duration.ZERO, false)) {
                                 // Condition was met, set the state accordingly
                                 log.trace("Trigger {} satisfied, watching...", t);
                                 t.setState(TriggerState.WAITING_HIGH);
@@ -237,7 +251,7 @@ public class TriggerEvaluator {
                         break;
                     case WAITING_HIGH:
                         // Condition was met at last check but duration hasn't passed
-                        if (evaluateTriggerConstraint(t, Duration.ofMillis(difference))) {
+                        if (evaluateTrigger(t, Duration.ofMillis(difference), false)) {
                             log.trace("Trigger {} satisfied, completing...", t);
                             startRecording(t);
                             client.syncSmartTrigger(
@@ -245,7 +259,7 @@ public class TriggerEvaluator {
                                             Collections.emptyList(),
                                             List.of(t.getID()),
                                             Collections.emptyList()));
-                        } else if (evaluateTriggerConstraint(t, Duration.ZERO)) {
+                        } else if (evaluateTrigger(t, Duration.ZERO, false)) {
                             log.trace("Trigger {} satisfied, waiting for duration...", t);
                         } else {
                             t.setState(TriggerState.WAITING_LOW);
@@ -254,11 +268,46 @@ public class TriggerEvaluator {
                         break;
                     case WAITING_LOW:
                         log.trace("Trigger {} in WAITING_LOW, checking...", t);
-                        if (evaluateTriggerConstraint(t, Duration.ZERO)) {
+                        if (evaluateTrigger(t, Duration.ZERO, false)) {
                             log.trace(
                                     "Trigger {} met for the first time! Going to WAITING_HIGH", t);
                             t.setTimeConditionFirstMet(new Date(System.currentTimeMillis()));
                             t.setState(TriggerState.WAITING_HIGH);
+                        }
+                        break;
+                    case RECORDING_ACTIVE:
+                        log.trace("Trigger {} in RECORDING_ACTIVE, monitoring conditions", t);
+                        // If no stopping condition was provided, no need to take any action.
+                        if (t.getStopCondition().isBlank()) {
+                            break;
+                        }
+                        if (evaluateTrigger(t, Duration.ZERO, true)) {
+                            log.trace(
+                                    "Trigger {} met stopping condition, transitioning to"
+                                            + " RECORDING_STOPPING",
+                                    t);
+                            t.setTimeStopConditionFirstMet(new Date(System.currentTimeMillis()));
+                            t.setState(TriggerState.RECORDING_STOPPING);
+                        }
+                        break;
+                    case RECORDING_STOPPING:
+                        log.trace("Trigger {} in RECORDING_STOPPING, checking...", t);
+                        // Condition was met at last check but duration hasn't passed
+                        long stopDifference =
+                                currentTime.getTime() - t.getTimeStopConditionFirstMet().getTime();
+                        if (evaluateTrigger(t, Duration.ofMillis(stopDifference), true)) {
+                            log.trace("Trigger {} satisfied, completing...", t);
+                            stopRecording(t);
+                            client.syncSmartTrigger(
+                                    new SmartTriggerUpdate(
+                                            Collections.emptyList(),
+                                            List.of(t.getID()),
+                                            Collections.emptyList()));
+                        } else if (evaluateTrigger(t, Duration.ZERO, true)) {
+                            log.trace("Trigger {} satisfied, waiting for duration...", t);
+                        } else {
+                            t.setState(TriggerState.RECORDING_ACTIVE);
+                            log.trace("Trigger {} not satisfied, going RECORDING_STOPPING...", t);
                         }
                         break;
                 }
@@ -268,43 +317,89 @@ public class TriggerEvaluator {
         }
     }
 
-    private void startRecording(SmartTrigger t) {
-        flightRecorderHelper
-                .createRecordingWithPredefinedTemplate(t.getRecordingTemplateName())
-                .ifPresent(
-                        tr -> {
-                            String recordingName =
-                                    String.format(
-                                            "cryostat-smart-trigger-%d", tr.getRecording().getId());
-                            tr.getRecording().setName(recordingName);
-                            harvester.handleNewNamedRecording(tr, recordingName);
-                            tr.getRecording().start();
-                            t.setState(TriggerState.COMPLETE);
-                            log.debug(
-                                    "Started recording \"{}\" using template \"{}\" due to trigger"
-                                            + " \"{}\"",
-                                    recordingName,
-                                    t.getRecordingTemplateName(),
-                                    t.getTriggerCondition());
-                        });
+    private void stopRecording(SmartTrigger t) {
+        TemplatedRecording recording = recordings.get(t.getID());
+        if (Objects.isNull(recording)) {
+            log.error("Trigger {} has no associated recording.", t);
+            throw new IllegalArgumentException();
+        }
+        recording.getRecording().stop();
+        log.trace(
+                "Recording {} stopped, delegating to harvester",
+                recording.getRecording().getName());
+        harvester.recordingStateChanged(recording.getRecording());
+        log.trace("Activation Count: {}", activationCounts.getOrDefault(t, 0L));
+        log.trace("Invocation Target: {}", t.getInvocationCountTarget());
+        if (activationCounts.getOrDefault(t, 0L) >= t.getInvocationCountTarget()) {
+            log.trace("Trigger exceeded invocation target, completing");
+            t.setState(TriggerState.COMPLETE);
+        } else {
+            // Trigger can keep firing, reset the state
+            t.setState(TriggerState.NEW);
+        }
     }
 
-    private boolean evaluateTriggerConstraint(SmartTrigger trigger, Duration targetDuration) {
+    private void startRecording(SmartTrigger t) {
+        Optional<TemplatedRecording> rec =
+                flightRecorderHelper.createRecordingWithPredefinedTemplate(
+                        t.getRecordingTemplateName());
+        if (rec.isEmpty()) {
+            log.warn("Failed to create recording, leaving trigger state unchanged");
+            return;
+        }
+        TemplatedRecording tr = rec.get();
+        String recordingName =
+                String.format("cryostat-smart-trigger-%d", tr.getRecording().getId());
+        tr.getRecording().setName(recordingName);
+        harvester.handleNewNamedRecording(tr, recordingName);
+        tr.getRecording().start();
+        recordings.put(t.getID(), tr);
+        t.setState(TriggerState.RECORDING_ACTIVE);
+        activationCounts.merge(t, 1l, Long::sum);
+        lastActivations.put(t, System.currentTimeMillis());
+        log.debug(
+                "Started recording \"{}\" using template \"{}\" due to trigger" + " \"{}\"",
+                recordingName,
+                t.getRecordingTemplateName(),
+                t.getTriggerCondition());
+    }
+
+    private boolean evaluateTrigger(SmartTrigger trigger, Duration targetDuration, boolean stop) {
         try {
             Map<String, Object> conditionVars = cache.snapshot();
+            var lastActivation = lastActivations.getOrDefault(trigger, 0l);
+            conditionVars.putAll(new MBeanInfo().getSimplifiedMetrics());
+            // Inject extra state to allow control over how triggers activate
+            conditionVars.put(ACTIVATION_KEY, activationCounts.getOrDefault(trigger, 0l));
+            conditionVars.put(LAST_ACTIVATION_KEY, lastActivation);
+            conditionVars.put(TIME_LAST_ACTIVATED_KEY, System.currentTimeMillis() - lastActivation);
             log.trace("evaluating mbean map:\n{}", conditionVars);
+
             Boolean conditionResult =
-                    buildConditionScript(trigger, conditionVars)
-                            .execute(Boolean.class, conditionVars);
+                    stop
+                            ? stopConditionCache
+                                    .computeIfAbsent(
+                                            trigger,
+                                            t -> buildScript(t.getStopCondition(), conditionVars))
+                                    .execute(Boolean.class, conditionVars)
+                            : buildConditionScript(trigger, conditionVars)
+                                    .execute(Boolean.class, conditionVars);
 
-            var durationResult = Boolean.FALSE;
+            var durationResult = false;
             if (targetDuration.equals(Duration.ZERO)) {
-                durationResult = Boolean.TRUE;
-            } else if (targetDuration.toMillis() >= trigger.getTargetDuration().toMillis()) {
-                durationResult = Boolean.TRUE;
+                durationResult = true;
             }
-
-            return Boolean.TRUE.equals(conditionResult) && Boolean.TRUE.equals(durationResult);
+            if (stop) {
+                if (targetDuration.toMillis() >= trigger.getStopDuration()) {
+                    durationResult = true;
+                }
+            } else {
+                if (targetDuration.toMillis() >= trigger.getTargetDuration().toMillis()) {
+                    durationResult = true;
+                }
+            }
+            boolean satisfied = conditionResult && durationResult;
+            return satisfied;
         } catch (Exception e) {
             log.error("Failed to create or execute script", e);
             return false;
@@ -360,6 +455,15 @@ public class TriggerEvaluator {
 
     public List<SmartTrigger> getDefinitions() {
         return new ArrayList<SmartTrigger>(triggers.values());
+    }
+
+    private void cleanupState(SmartTrigger t) {
+        triggers.values().remove(t);
+        conditionScriptCache.remove(t);
+        stopConditionCache.remove(t);
+        activationCounts.remove(t);
+        lastActivations.remove(t);
+        recordings.remove(t.getID());
     }
 
     public static class SmartTriggerUpdate {
