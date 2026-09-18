@@ -138,7 +138,7 @@ public class TriggerEvaluator {
         }
 
         this.stop();
-        this.triggers.remove(uuid);
+        cleanupState(triggers.get(uuid));
         this.refresh();
         return true;
     }
@@ -181,8 +181,7 @@ public class TriggerEvaluator {
                     case COMPLETE:
                         /* Trigger condition has been met, can remove it */
                         log.trace("Completed {} , removing", t);
-                        triggers.values().remove(t);
-                        conditionScriptCache.remove(t);
+                        cleanupState(t);
                         break;
                     case NEW:
                         // Simple Constraint, no duration specified so condition only needs to be
@@ -409,6 +408,15 @@ public class TriggerEvaluator {
 
     public List<SmartTrigger> getDefinitions() {
         return new ArrayList<SmartTrigger>(triggers.values());
+    }
+
+    private void cleanupState(SmartTrigger t) {
+        triggers.values().remove(t);
+        conditionScriptCache.remove(t);
+        stopConditionCache.remove(t);
+        activationCounts.remove(t);
+        lastActivations.remove(t);
+        recordings.remove(t.getID());
     }
 
     public static class SmartTriggerUpdate {
