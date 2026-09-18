@@ -142,8 +142,9 @@ public class MBeanCache {
                         // Monitor is still registered, restart and restore count
                         gauges.get(attr).start();
                         monitoredAttributeCount.merge(attr, 1, Integer::sum);
+                        throw e;
                     } else {
-                        // Monitor was unregistereed, cleanup
+                        // Monitor was unregistered, cleanup
                         monitoredAttributes.remove(attr);
                         gauges.remove(attr);
                     }

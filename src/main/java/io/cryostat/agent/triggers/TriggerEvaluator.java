@@ -128,7 +128,11 @@ public class TriggerEvaluator {
         try {
             cleanupListeners(this.triggers.get(uuid));
         } catch (Exception e) {
-            log.warn("Failed to cleanup listeners for trigger {}", uuid);
+            // Exception gets propagated if the listeners remained
+            // registered. Retain the trigger and restart evaluation
+            log.warn("Failed to cleanup listeners for trigger {}, retaining trigger.", uuid);
+            this.refresh();
+            return false;
         }
         this.triggers.remove(uuid);
         this.refresh();
@@ -198,9 +202,14 @@ public class TriggerEvaluator {
                     case COMPLETE:
                         /* Trigger condition has been met, can remove it */
                         log.trace("Completed {} , removing", t);
+                        try { // Exception is propagated if the mbean remained registered
+                            cleanupListeners(t);
+                        } catch (Exception e) {
+                            log.warn("Failed to clean up listeners, retaining trigger");
+                            break;
+                        }
                         triggers.values().remove(t);
                         conditionScriptCache.remove(t);
-                        cleanupListeners(t);
                         break;
                     case NEW:
                         // Simple Constraint, no duration specified so condition only needs to be

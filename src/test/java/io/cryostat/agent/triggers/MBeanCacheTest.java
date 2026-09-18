@@ -110,7 +110,11 @@ public class MBeanCacheTest {
                 .registerMBean(Mockito.any(Object.class), Mockito.any(ObjectName.class));
         Mockito.doThrow(new RuntimeException()).when(server).unregisterMBean(Mockito.any());
         Mockito.when(server.isRegistered(Mockito.any())).thenReturn(true);
-        cache.deregister(in);
+        try {
+            cache.deregister(in);
+        } catch (RuntimeException re) {
+            // Expected
+        }
         // Expect cache entry to still be present
         assertEquals(cache.snapshot().size(), 1);
     }
