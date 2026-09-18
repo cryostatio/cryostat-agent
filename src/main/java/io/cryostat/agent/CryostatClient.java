@@ -20,6 +20,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -272,7 +274,11 @@ public class CryostatClient {
                         .orElseThrow(
                                 () -> new IllegalArgumentException("Failed to generate heap dump"));
         HttpPost req =
-                new HttpPost(baseUri.resolve(HEAP_DUMP_UPLOAD_PATH.replace("{jvmId}", jvmId)));
+                new HttpPost(
+                        baseUri.resolve(
+                                HEAP_DUMP_UPLOAD_PATH.replace(
+                                        "{jvmId}",
+                                        URLEncoder.encode(jvmId, StandardCharsets.UTF_8))));
 
         CountingInputStream is = getRecordingInputStream(heapDump);
 
