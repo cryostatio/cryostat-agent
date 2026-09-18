@@ -167,7 +167,7 @@ public class TriggerEvaluator {
                         this::evaluate, 0, evaluationPeriodMs, TimeUnit.MILLISECONDS);
     }
 
-    private void evaluate() {
+    void evaluate() {
         try {
             for (SmartTrigger t : triggers.values()) {
                 log.trace("Evaluating {}", t);
