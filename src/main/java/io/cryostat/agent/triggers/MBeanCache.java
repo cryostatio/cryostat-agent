@@ -117,12 +117,12 @@ public class MBeanCache {
 
     public void deregister(String attr) throws Exception {
         synchronized (registrationLock) {
+            if (!monitoredAttributeCount.containsKey(attr) || !gauges.containsKey(attr)) {
+                log.warn("Attempt to deregister non-monitored attribute: {}", attr);
+                return;
+            }
             monitoredAttributeCount.merge(attr, -1, Integer::sum);
             if (monitoredAttributeCount.get(attr) == 0) {
-                if (!gauges.containsKey(attr)) {
-                    log.warn("Attempt to deregister non-monitored attribute: {}", attr);
-                    return;
-                }
                 gauges.get(attr).stop();
                 server.unregisterMBean(generateObjectName(attr));
                 monitoredAttributes.remove(attr);
