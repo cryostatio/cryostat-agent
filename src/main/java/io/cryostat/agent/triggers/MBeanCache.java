@@ -121,8 +121,7 @@ public class MBeanCache {
                 log.warn("Attempt to deregister non-monitored attribute: {}", attr);
                 return;
             }
-            monitoredAttributeCount.merge(attr, -1, Integer::sum);
-            if (monitoredAttributeCount.get(attr) == 0) {
+            if (monitoredAttributeCount.merge(attr, -1, Integer::sum) == 0) {
                 gauges.get(attr).stop();
                 server.unregisterMBean(generateObjectName(attr));
                 monitoredAttributes.remove(attr);
