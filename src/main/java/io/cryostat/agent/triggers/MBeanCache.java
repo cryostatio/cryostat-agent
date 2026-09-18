@@ -56,8 +56,11 @@ public class MBeanCache {
     private final Logger log = LoggerFactory.getLogger(getClass());
     private final Object registrationLock = new Object();
     private MBeanServer server = ManagementFactory.getPlatformMBeanServer();
+    private long evaluationPeriodMs;
 
-    public MBeanCache() {}
+    public MBeanCache(long evaluationPeriodMs) {
+        this.evaluationPeriodMs = evaluationPeriodMs;
+    }
 
     public Map<String, Object> snapshot() {
         return new HashMap<>(monitoredAttributes);
@@ -74,6 +77,7 @@ public class MBeanCache {
             ObjectName objectName = getObjectName(attr);
             monitor.addObservedObject(objectName);
             monitor.setObservedAttribute(attr);
+            monitor.setGranularityPeriod(evaluationPeriodMs);
             // Initially fire on any change,
             var val = server.getAttribute(objectName, attr);
             var threshold = generateThreshold(getAttributeType(attr, objectName), val);

@@ -46,7 +46,7 @@ public class MBeanCacheTest {
     public void setup() {
         factoryMock = Mockito.mockStatic(ManagementFactory.class);
         factoryMock.when(ManagementFactory::getPlatformMBeanServer).thenReturn(server);
-        cache = new MBeanCache();
+        cache = new MBeanCache(1000);
     }
 
     @AfterEach

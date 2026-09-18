@@ -79,7 +79,7 @@ public class TriggerEvaluator {
         this.harvester = harvester;
         this.evaluationPeriodMs = evaluationPeriodMs;
         this.client = client;
-        this.cache = new MBeanCache();
+        this.cache = new MBeanCache(evaluationPeriodMs);
     }
 
     public void start() {
