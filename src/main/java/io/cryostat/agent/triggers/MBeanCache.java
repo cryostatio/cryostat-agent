@@ -20,6 +20,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
@@ -43,10 +44,10 @@ public class MBeanCache {
     private static final String THRESHOLD_HIGH_VALUE_EXCEEDED = "jmx.monitor.gauge.high";
     private static final String THRESHOLD_LOW_VALUE_EXCEEDED = "jmx.monitor.gauge.low";
     // Read/Written by JMX Threads
-    private ConcurrentHashMap<String, Object> monitoredAttributes = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Object> monitoredAttributes = new ConcurrentHashMap<>();
     // Read/Written by evaluation thread and HTTP thread
     // Read/Writes protected by registrationLock
-    private HashMap<String, GaugeMonitor> gauges = new HashMap<>();
+    private final HashMap<String, GaugeMonitor> gauges = new HashMap<>();
     // Multiple triggers can monitor the same attribute, but we only need
     // one listener for that attribute. Track how many are using each one
     // to decide when to deregister.
@@ -55,8 +56,8 @@ public class MBeanCache {
     private final HashMap<String, Integer> monitoredAttributeCount = new HashMap<>();
     private final Logger log = LoggerFactory.getLogger(getClass());
     private final Object registrationLock = new Object();
-    private MBeanServer server = ManagementFactory.getPlatformMBeanServer();
-    private long evaluationPeriodMs;
+    private final MBeanServer server = ManagementFactory.getPlatformMBeanServer();
+    private final long evaluationPeriodMs;
 
     public MBeanCache(long evaluationPeriodMs) {
         this.evaluationPeriodMs = evaluationPeriodMs;
@@ -75,6 +76,11 @@ public class MBeanCache {
             }
             GaugeMonitor monitor = new GaugeMonitor();
             ObjectName objectName = getObjectName(attr);
+            if (Objects.isNull(objectName)) {
+                log.warn(
+                        "Failed to find objectName for attribute: {}, stopping registration", attr);
+                return;
+            }
             monitor.addObservedObject(objectName);
             monitor.setObservedAttribute(attr);
             monitor.setGranularityPeriod(evaluationPeriodMs);
