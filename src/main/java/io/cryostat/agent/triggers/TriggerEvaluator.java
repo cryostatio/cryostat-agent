@@ -19,7 +19,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
-import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -33,7 +33,6 @@ import io.cryostat.agent.CryostatClient;
 import io.cryostat.agent.FlightRecorderHelper;
 import io.cryostat.agent.FlightRecorderHelper.TemplatedRecording;
 import io.cryostat.agent.harvest.Harvester;
-import io.cryostat.agent.model.MBeanInfo;
 import io.cryostat.libcryostat.triggers.SmartTrigger;
 import io.cryostat.libcryostat.triggers.SmartTrigger.TriggerState;
 
@@ -61,6 +60,7 @@ public class TriggerEvaluator {
     private final FlightRecorderHelper flightRecorderHelper;
     private final Harvester harvester;
     private final long evaluationPeriodMs;
+    private final List<String> orphanAttributes = new ArrayList<>();
     private final ConcurrentHashMap<SmartTrigger, Script> conditionScriptCache =
             new ConcurrentHashMap<>();
     private final ConcurrentHashMap<SmartTrigger, Script> stopConditionCache =
@@ -74,6 +74,7 @@ public class TriggerEvaluator {
     private Future<?> task;
     private final Logger log = LoggerFactory.getLogger(getClass());
     private final CryostatClient client;
+    private final MBeanCache cache;
 
     @SuppressFBWarnings("EI_EXPOSE_REP2")
     public TriggerEvaluator(
@@ -84,6 +85,7 @@ public class TriggerEvaluator {
             FlightRecorderHelper flightRecorderHelper,
             Harvester harvester,
             long evaluationPeriodMs,
+            MBeanCache cache,
             CryostatClient client) {
         this.scheduler = scheduler;
         this.definitions = definitions;
@@ -93,6 +95,7 @@ public class TriggerEvaluator {
         this.harvester = harvester;
         this.evaluationPeriodMs = evaluationPeriodMs;
         this.client = client;
+        this.cache = cache;
     }
 
     public void start() {
@@ -119,10 +122,11 @@ public class TriggerEvaluator {
             String uuid = registerTrigger(trigger);
             if (Objects.isNull(uuid)) {
                 log.warn(
-                        "Duplicate smart trigger definition: {} {} {}",
+                        "Smart trigger failed registration: {} {} {}",
                         trigger.getTriggerCondition(),
                         trigger.getTargetDuration().toMillis(),
                         trigger.getRecordingTemplateName());
+                continue;
             }
             returnVal.add(uuid);
         }
@@ -138,6 +142,15 @@ public class TriggerEvaluator {
         }
 
         this.stop();
+        try {
+            cleanupListeners(this.triggers.get(uuid));
+        } catch (Exception e) {
+            // Exception gets propagated if the listeners remained
+            // registered. Retain the trigger and restart evaluation
+            log.warn("Failed to cleanup listeners for trigger {}, retaining trigger.", uuid);
+            this.refresh();
+            return false;
+        }
         cleanupState(triggers.get(uuid));
         this.refresh();
         return true;
@@ -150,10 +163,40 @@ public class TriggerEvaluator {
     }
 
     private String registerTrigger(SmartTrigger t) {
-        log.trace("Registering Smart Trigger: {}", t);
-        if (!triggers.values().contains(t)) {
-            triggers.put(t.getID(), t);
+        var registeredListeners = new ArrayList<String>();
+        var parsedAttributes = new ArrayList<String>();
+        if (triggers.values().contains(t)) {
+            log.warn("Attempt to register duplicate trigger: {}", t);
+            return null;
         }
+        try {
+            parsedAttributes.addAll(parser.parseAttributesFromCondition(t.getTriggerCondition()));
+            parsedAttributes.addAll(parser.parseAttributesFromCondition(t.getStopCondition()));
+            if (parsedAttributes.isEmpty()) {
+                log.warn(
+                        "No valid attributes found in expression {}, rejecting trigger",
+                        t.getTriggerCondition());
+                return null;
+            }
+            for (String s : parsedAttributes) {
+                cache.monitorAttribute(s);
+                registeredListeners.add(s);
+            }
+        } catch (Exception e) {
+            log.warn(
+                    "Invalid Attribute referenced in Trigger condition {}, skipping trigger",
+                    t.getTriggerCondition());
+            for (String s : registeredListeners) {
+                try {
+                    cache.deregister(s);
+                } catch (Exception e2) {
+                    log.warn("Failed to de-register attribute: {}", s);
+                    orphanAttributes.add(s);
+                }
+            }
+            return null;
+        }
+        triggers.put(t.getID(), t);
         return t.getID();
     }
 
@@ -181,6 +224,12 @@ public class TriggerEvaluator {
                     case COMPLETE:
                         /* Trigger condition has been met, can remove it */
                         log.trace("Completed {} , removing", t);
+                        try { // Exception is propagated if the mbean remained registered
+                            cleanupListeners(t);
+                        } catch (Exception e) {
+                            log.warn("Failed to clean up listeners, retaining trigger");
+                            break;
+                        }
                         cleanupState(t);
                         break;
                     case NEW:
@@ -324,9 +373,8 @@ public class TriggerEvaluator {
 
     private boolean evaluateTrigger(SmartTrigger trigger, Duration targetDuration, boolean stop) {
         try {
-            Map<String, Object> conditionVars = new HashMap<>();
+            Map<String, Object> conditionVars = cache.snapshot();
             var lastActivation = lastActivations.getOrDefault(trigger, 0l);
-            conditionVars.putAll(new MBeanInfo().getSimplifiedMetrics());
             // Inject extra state to allow control over how triggers activate
             conditionVars.put(ACTIVATION_KEY, activationCounts.getOrDefault(trigger, 0l));
             conditionVars.put(LAST_ACTIVATION_KEY, lastActivation);
@@ -381,6 +429,27 @@ public class TriggerEvaluator {
         }
     }
 
+    private void cleanupListeners(SmartTrigger t) throws Exception {
+        ArrayList<String> conditions = new ArrayList<>();
+        conditions.addAll(parser.parseAttributesFromCondition(t.getTriggerCondition()));
+        conditions.addAll(parser.parseAttributesFromCondition(t.getStopCondition()));
+        for (String c : conditions) {
+            cache.deregister(c);
+        }
+        // Attempt removal of any orphaned attributes that previously failed
+        try {
+            Iterator<String> it = orphanAttributes.iterator();
+            while (it.hasNext()) {
+                String c = it.next();
+                cache.deregister(c);
+                it.remove();
+            }
+        } catch (Exception e) {
+            // If we failed again it will still be in the list for the next retry.
+            log.warn("Failed to remove orphaned listener, retrying later");
+        }
+    }
+
     private List<Decl> buildDeclarations(Map<String, Object> scriptVars) {
         ArrayList<Decl> decls = new ArrayList<>();
         for (Map.Entry<String, Object> s : scriptVars.entrySet()) {
@@ -396,6 +465,9 @@ public class TriggerEvaluator {
         if (obj.getClass().equals(String.class)) return Decls.String;
         else if (obj.getClass().equals(Boolean.class)) return Decls.Bool;
         else if (obj.getClass().equals(Integer.class)) return Decls.Int;
+        else if (obj.getClass().equals(Float.class)) return Decls.Double;
+        else if (obj.getClass().equals(Short.class)) return Decls.Int;
+        else if (obj.getClass().equals(Byte.class)) return Decls.Int;
         else if (obj.getClass().equals(Long.class))
             return Decls.newPrimitiveType(PrimitiveType.INT64);
         else if (obj.getClass().equals(Double.class)) return Decls.Double;
