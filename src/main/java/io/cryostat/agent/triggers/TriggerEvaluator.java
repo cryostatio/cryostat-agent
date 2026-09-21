@@ -59,7 +59,7 @@ public class TriggerEvaluator {
     private final FlightRecorderHelper flightRecorderHelper;
     private final Harvester harvester;
     private final long evaluationPeriodMs;
-    private List<String> orphanAttributes = new ArrayList<>();
+    private final List<String> orphanAttributes = new ArrayList<>();
     private final ConcurrentHashMap<SmartTrigger, Script> conditionScriptCache =
             new ConcurrentHashMap<>();
     private final ConcurrentHashMap<SmartTrigger, Script> stopConditionCache =
