@@ -79,7 +79,7 @@ public class MBeanCache {
             if (Objects.isNull(objectName)) {
                 log.warn(
                         "Failed to find objectName for attribute: {}, stopping registration", attr);
-                return;
+                throw new IllegalArgumentException();
             }
             monitor.addObservedObject(objectName);
             monitor.setObservedAttribute(attr);

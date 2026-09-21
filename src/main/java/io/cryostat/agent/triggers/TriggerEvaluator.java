@@ -467,8 +467,7 @@ public class TriggerEvaluator {
         else if (obj.getClass().equals(Integer.class)) return Decls.Int;
         else if (obj.getClass().equals(Float.class)) return Decls.Double;
         else if (obj.getClass().equals(Short.class)) return Decls.Int;
-        else if (obj.getClass().equals(Byte.class))
-            return Decls.newPrimitiveType(PrimitiveType.BYTES);
+        else if (obj.getClass().equals(Byte.class)) return Decls.Int;
         else if (obj.getClass().equals(Long.class))
             return Decls.newPrimitiveType(PrimitiveType.INT64);
         else if (obj.getClass().equals(Double.class)) return Decls.Double;
