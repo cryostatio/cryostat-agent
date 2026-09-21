@@ -19,7 +19,11 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import java.nio.file.Path;
@@ -101,6 +105,94 @@ class TriggerEvaluatorTest {
         };
         when(parser.isValid(any(SmartTriggerReq.class))).thenReturn(false);
         MatcherAssert.assertThat(triggerEvaluator.append(req), Matchers.equalTo(List.of()));
+    }
+
+    @Test
+    public void testDuplicateRegistrationDoesNotRegisterListeners() throws Exception {
+        SmartTriggerReq[] req = {
+            new SmartTriggerReq(
+                    "ProcessCpuLoad>0.4&&SystemCpuLoad>0.5",
+                    10010,
+                    "ProcessCpuLoad<0.7",
+                    101100,
+                    0,
+                    "template.jfc")
+        };
+        SmartTrigger trigger =
+                new SmartTrigger(
+                        "foo",
+                        "ProcessCpuLoad>0.4&&SystemCpuLoad>0.5",
+                        "ProcessCpuLoad<0.7",
+                        10010,
+                        101100,
+                        0,
+                        "template.jfc");
+        when(parser.isValid(any(SmartTriggerReq.class))).thenReturn(true);
+        when(parser.parseAttributesFromCondition(anyString()))
+                .thenReturn(List.of("ProcessCpuLoad"));
+        when(parser.parse(any(SmartTriggerReq.class))).thenReturn(trigger);
+        doNothing().when(cache).monitorAttribute(anyString());
+        triggerEvaluator.append(req);
+        verify(cache, atLeastOnce()).monitorAttribute(anyString());
+        triggerEvaluator.append(req);
+        verifyNoMoreInteractions(cache);
+    }
+
+    @Test
+    public void testCacheDeregistrationFailure() throws Exception {
+        SmartTriggerReq[] req = {
+            new SmartTriggerReq(
+                    "ProcessCpuLoad>0.4&&SystemCpuLoad>0.5",
+                    10010,
+                    "ProcessCpuLoad<0.7",
+                    101100,
+                    0,
+                    "template.jfc")
+        };
+        SmartTriggerReq[] req2 = {
+            new SmartTriggerReq("ThreadCount>1", 1000, "ThreadCount<2", 1000, 0, "template.jfc")
+        };
+        SmartTrigger trigger =
+                new SmartTrigger(
+                        "foo",
+                        "ProcessCpuLoad>0.4&&SystemCpuLoad>0.5",
+                        "ProcessCpuLoad<0.7",
+                        10010,
+                        101100,
+                        0,
+                        "template.jfc");
+        SmartTrigger trigger2 =
+                new SmartTrigger(
+                        "bar", "ThreadCount>1", "ThreadCount<2", 1000, 1000, 0, "template.jfc");
+        when(parser.isValid(any(SmartTriggerReq.class))).thenReturn(true);
+        when(parser.parseAttributesFromCondition(anyString()))
+                .thenReturn(List.of("ProcessCpuLoad", "SystemCpuLoad"));
+        when(parser.parse(any(SmartTriggerReq.class))).thenReturn(trigger);
+        // If a trigger references multiple attributes and registering a listener
+        // for a later one fails, we can end up with an orphan listener if
+        // de-registering the created listeners also fails
+        doNothing().when(cache).monitorAttribute("ProcessCpuLoad");
+        // Fail registration of the next attribute and fail deregistration of the existing one
+        doThrow(new RuntimeException()).when(cache).deregister(anyString());
+        doThrow(new RuntimeException()).when(cache).monitorAttribute("SystemCpuLoad");
+        // Trigger should fail registration and be cleaned up, but listeners should still
+        // be tracked for later cleanup
+        MatcherAssert.assertThat(triggerEvaluator.append(req), Matchers.equalTo(List.of()));
+        // At this point registration should have failed and left an orphan attribute
+        // Register and remove a trigger, orphan cleanup attempts happen on each
+        // subsequent cleanup call
+        when(parser.isValid(any(SmartTriggerReq.class))).thenReturn(true);
+        when(parser.parseAttributesFromCondition(anyString())).thenReturn(List.of("ThreadCount"));
+        when(parser.parse(any(SmartTriggerReq.class))).thenReturn(trigger2);
+        // Succeed at registration this time
+        doNothing().when(cache).deregister(anyString());
+        doNothing().when(cache).monitorAttribute(anyString());
+        triggerEvaluator.append(req2);
+        triggerEvaluator.remove(trigger2.getID());
+        // deregister should be called twice, once for ThreadCount and once for
+        // the dangling ProcessCpuLoad
+        verify(cache, atLeastOnce()).deregister("ThreadCount");
+        verify(cache, atLeastOnce()).deregister("ProcessCpuLoad");
     }
 
     @Test

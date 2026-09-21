@@ -19,6 +19,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -121,10 +122,11 @@ public class TriggerEvaluator {
             String uuid = registerTrigger(trigger);
             if (Objects.isNull(uuid)) {
                 log.warn(
-                        "Duplicate smart trigger definition: {} {} {}",
+                        "Smart trigger failed registration: {} {} {}",
                         trigger.getTriggerCondition(),
                         trigger.getTargetDuration().toMillis(),
                         trigger.getRecordingTemplateName());
+                continue;
             }
             returnVal.add(uuid);
         }
@@ -163,6 +165,10 @@ public class TriggerEvaluator {
     private String registerTrigger(SmartTrigger t) {
         var registeredListeners = new ArrayList<String>();
         var parsedAttributes = new ArrayList<String>();
+        if (triggers.values().contains(t)) {
+            log.warn("Attempt to register duplicate trigger: {}", t);
+            return null;
+        }
         try {
             parsedAttributes.addAll(parser.parseAttributesFromCondition(t.getTriggerCondition()));
             parsedAttributes.addAll(parser.parseAttributesFromCondition(t.getStopCondition()));
@@ -190,9 +196,7 @@ public class TriggerEvaluator {
             }
             return null;
         }
-        if (!triggers.values().contains(t)) {
-            triggers.put(t.getID(), t);
-        }
+        triggers.put(t.getID(), t);
         return t.getID();
     }
 
@@ -434,9 +438,11 @@ public class TriggerEvaluator {
         }
         // Attempt removal of any orphaned attributes that previously failed
         try {
-            for (String c : orphanAttributes) {
+            Iterator<String> it = orphanAttributes.iterator();
+            while (it.hasNext()) {
+                String c = it.next();
                 cache.deregister(c);
-                orphanAttributes.remove(c);
+                it.remove();
             }
         } catch (Exception e) {
             // If we failed again it will still be in the list for the next retry.
@@ -459,6 +465,10 @@ public class TriggerEvaluator {
         if (obj.getClass().equals(String.class)) return Decls.String;
         else if (obj.getClass().equals(Boolean.class)) return Decls.Bool;
         else if (obj.getClass().equals(Integer.class)) return Decls.Int;
+        else if (obj.getClass().equals(Float.class)) return Decls.Double;
+        else if (obj.getClass().equals(Short.class)) return Decls.Int;
+        else if (obj.getClass().equals(Byte.class))
+            return Decls.newPrimitiveType(PrimitiveType.BYTES);
         else if (obj.getClass().equals(Long.class))
             return Decls.newPrimitiveType(PrimitiveType.INT64);
         else if (obj.getClass().equals(Double.class)) return Decls.Double;
