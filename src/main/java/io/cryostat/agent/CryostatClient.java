@@ -83,9 +83,18 @@ public class CryostatClient {
      * internal/controller/configmaps.go) must be updated to match.
      * See https://github.com/cryostatio/cryostat-agent/issues/907
      */
-    private static final String DISCOVERY_API_PATH = "/api/v4/discovery";
-    private static final String AGENT_REGISTRATION_API_PATH = "/api/v4.3/discovery/agents";
-    private static final String DISCOVERY_PUBLISH_API_PATH = "/api/v4.2/discovery";
+    private static final String DISCOVERY_PLUGINS_API_PATH = "/api/v5/discovery/plugins";
+    private static final String DISCOVERY_PLUGIN_PATH = "/api/v5/discovery/plugins/{id}";
+    private static final String DISCOVERY_PLUGIN_REGISTRATION_CHECK_PATH =
+            "/api/v5/discovery/plugins/registration_check/{id}";
+    private static final String DISCOVERY_PLUGIN_PUBLISH_PATH =
+            "/api/v5/discovery/plugins/{id}/publish";
+    private static final String AGENT_REGISTRATION_API_PATH = "/api/v5/discovery/plugins/agent";
+    private static final String SMART_TRIGGER_SYNC_PATH =
+            "/api/beta/targets/{jvmId}/smart_triggers/sync/";
+    private static final String HEAP_DUMP_UPLOAD_PATH =
+            "/api/v5/targets/{jvmId}/diagnostics/heapdump/upload";
+    private static final String RECORDINGS_UPLOAD_PATH = "/api/beta/recordings/{jvmId}";
     private static final String DISCOVERY_TOKEN_HEADER = "Cryostat-Discovery-Authentication";
 
     private final Logger log = LoggerFactory.getLogger(getClass());
@@ -146,7 +155,11 @@ public class CryostatClient {
         if (!pluginInfo.isInitialized()) {
             return CompletableFuture.completedFuture(false);
         }
-        HttpGet req = new HttpGet(baseUri.resolve(DISCOVERY_API_PATH + "/" + pluginInfo.getId()));
+        HttpGet req =
+                new HttpGet(
+                        baseUri.resolve(
+                                DISCOVERY_PLUGIN_REGISTRATION_CHECK_PATH.replace(
+                                        "{id}", pluginInfo.getId())));
         req.addHeader(DISCOVERY_TOKEN_HEADER, pluginInfo.getToken());
         log.trace("{}", req);
         return supply(req, (res) -> logResponse(req, res))
@@ -161,12 +174,12 @@ public class CryostatClient {
         }
         RegistrationRefresh refresh =
                 new RegistrationRefresh(pluginInfo.getId(), pluginInfo.getToken(), realm, callback);
-        return postForPluginInfo(baseUri.resolve(DISCOVERY_API_PATH), refresh);
+        return postForPluginInfo(baseUri.resolve(DISCOVERY_PLUGINS_API_PATH), refresh);
     }
 
     public CompletableFuture<PluginInfo> activateRegistrationRefresh(URI callback) {
         RegistrationActivation activation = new RegistrationActivation(realm, callback);
-        return postForPluginInfo(baseUri.resolve(DISCOVERY_API_PATH), activation);
+        return postForPluginInfo(baseUri.resolve(DISCOVERY_PLUGINS_API_PATH), activation);
     }
 
     public CompletableFuture<PluginInfo> register(
@@ -196,7 +209,8 @@ public class CryostatClient {
 
     public CompletableFuture<Void> deregister(PluginInfo pluginInfo) {
         HttpDelete req =
-                new HttpDelete(baseUri.resolve(DISCOVERY_API_PATH + "/" + pluginInfo.getId()));
+                new HttpDelete(
+                        baseUri.resolve(DISCOVERY_PLUGIN_PATH.replace("{id}", pluginInfo.getId())));
         req.addHeader(DISCOVERY_TOKEN_HEADER, pluginInfo.getToken());
         log.trace("{}", req);
         return supply(req, (res) -> logResponse(req, res))
@@ -210,7 +224,9 @@ public class CryostatClient {
         try {
             HttpPost req =
                     new HttpPost(
-                            baseUri.resolve(DISCOVERY_PUBLISH_API_PATH + "/" + pluginInfo.getId()));
+                            baseUri.resolve(
+                                    DISCOVERY_PLUGIN_PUBLISH_PATH.replace(
+                                            "{id}", pluginInfo.getId())));
             req.addHeader(DISCOVERY_TOKEN_HEADER, pluginInfo.getToken());
             req.setEntity(
                     new StringEntity(
@@ -232,8 +248,7 @@ public class CryostatClient {
         try {
             HttpPost req =
                     new HttpPost(
-                            baseUri.resolve(
-                                    "/api/beta/targets/" + jvmId + "/smart_triggers/sync/"));
+                            baseUri.resolve(SMART_TRIGGER_SYNC_PATH.replace("{jvmId}", jvmId)));
             req.setEntity(
                     new StringEntity(
                             mapper.writeValueAsString(update), ContentType.APPLICATION_JSON));
@@ -257,7 +272,7 @@ public class CryostatClient {
                         .orElseThrow(
                                 () -> new IllegalArgumentException("Failed to generate heap dump"));
         HttpPost req =
-                new HttpPost(baseUri.resolve("/api/beta/diagnostics/heapdump/upload/" + jvmId));
+                new HttpPost(baseUri.resolve(HEAP_DUMP_UPLOAD_PATH.replace("{jvmId}", jvmId)));
 
         CountingInputStream is = getRecordingInputStream(heapDump);
 
@@ -346,7 +361,8 @@ public class CryostatClient {
                         "template.type",
                         "TARGET"));
 
-        HttpPost req = new HttpPost(baseUri.resolve("/api/beta/recordings/" + jvmId));
+        HttpPost req =
+                new HttpPost(baseUri.resolve(RECORDINGS_UPLOAD_PATH.replace("{jvmId}", jvmId)));
 
         CountingInputStream is = getRecordingInputStream(recording);
         MultipartEntityBuilder entityBuilder =
