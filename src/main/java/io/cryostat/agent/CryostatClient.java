@@ -93,7 +93,7 @@ public class CryostatClient {
             "/api/v5/discovery/plugins/{id}/publish";
     private static final String AGENT_REGISTRATION_API_PATH = "/api/v5/discovery/plugins/agent";
     private static final String SMART_TRIGGER_SYNC_PATH =
-            "/api/beta/targets/{jvmId}/smart_triggers/sync/";
+            "/api/v5/targets/{jvmId}/smart_triggers/sync";
     private static final String HEAP_DUMP_UPLOAD_PATH =
             "/api/v5/targets/{jvmId}/diagnostics/heapdump/upload";
     private static final String RECORDINGS_UPLOAD_PATH = "/api/v5/recordings/{jvmId}";
