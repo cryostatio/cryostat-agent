@@ -96,7 +96,7 @@ public class CryostatClient {
             "/api/beta/targets/{jvmId}/smart_triggers/sync/";
     private static final String HEAP_DUMP_UPLOAD_PATH =
             "/api/v5/targets/{jvmId}/diagnostics/heapdump/upload";
-    private static final String RECORDINGS_UPLOAD_PATH = "/api/beta/recordings/{jvmId}";
+    private static final String RECORDINGS_UPLOAD_PATH = "/api/v5/recordings/{jvmId}";
     private static final String DISCOVERY_TOKEN_HEADER = "Cryostat-Discovery-Authentication";
 
     private final Logger log = LoggerFactory.getLogger(getClass());
