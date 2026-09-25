@@ -88,14 +88,14 @@ public class CryostatClient {
     private static final String DISCOVERY_PLUGINS_API_PATH = "/api/v5/discovery/plugins";
     private static final String DISCOVERY_PLUGIN_PATH = "/api/v5/discovery/plugins/{id}";
     private static final String DISCOVERY_PLUGIN_REGISTRATION_CHECK_PATH =
-            "/api/v5/discovery/plugins/registration_check/{id}";
+            "/api/v5/discovery/plugins/registration-check/{id}";
     private static final String DISCOVERY_PLUGIN_PUBLISH_PATH =
             "/api/v5/discovery/plugins/{id}/publish";
     private static final String AGENT_REGISTRATION_API_PATH = "/api/v5/discovery/plugins/agent";
     private static final String SMART_TRIGGER_SYNC_PATH =
-            "/api/v5/targets/{jvmId}/smart_triggers/sync";
+            "/api/v5/targets/{jvmId}/smart-triggers/sync";
     private static final String HEAP_DUMP_UPLOAD_PATH =
-            "/api/v5/targets/{jvmId}/diagnostics/heapdump/upload";
+            "/api/v5/targets/{jvmId}/diagnostics/heap-dump/upload";
     private static final String RECORDINGS_UPLOAD_PATH = "/api/v5/recordings/{jvmId}";
     private static final String DISCOVERY_TOKEN_HEADER = "Cryostat-Discovery-Authentication";
 
