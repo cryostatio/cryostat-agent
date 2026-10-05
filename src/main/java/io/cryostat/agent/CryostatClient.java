@@ -20,6 +20,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -86,15 +88,15 @@ public class CryostatClient {
     private static final String DISCOVERY_PLUGINS_API_PATH = "/api/v5/discovery/plugins";
     private static final String DISCOVERY_PLUGIN_PATH = "/api/v5/discovery/plugins/{id}";
     private static final String DISCOVERY_PLUGIN_REGISTRATION_CHECK_PATH =
-            "/api/v5/discovery/plugins/registration_check/{id}";
+            "/api/v5/discovery/plugins/registration-check/{id}";
     private static final String DISCOVERY_PLUGIN_PUBLISH_PATH =
             "/api/v5/discovery/plugins/{id}/publish";
     private static final String AGENT_REGISTRATION_API_PATH = "/api/v5/discovery/plugins/agent";
     private static final String SMART_TRIGGER_SYNC_PATH =
-            "/api/beta/targets/{jvmId}/smart_triggers/sync/";
+            "/api/v5/targets/{jvmId}/smart-triggers/sync";
     private static final String HEAP_DUMP_UPLOAD_PATH =
-            "/api/v5/targets/{jvmId}/diagnostics/heapdump/upload";
-    private static final String RECORDINGS_UPLOAD_PATH = "/api/beta/recordings/{jvmId}";
+            "/api/v5/targets/{jvmId}/diagnostics/heap-dump/upload";
+    private static final String RECORDINGS_UPLOAD_PATH = "/api/v5/recordings/{jvmId}";
     private static final String DISCOVERY_TOKEN_HEADER = "Cryostat-Discovery-Authentication";
 
     private final Logger log = LoggerFactory.getLogger(getClass());
@@ -272,7 +274,11 @@ public class CryostatClient {
                         .orElseThrow(
                                 () -> new IllegalArgumentException("Failed to generate heap dump"));
         HttpPost req =
-                new HttpPost(baseUri.resolve(HEAP_DUMP_UPLOAD_PATH.replace("{jvmId}", jvmId)));
+                new HttpPost(
+                        baseUri.resolve(
+                                HEAP_DUMP_UPLOAD_PATH.replace(
+                                        "{jvmId}",
+                                        URLEncoder.encode(jvmId, StandardCharsets.UTF_8))));
 
         CountingInputStream is = getRecordingInputStream(heapDump);
 
