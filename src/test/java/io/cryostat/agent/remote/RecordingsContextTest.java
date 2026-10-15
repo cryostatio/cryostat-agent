@@ -95,7 +95,11 @@ class RecordingsContextTest {
                             // jdk.jfr.Recording is created and started, registering itself with
                             // the real FlightRecorder, without any direct involvement from
                             // RecordingsContext
+                            String cmd = (String) invocation.getArgument(0);
+                            String outputPath =
+                                    cmd.substring(cmd.indexOf("file=") + "file=".length());
                             Recording simulated = new Recording();
+                            simulated.setDestination(Path.of(outputPath));
                             simulated.start();
                             recordingsToClose.add(simulated);
                             return "profiler is running";
@@ -127,7 +131,11 @@ class RecordingsContextTest {
         when(asyncProfilerExecutor.isAvailable()).thenReturn(true);
         doAnswer(
                         invocation -> {
+                            String cmd = (String) invocation.getArgument(0);
+                            String outputPath =
+                                    cmd.substring(cmd.indexOf("file=") + "file=".length());
                             Recording simulated = new Recording();
+                            simulated.setDestination(Path.of(outputPath));
                             simulated.start();
                             recordingsToClose.add(simulated);
                             return "profiler is running";
@@ -156,7 +164,11 @@ class RecordingsContextTest {
         when(asyncProfilerExecutor.isAvailable()).thenReturn(true);
         doAnswer(
                         invocation -> {
+                            String cmd = (String) invocation.getArgument(0);
+                            String outputPath =
+                                    cmd.substring(cmd.indexOf("file=") + "file=".length());
                             Recording simulated = new Recording();
+                            simulated.setDestination(Path.of(outputPath));
                             simulated.start();
                             recordingsToClose.add(simulated);
                             return "profiler is running";
@@ -409,7 +421,11 @@ class RecordingsContextTest {
         when(asyncProfilerExecutor.isAvailable()).thenReturn(true);
         doAnswer(
                         invocation -> {
+                            String cmd = (String) invocation.getArgument(0);
+                            String outputPath =
+                                    cmd.substring(cmd.indexOf("file=") + "file=".length());
                             Recording simulated = new Recording();
+                            simulated.setDestination(Path.of(outputPath));
                             simulated.start();
                             recordingsToClose.add(simulated);
                             return "profiler is running";
@@ -456,7 +472,21 @@ class RecordingsContextTest {
         when(config.getValue(anyString(), eq(boolean.class))).thenReturn(true);
         when(asyncProfilerExecutor.isAvailable()).thenReturn(true);
         // simulate native async-profiler rejecting an unrecognized asprofEvents name
-        doThrow(new IllegalArgumentException("Unknown event: not-a-real-event"))
+        doAnswer(
+                        invocation -> {
+                            String cmd = (String) invocation.getArgument(0);
+                            if (cmd.contains("not-a-real-event")) {
+                                throw new IllegalArgumentException(
+                                        "Unknown event: not-a-real-event");
+                            }
+                            String outputPath =
+                                    cmd.substring(cmd.indexOf("file=") + "file=".length());
+                            Recording simulated = new Recording();
+                            simulated.setDestination(Path.of(outputPath));
+                            simulated.start();
+                            recordingsToClose.add(simulated);
+                            return "profiler is running";
+                        })
                 .when(asyncProfilerExecutor)
                 .execute(anyString());
 

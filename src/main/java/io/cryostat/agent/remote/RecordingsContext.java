@@ -447,7 +447,19 @@ class RecordingsContext implements RemoteContext {
                     return;
                 }
             } else {
-                opt.get().close();
+                Recording recording = opt.get();
+                // for a jfrsync-enabled recording tracked in jfrSyncRecordings, call stop() first
+                // to stop the async-profiler via the bound FlightRecorderListener, before cleanup
+                // removes its state and files
+                if (jfrSyncRecordings.containsKey(recordingId)) {
+                    try {
+                        recording.stop();
+                    } catch (IllegalStateException e) {
+                        log.warn("Recording already stopped", e);
+                    }
+                } else {
+                    recording.close();
+                }
             }
             cleanupJfrSyncRecordingFiles(recordingId);
             sendHeader(exchange, HttpStatus.SC_NO_CONTENT);
@@ -543,6 +555,7 @@ class RecordingsContext implements RemoteContext {
     private SerializableRecordingDescriptor startJfrSyncRecording(StartRecordingRequest req)
             throws InvalidEventTemplateException, IOException {
         Path jfcFile = null;
+        Path outputFile = null;
         try {
             String jfrSyncSetting;
             if (req.requestsCustomTemplate()) {
@@ -562,7 +575,7 @@ class RecordingsContext implements RemoteContext {
                 jfrSyncSetting = jfcFile.toAbsolutePath().toString();
             }
 
-            Path outputFile = Files.createTempFile("cryostat-jfrsync-recording-", ".jfr");
+            outputFile = Files.createTempFile("cryostat-jfrsync-recording-", ".jfr");
             // async-profiler's native argument parser requires file= to designate a destination;
             // the file it manages is distinct from the .jfc configuration file above. While the
             // recording is RUNNING, the normal Recording-API-based download path
@@ -583,13 +596,22 @@ class RecordingsContext implements RemoteContext {
             Set<Long> recordingIdsBeforeStart = currentRecordingIds();
             asyncProfilerExecutor.execute(cmd);
             Recording recording =
-                    findNewRecording(recordingIdsBeforeStart)
+                    findNewRecording(recordingIdsBeforeStart, outputFile)
                             .orElseThrow(
-                                    () ->
-                                            new IOException(
-                                                    "jfrsync start reported success but no new"
-                                                            + " recording was found registered with"
-                                                            + " the FlightRecorder"));
+                                    () -> {
+                                        try {
+                                            asyncProfilerExecutor.execute("stop");
+                                        } catch (Exception e) {
+                                            log.warn(
+                                                    "Failed to stop async-profiler after failed"
+                                                            + " jfrsync startup",
+                                                    e);
+                                        }
+                                        return new IOException(
+                                                "jfrsync start reported success but no new"
+                                                        + " recording was found registered with"
+                                                        + " the FlightRecorder");
+                                    });
 
             recording.setName(req.name);
             applyRecordingOptions(recording, req);
@@ -597,8 +619,12 @@ class RecordingsContext implements RemoteContext {
             jfrSyncRecordings.put(
                     recording.getId(), new JfrSyncRecording(jfcFile, outputFile, recording));
             return new SerializableRecordingDescriptor(recording);
-        } catch (InvalidEventTemplateException | IOException e) {
+        } catch (InvalidEventTemplateException
+                | IOException
+                | IllegalArgumentException
+                | IllegalStateException e) {
             deleteQuietly(jfcFile);
+            deleteQuietly(outputFile);
             throw e;
         }
     }
@@ -621,9 +647,11 @@ class RecordingsContext implements RemoteContext {
                 .collect(Collectors.toSet());
     }
 
-    private Optional<Recording> findNewRecording(Set<Long> recordingIdsBeforeStart) {
+    private Optional<Recording> findNewRecording(
+            Set<Long> recordingIdsBeforeStart, Path expectedOutputFile) {
         return flightRecorder.getRecordings().stream()
                 .filter(r -> !recordingIdsBeforeStart.contains(r.getId()))
+                .filter(r -> expectedOutputFile.equals(r.getDestination()))
                 .findFirst();
     }
 
