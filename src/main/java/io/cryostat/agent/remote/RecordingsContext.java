@@ -535,10 +535,10 @@ class RecordingsContext implements RemoteContext {
      * JfrSync.start()}), wiring a {@code FlightRecorderListener} so that stopping the recording via
      * the normal {@code Recording.stop()} path (used by {@link #handleStopOrUpdate(HttpExchange,
      * long)}) also stops the profiler. Because of that, this method never calls the JDK's {@code
-     * Recording} constructor itself - doing so would create a second, unrelated recording and
-     * leave async-profiler's one dangling - it only locates the {@code Recording} that
-     * async-profiler already created, by diffing the set of known recording IDs before and after
-     * issuing the {@code execute(...)} call.
+     * Recording} constructor itself - doing so would create a second, unrelated recording and leave
+     * async-profiler's one dangling - it only locates the {@code Recording} that async-profiler
+     * already created, by diffing the set of known recording IDs before and after issuing the
+     * {@code execute(...)} call.
      */
     private SerializableRecordingDescriptor startJfrSyncRecording(StartRecordingRequest req)
             throws InvalidEventTemplateException, IOException {
