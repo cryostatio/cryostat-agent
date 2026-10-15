@@ -15,12 +15,21 @@
  */
 package io.cryostat.agent.remote;
 
+import javax.inject.Singleton;
+
 import dagger.Binds;
 import dagger.Module;
+import dagger.Provides;
 import dagger.multibindings.IntoSet;
 
 @Module
 public abstract class RemoteModule {
+
+    @Provides
+    @Singleton
+    static AsyncProfilerExecutor provideAsyncProfilerExecutor() {
+        return new AsyncProfilerExecutor();
+    }
 
     @Binds
     @IntoSet
