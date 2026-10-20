@@ -116,6 +116,13 @@
 <dependencyManagement>
   <dependencies>
     <dependency>
+      <groupId>io.cryostat</groupId>
+      <artifactId>cryostat-core-bom</artifactId>
+      <version>${io.cryostat.libcryostat.version}</version>
+      <type>pom</type>
+      <scope>import</scope>
+    </dependency>
+    <dependency>
       <groupId>io.smallrye.config</groupId>
       <artifactId>smallrye-config-parent</artifactId>
       <version>${io.smallrye.config.version}</version>
