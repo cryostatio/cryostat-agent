@@ -316,4 +316,24 @@ class TlsUtilTest {
                 IllegalArgumentException.class,
                 () -> engine.setEnabledCipherSuites(new String[] {"NOT_A_REAL_CIPHER"}));
     }
+
+    @Test
+    void testHttpsConfiguratorRejectsUnsupportedCipher() {
+        List<String> ciphers = List.of("TLS_AES_256_GCM_SHA384", "NOT_A_REAL_CIPHER");
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> TlsUtil.createHttpsConfigurator(sslContext, Optional.of("TLSv1.2"), ciphers));
+    }
+
+    @Test
+    void testSocketFactoryRejectsUnsupportedCipher() {
+        List<String> ciphers = List.of("NOT_A_REAL_CIPHER");
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () ->
+                        TlsUtil.createSSLConnectionSocketFactory(
+                                sslContext, Optional.of("TLSv1.2"), ciphers, true));
+    }
 }

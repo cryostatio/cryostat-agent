@@ -20,6 +20,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
@@ -60,10 +61,7 @@ public class TlsUtil {
             List<String> ciphers,
             boolean verifyHostname) {
         String[] protocols = resolveProtocols(sslContext, minTlsVersion);
-        String[] cipherArray = ciphers.isEmpty() ? null : ciphers.toArray(new String[0]);
-        if (cipherArray != null) {
-            log.info("TLS cipher suites: {}", ciphers);
-        }
+        String[] cipherArray = resolveCiphers(sslContext, ciphers);
         return new SSLConnectionSocketFactory(
                 sslContext,
                 protocols,
@@ -85,10 +83,7 @@ public class TlsUtil {
     public static HttpsConfigurator createHttpsConfigurator(
             SSLContext sslContext, Optional<String> minTlsVersion, List<String> ciphers) {
         String[] protocols = resolveProtocols(sslContext, minTlsVersion);
-        String[] cipherArray = ciphers.isEmpty() ? null : ciphers.toArray(new String[0]);
-        if (cipherArray != null) {
-            log.info("TLS cipher suites: {}", ciphers);
-        }
+        String[] cipherArray = resolveCiphers(sslContext, ciphers);
         return new HttpsConfigurator(sslContext) {
             @Override
             public void configure(HttpsParameters params) {
@@ -107,6 +102,21 @@ public class TlsUtil {
                 }
             }
         };
+    }
+
+    private static String[] resolveCiphers(SSLContext ctx, List<String> ciphers) {
+        if (ciphers.isEmpty()) {
+            return null;
+        }
+        Set<String> supported =
+                new HashSet<>(Arrays.asList(ctx.getSupportedSSLParameters().getCipherSuites()));
+        List<String> unknown =
+                ciphers.stream().filter(c -> !supported.contains(c)).collect(Collectors.toList());
+        if (!unknown.isEmpty()) {
+            throw new IllegalArgumentException("Unsupported TLS cipher suites: " + unknown);
+        }
+        log.info("TLS cipher suites: {}", ciphers);
+        return ciphers.toArray(new String[0]);
     }
 
     private static String[] resolveProtocols(SSLContext ctx, Optional<String> minVersion) {
