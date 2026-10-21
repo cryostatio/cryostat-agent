@@ -44,24 +44,29 @@ public class TlsUtil {
     private TlsUtil() {}
 
     /**
-     * Creates an {@link SSLConnectionSocketFactory}. When a minimum TLS version is specified,
-     * connections are restricted to protocol versions at or above that minimum. When absent, the
-     * {@link SSLContext}'s default protocols are used, preserving backward compatibility. An
-     * optional list of cipher suites may also be supplied.
+     * Creates an {@link SSLConnectionSocketFactory}. When an exact TLS version is specified,
+     * connections are restricted to that single protocol version. When only a minimum TLS version
+     * is specified, connections are restricted to protocol versions at or above that minimum. When
+     * neither is set, the {@link SSLContext}'s default protocols are used.
      *
      * @param sslContext the SSLContext for the client
-     * @param minTlsVersion if present, the minimum TLS version to allow (e.g. {@code "TLSv1.2"})
+     * @param exactTlsVersion if present, the exact TLS version to use (takes precedence over
+     *     minTlsVersion)
+     * @param minTlsVersion if present and exactTlsVersion is absent, the minimum TLS version to
+     *     allow (e.g. {@code "TLSv1.2"})
      * @param ciphers the cipher suites to enable; if empty, the JVM defaults are used
      * @param verifyHostname whether to verify server hostnames against the certificate
      * @return a configured {@link SSLConnectionSocketFactory}
      */
     public static SSLConnectionSocketFactory createSSLConnectionSocketFactory(
             SSLContext sslContext,
+            Optional<String> exactTlsVersion,
             Optional<String> minTlsVersion,
             List<String> ciphers,
             boolean verifyHostname) {
-        String[] protocols = resolveProtocols(sslContext, minTlsVersion);
+        String[] protocols = resolveProtocols(sslContext, exactTlsVersion, minTlsVersion);
         String[] cipherArray = resolveCiphers(sslContext, ciphers);
+        validateCipherProtocolCompatibility(sslContext, protocols, cipherArray);
         return new SSLConnectionSocketFactory(
                 sslContext,
                 protocols,
@@ -70,20 +75,27 @@ public class TlsUtil {
     }
 
     /**
-     * Creates an {@link HttpsConfigurator}. When a minimum TLS version is specified, the HTTPS
-     * server is restricted to protocol versions at or above that minimum. When absent, the {@link
-     * SSLContext}'s default protocols are used, preserving backward compatibility. An optional list
-     * of cipher suites may also be supplied.
+     * Creates an {@link HttpsConfigurator}. When an exact TLS version is specified, the HTTPS
+     * server is restricted to that single protocol version. When only a minimum TLS version is
+     * specified, the server is restricted to protocol versions at or above that minimum. When
+     * neither is set, the {@link SSLContext}'s default protocols are used.
      *
      * @param sslContext the SSLContext for the server
-     * @param minTlsVersion if present, the minimum TLS version to allow (e.g. {@code "TLSv1.2"})
+     * @param exactTlsVersion if present, the exact TLS version to use (takes precedence over
+     *     minTlsVersion)
+     * @param minTlsVersion if present and exactTlsVersion is absent, the minimum TLS version to
+     *     allow (e.g. {@code "TLSv1.2"})
      * @param ciphers the cipher suites to enable; if empty, the JVM defaults are used
      * @return a configured {@link HttpsConfigurator}
      */
     public static HttpsConfigurator createHttpsConfigurator(
-            SSLContext sslContext, Optional<String> minTlsVersion, List<String> ciphers) {
-        String[] protocols = resolveProtocols(sslContext, minTlsVersion);
+            SSLContext sslContext,
+            Optional<String> exactTlsVersion,
+            Optional<String> minTlsVersion,
+            List<String> ciphers) {
+        String[] protocols = resolveProtocols(sslContext, exactTlsVersion, minTlsVersion);
         String[] cipherArray = resolveCiphers(sslContext, ciphers);
+        validateCipherProtocolCompatibility(sslContext, protocols, cipherArray);
         return new HttpsConfigurator(sslContext) {
             @Override
             public void configure(HttpsParameters params) {
@@ -104,6 +116,55 @@ public class TlsUtil {
         };
     }
 
+    /**
+     * Validates that the configured cipher suites are compatible with the effective TLS protocols.
+     *
+     * <p>Uses the IANA naming convention to distinguish TLS versions: TLS 1.2 IANA names follow the
+     * pattern {@code TLS_<KX>_WITH_<Cipher>_<MAC>} (RFC 5246), while TLS 1.3 names follow {@code
+     * TLS_<AEAD>_<Hash>} with no {@code _WITH_} (RFC 8446). This is the same heuristic used by the
+     * cryostat-operator's {@code filterTLS12Ciphers}.
+     *
+     * <p>When {@code protocols} is null (no minimum version configured), the SSLContext's default
+     * enabled protocols are used for the compatibility check. Note that {@code
+     * SSLContext.getInstance()} returns a context that supports "at least" the requested protocol
+     * (see the <a
+     * href="https://docs.oracle.com/en/java/javase/21/security/java-secure-socket-extension-jsse-reference-guide.html">JSSE
+     * Reference Guide</a>). In OpenJDK's SunJSSE provider, all TLS context types share the same
+     * server-side defaults (TLSv1.3 + TLSv1.2), so this fallback may report more protocols than the
+     * context algorithm name suggests.
+     */
+    private static void validateCipherProtocolCompatibility(
+            SSLContext ctx, String[] protocols, String[] ciphers) {
+        if (ciphers == null) {
+            return;
+        }
+        String[] effectiveProtocols =
+                protocols != null ? protocols : ctx.createSSLEngine().getEnabledProtocols();
+        Set<String> protoSet = new HashSet<>(Arrays.asList(effectiveProtocols));
+        boolean hasTls13 = protoSet.contains("TLSv1.3");
+        boolean hasTls12OrBelow = protoSet.stream().anyMatch(p -> !p.equals("TLSv1.3"));
+        boolean hasAnyTls13Cipher = Arrays.stream(ciphers).anyMatch(c -> !c.contains("_WITH_"));
+        boolean hasAnyTls12Cipher = Arrays.stream(ciphers).anyMatch(c -> c.contains("_WITH_"));
+
+        if (hasTls13 && !hasTls12OrBelow && !hasAnyTls13Cipher) {
+            throw new IllegalArgumentException(
+                    "None of the configured cipher suites are compatible with TLSv1.3: "
+                            + Arrays.asList(ciphers)
+                            + ". TLS 1.3 cipher suites do not contain '_WITH_' in their names"
+                            + " (e.g. TLS_AES_128_GCM_SHA256).");
+        }
+        if (hasTls12OrBelow && !hasTls13 && !hasAnyTls12Cipher) {
+            throw new IllegalArgumentException(
+                    "None of the configured cipher suites are compatible with the enabled"
+                            + " protocols "
+                            + Arrays.asList(effectiveProtocols)
+                            + ": "
+                            + Arrays.asList(ciphers)
+                            + ". TLS 1.2 and below require cipher suites containing '_WITH_'"
+                            + " (e.g. TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256).");
+        }
+    }
+
     private static String[] resolveCiphers(SSLContext ctx, List<String> ciphers) {
         if (ciphers.isEmpty()) {
             return null;
@@ -115,11 +176,30 @@ public class TlsUtil {
         if (!unknown.isEmpty()) {
             throw new IllegalArgumentException("Unsupported TLS cipher suites: " + unknown);
         }
-        log.info("TLS cipher suites: {}", ciphers);
+        log.debug("TLS cipher suites: {}", ciphers);
         return ciphers.toArray(new String[0]);
     }
 
-    private static String[] resolveProtocols(SSLContext ctx, Optional<String> minVersion) {
+    private static String[] resolveProtocols(
+            SSLContext ctx, Optional<String> exactVersion, Optional<String> minVersion) {
+        if (exactVersion.isPresent()) {
+            String exact = exactVersion.get();
+            if (!ORDERED_PROTOCOLS.contains(exact)) {
+                throw new IllegalArgumentException(
+                        "Unknown TLS version: "
+                                + exact
+                                + ". Supported values: "
+                                + ORDERED_PROTOCOLS);
+            }
+            Set<String> supported =
+                    new HashSet<>(Arrays.asList(ctx.getSupportedSSLParameters().getProtocols()));
+            if (!supported.contains(exact)) {
+                throw new IllegalStateException(
+                        "TLS version " + exact + " is not supported by this JVM");
+            }
+            log.debug("TLS protocol (exact): {}", exact);
+            return new String[] {exact};
+        }
         if (minVersion.isEmpty()) {
             return null;
         }
@@ -140,7 +220,7 @@ public class TlsUtil {
             throw new IllegalStateException(
                     "No TLS protocols available at or above minimum version " + min);
         }
-        log.info("TLS protocols (minimum {}): {}", min, Arrays.asList(protocols));
+        log.debug("TLS protocols (minimum {}): {}", min, Arrays.asList(protocols));
         return protocols;
     }
 }

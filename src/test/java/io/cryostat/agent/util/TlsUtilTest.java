@@ -47,12 +47,13 @@ class TlsUtilTest {
         }
     }
 
-    // --- createHttpsConfigurator (server) tests ---
+    // --- createHttpsConfigurator (server) min version tests ---
 
     @Test
     void testHttpsConfiguratorSetsProtocolsAtOrAboveMinimum() {
         HttpsConfigurator configurator =
-                TlsUtil.createHttpsConfigurator(sslContext, Optional.of("TLSv1.2"), List.of());
+                TlsUtil.createHttpsConfigurator(
+                        sslContext, Optional.empty(), Optional.of("TLSv1.2"), List.of());
 
         com.sun.net.httpserver.HttpsParameters params =
                 mock(com.sun.net.httpserver.HttpsParameters.class);
@@ -72,7 +73,8 @@ class TlsUtilTest {
         boolean jvmSupportsTls13 = List.of(supported).contains("TLSv1.3");
 
         HttpsConfigurator configurator =
-                TlsUtil.createHttpsConfigurator(sslContext, Optional.of("TLSv1.2"), List.of());
+                TlsUtil.createHttpsConfigurator(
+                        sslContext, Optional.empty(), Optional.of("TLSv1.2"), List.of());
 
         com.sun.net.httpserver.HttpsParameters params =
                 mock(com.sun.net.httpserver.HttpsParameters.class);
@@ -89,9 +91,10 @@ class TlsUtilTest {
     }
 
     @Test
-    void testHttpsConfiguratorUsesEngineDefaultsWhenNoMinVersion() {
+    void testHttpsConfiguratorUsesEngineDefaultsWhenNoVersionSet() {
         HttpsConfigurator configurator =
-                TlsUtil.createHttpsConfigurator(sslContext, Optional.empty(), List.of());
+                TlsUtil.createHttpsConfigurator(
+                        sslContext, Optional.empty(), Optional.empty(), List.of());
 
         com.sun.net.httpserver.HttpsParameters params =
                 mock(com.sun.net.httpserver.HttpsParameters.class);
@@ -107,7 +110,8 @@ class TlsUtilTest {
     void testHttpsConfiguratorSetsCustomCiphers() {
         List<String> ciphers = List.of("TLS_AES_256_GCM_SHA384", "TLS_AES_128_GCM_SHA256");
         HttpsConfigurator configurator =
-                TlsUtil.createHttpsConfigurator(sslContext, Optional.of("TLSv1.2"), ciphers);
+                TlsUtil.createHttpsConfigurator(
+                        sslContext, Optional.empty(), Optional.of("TLSv1.2"), ciphers);
 
         com.sun.net.httpserver.HttpsParameters params =
                 mock(com.sun.net.httpserver.HttpsParameters.class);
@@ -121,7 +125,8 @@ class TlsUtilTest {
     @Test
     void testHttpsConfiguratorUsesDefaultCiphersWhenNoneSpecified() {
         HttpsConfigurator configurator =
-                TlsUtil.createHttpsConfigurator(sslContext, Optional.of("TLSv1.2"), List.of());
+                TlsUtil.createHttpsConfigurator(
+                        sslContext, Optional.empty(), Optional.of("TLSv1.2"), List.of());
 
         com.sun.net.httpserver.HttpsParameters params =
                 mock(com.sun.net.httpserver.HttpsParameters.class);
@@ -136,7 +141,8 @@ class TlsUtilTest {
     @Test
     void testHttpsConfiguratorExcludesTlsv12WhenMinIsTlsv13() {
         HttpsConfigurator configurator =
-                TlsUtil.createHttpsConfigurator(sslContext, Optional.of("TLSv1.3"), List.of());
+                TlsUtil.createHttpsConfigurator(
+                        sslContext, Optional.empty(), Optional.of("TLSv1.3"), List.of());
 
         com.sun.net.httpserver.HttpsParameters params =
                 mock(com.sun.net.httpserver.HttpsParameters.class);
@@ -159,7 +165,8 @@ class TlsUtilTest {
                         "TLS_AES_256_GCM_SHA384",
                         "TLS_CHACHA20_POLY1305_SHA256");
         HttpsConfigurator configurator =
-                TlsUtil.createHttpsConfigurator(sslContext, Optional.of("TLSv1.3"), ciphers);
+                TlsUtil.createHttpsConfigurator(
+                        sslContext, Optional.empty(), Optional.of("TLSv1.3"), ciphers);
 
         com.sun.net.httpserver.HttpsParameters params =
                 mock(com.sun.net.httpserver.HttpsParameters.class);
@@ -175,7 +182,8 @@ class TlsUtilTest {
     @Test
     void testHttpsConfiguratorSetsNeedClientAuthFalse() {
         HttpsConfigurator configurator =
-                TlsUtil.createHttpsConfigurator(sslContext, Optional.of("TLSv1.2"), List.of());
+                TlsUtil.createHttpsConfigurator(
+                        sslContext, Optional.empty(), Optional.of("TLSv1.2"), List.of());
 
         com.sun.net.httpserver.HttpsParameters params =
                 mock(com.sun.net.httpserver.HttpsParameters.class);
@@ -190,7 +198,9 @@ class TlsUtilTest {
     void testHttpsConfiguratorRejectsInvalidMinVersion() {
         assertThrows(
                 IllegalArgumentException.class,
-                () -> TlsUtil.createHttpsConfigurator(sslContext, Optional.of("SSLv3"), List.of()));
+                () ->
+                        TlsUtil.createHttpsConfigurator(
+                                sslContext, Optional.empty(), Optional.of("SSLv3"), List.of()));
     }
 
     @Test
@@ -199,7 +209,10 @@ class TlsUtilTest {
                 IllegalArgumentException.class,
                 () ->
                         TlsUtil.createHttpsConfigurator(
-                                sslContext, Optional.of("not-a-protocol"), List.of()));
+                                sslContext,
+                                Optional.empty(),
+                                Optional.of("not-a-protocol"),
+                                List.of()));
     }
 
     @Test
@@ -211,25 +224,114 @@ class TlsUtilTest {
 
         assertThrows(
                 IllegalStateException.class,
-                () -> TlsUtil.createHttpsConfigurator(mockCtx, Optional.of("TLSv1.2"), List.of()));
+                () ->
+                        TlsUtil.createHttpsConfigurator(
+                                mockCtx, Optional.empty(), Optional.of("TLSv1.2"), List.of()));
     }
 
-    // --- createSSLConnectionSocketFactory (client) tests ---
+    // --- createHttpsConfigurator (server) exact version tests ---
+
+    @Test
+    void testHttpsConfiguratorExactVersionRestrictsToSingleProtocol() {
+        HttpsConfigurator configurator =
+                TlsUtil.createHttpsConfigurator(
+                        sslContext, Optional.of("TLSv1.2"), Optional.empty(), List.of());
+
+        com.sun.net.httpserver.HttpsParameters params =
+                mock(com.sun.net.httpserver.HttpsParameters.class);
+        configurator.configure(params);
+
+        ArgumentCaptor<SSLParameters> captor = ArgumentCaptor.forClass(SSLParameters.class);
+        verify(params).setSSLParameters(captor.capture());
+        assertArrayEquals(new String[] {"TLSv1.2"}, captor.getValue().getProtocols());
+    }
+
+    @Test
+    void testHttpsConfiguratorExactVersionTls13() {
+        String[] supported = sslContext.getSupportedSSLParameters().getProtocols();
+        if (!List.of(supported).contains("TLSv1.3")) {
+            return;
+        }
+
+        HttpsConfigurator configurator =
+                TlsUtil.createHttpsConfigurator(
+                        sslContext, Optional.of("TLSv1.3"), Optional.empty(), List.of());
+
+        com.sun.net.httpserver.HttpsParameters params =
+                mock(com.sun.net.httpserver.HttpsParameters.class);
+        configurator.configure(params);
+
+        ArgumentCaptor<SSLParameters> captor = ArgumentCaptor.forClass(SSLParameters.class);
+        verify(params).setSSLParameters(captor.capture());
+        assertArrayEquals(new String[] {"TLSv1.3"}, captor.getValue().getProtocols());
+    }
+
+    @Test
+    void testHttpsConfiguratorExactVersionTakesPrecedenceOverMinVersion() {
+        HttpsConfigurator configurator =
+                TlsUtil.createHttpsConfigurator(
+                        sslContext, Optional.of("TLSv1.2"), Optional.of("TLSv1.3"), List.of());
+
+        com.sun.net.httpserver.HttpsParameters params =
+                mock(com.sun.net.httpserver.HttpsParameters.class);
+        configurator.configure(params);
+
+        ArgumentCaptor<SSLParameters> captor = ArgumentCaptor.forClass(SSLParameters.class);
+        verify(params).setSSLParameters(captor.capture());
+        assertArrayEquals(new String[] {"TLSv1.2"}, captor.getValue().getProtocols());
+    }
+
+    @Test
+    void testHttpsConfiguratorExactVersionRejectsInvalidVersion() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () ->
+                        TlsUtil.createHttpsConfigurator(
+                                sslContext, Optional.of("SSLv3"), Optional.empty(), List.of()));
+    }
+
+    @Test
+    void testHttpsConfiguratorExactVersionRejectsGarbageVersion() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () ->
+                        TlsUtil.createHttpsConfigurator(
+                                sslContext,
+                                Optional.of("not-a-protocol"),
+                                Optional.empty(),
+                                List.of()));
+    }
+
+    @Test
+    void testHttpsConfiguratorExactVersionRejectsUnsupportedVersion() {
+        SSLContext mockCtx = mock(SSLContext.class);
+        SSLParameters mockParams = new SSLParameters();
+        mockParams.setProtocols(new String[] {"TLSv1.3"});
+        when(mockCtx.getSupportedSSLParameters()).thenReturn(mockParams);
+
+        assertThrows(
+                IllegalStateException.class,
+                () ->
+                        TlsUtil.createHttpsConfigurator(
+                                mockCtx, Optional.of("TLSv1.2"), Optional.empty(), List.of()));
+    }
+
+    // --- createSSLConnectionSocketFactory (client) min version tests ---
 
     @Test
     void testSocketFactoryCreatedWithMinVersion() {
         SSLConnectionSocketFactory factory =
                 TlsUtil.createSSLConnectionSocketFactory(
-                        sslContext, Optional.of("TLSv1.2"), List.of(), true);
+                        sslContext, Optional.empty(), Optional.of("TLSv1.2"), List.of(), true);
 
         assertNotNull(factory);
     }
 
     @Test
-    void testSocketFactoryCreatedWithoutMinVersion() {
+    void testSocketFactoryCreatedWithoutVersions() {
         SSLConnectionSocketFactory factory =
                 TlsUtil.createSSLConnectionSocketFactory(
-                        sslContext, Optional.empty(), List.of(), true);
+                        sslContext, Optional.empty(), Optional.empty(), List.of(), true);
 
         assertNotNull(factory);
     }
@@ -241,7 +343,7 @@ class TlsUtilTest {
 
         SSLConnectionSocketFactory factory =
                 TlsUtil.createSSLConnectionSocketFactory(
-                        sslContext, Optional.of("TLSv1.2"), ciphers, true);
+                        sslContext, Optional.empty(), Optional.of("TLSv1.2"), ciphers, true);
 
         assertNotNull(factory);
     }
@@ -252,7 +354,11 @@ class TlsUtilTest {
                 IllegalArgumentException.class,
                 () ->
                         TlsUtil.createSSLConnectionSocketFactory(
-                                sslContext, Optional.of("SSLv3"), List.of(), true));
+                                sslContext,
+                                Optional.empty(),
+                                Optional.of("SSLv3"),
+                                List.of(),
+                                true));
     }
 
     @Test
@@ -266,7 +372,48 @@ class TlsUtilTest {
                 IllegalStateException.class,
                 () ->
                         TlsUtil.createSSLConnectionSocketFactory(
-                                mockCtx, Optional.of("TLSv1.2"), List.of(), true));
+                                mockCtx,
+                                Optional.empty(),
+                                Optional.of("TLSv1.2"),
+                                List.of(),
+                                true));
+    }
+
+    // --- createSSLConnectionSocketFactory (client) exact version tests ---
+
+    @Test
+    void testSocketFactoryExactVersionCreated() {
+        SSLConnectionSocketFactory factory =
+                TlsUtil.createSSLConnectionSocketFactory(
+                        sslContext, Optional.of("TLSv1.2"), Optional.empty(), List.of(), true);
+
+        assertNotNull(factory);
+    }
+
+    @Test
+    void testSocketFactoryExactVersionTakesPrecedenceOverMinVersion() {
+        SSLConnectionSocketFactory factory =
+                TlsUtil.createSSLConnectionSocketFactory(
+                        sslContext,
+                        Optional.of("TLSv1.2"),
+                        Optional.of("TLSv1.3"),
+                        List.of(),
+                        true);
+
+        assertNotNull(factory);
+    }
+
+    @Test
+    void testSocketFactoryExactVersionRejectsInvalidVersion() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () ->
+                        TlsUtil.createSSLConnectionSocketFactory(
+                                sslContext,
+                                Optional.of("SSLv3"),
+                                Optional.empty(),
+                                List.of(),
+                                true));
     }
 
     // --- SSLEngine protocol/cipher acceptance tests ---
@@ -275,7 +422,8 @@ class TlsUtilTest {
     void testSslEngineAcceptsProtocolsFromConfigurator() {
         com.sun.net.httpserver.HttpsParameters params =
                 mock(com.sun.net.httpserver.HttpsParameters.class);
-        TlsUtil.createHttpsConfigurator(sslContext, Optional.of("TLSv1.2"), List.of())
+        TlsUtil.createHttpsConfigurator(
+                        sslContext, Optional.empty(), Optional.of("TLSv1.2"), List.of())
                 .configure(params);
 
         ArgumentCaptor<SSLParameters> captor = ArgumentCaptor.forClass(SSLParameters.class);
@@ -294,7 +442,8 @@ class TlsUtilTest {
 
         com.sun.net.httpserver.HttpsParameters params =
                 mock(com.sun.net.httpserver.HttpsParameters.class);
-        TlsUtil.createHttpsConfigurator(sslContext, Optional.of("TLSv1.2"), ciphers)
+        TlsUtil.createHttpsConfigurator(
+                        sslContext, Optional.empty(), Optional.of("TLSv1.2"), ciphers)
                 .configure(params);
 
         ArgumentCaptor<SSLParameters> captor = ArgumentCaptor.forClass(SSLParameters.class);
@@ -323,7 +472,9 @@ class TlsUtilTest {
 
         assertThrows(
                 IllegalArgumentException.class,
-                () -> TlsUtil.createHttpsConfigurator(sslContext, Optional.of("TLSv1.2"), ciphers));
+                () ->
+                        TlsUtil.createHttpsConfigurator(
+                                sslContext, Optional.empty(), Optional.of("TLSv1.2"), ciphers));
     }
 
     @Test
@@ -334,6 +485,87 @@ class TlsUtilTest {
                 IllegalArgumentException.class,
                 () ->
                         TlsUtil.createSSLConnectionSocketFactory(
-                                sslContext, Optional.of("TLSv1.2"), ciphers, true));
+                                sslContext,
+                                Optional.empty(),
+                                Optional.of("TLSv1.2"),
+                                ciphers,
+                                true));
+    }
+
+    @Test
+    void testHttpsConfiguratorRejectsTls12CiphersWithTls13Only() {
+        List<String> tls12Ciphers = List.of("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256");
+        String[] supported = sslContext.getSupportedSSLParameters().getCipherSuites();
+        boolean hasCipher = List.of(supported).contains(tls12Ciphers.get(0));
+        if (!hasCipher) {
+            return;
+        }
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () ->
+                        TlsUtil.createHttpsConfigurator(
+                                sslContext,
+                                Optional.empty(),
+                                Optional.of("TLSv1.3"),
+                                tls12Ciphers));
+    }
+
+    @Test
+    void testHttpsConfiguratorRejectsTls12CiphersWithExactTls13() {
+        List<String> tls12Ciphers = List.of("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256");
+        String[] supported = sslContext.getSupportedSSLParameters().getCipherSuites();
+        if (!List.of(supported).contains(tls12Ciphers.get(0))) {
+            return;
+        }
+        if (!List.of(supported).contains("TLSv1.3")) {
+            return;
+        }
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () ->
+                        TlsUtil.createHttpsConfigurator(
+                                sslContext,
+                                Optional.of("TLSv1.3"),
+                                Optional.empty(),
+                                tls12Ciphers));
+    }
+
+    @Test
+    void testHttpsConfiguratorRejectsTls13CiphersWithExactTls12() {
+        List<String> tls13Ciphers = List.of("TLS_AES_128_GCM_SHA256");
+
+        SSLContext mockCtx = mock(SSLContext.class);
+        SSLParameters mockParams = new SSLParameters();
+        mockParams.setProtocols(new String[] {"TLSv1.2"});
+        mockParams.setCipherSuites(new String[] {"TLS_AES_128_GCM_SHA256"});
+        when(mockCtx.getSupportedSSLParameters()).thenReturn(mockParams);
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () ->
+                        TlsUtil.createHttpsConfigurator(
+                                mockCtx, Optional.of("TLSv1.2"), Optional.empty(), tls13Ciphers));
+    }
+
+    @Test
+    void testSocketFactoryRejectsTls12CiphersWithTls13Only() {
+        List<String> tls12Ciphers = List.of("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256");
+        String[] supported = sslContext.getSupportedSSLParameters().getCipherSuites();
+        boolean hasCipher = List.of(supported).contains(tls12Ciphers.get(0));
+        if (!hasCipher) {
+            return;
+        }
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () ->
+                        TlsUtil.createSSLConnectionSocketFactory(
+                                sslContext,
+                                Optional.empty(),
+                                Optional.of("TLSv1.3"),
+                                tls12Ciphers,
+                                true));
     }
 }

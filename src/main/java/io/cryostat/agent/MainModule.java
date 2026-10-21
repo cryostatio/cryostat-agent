@@ -225,8 +225,6 @@ public abstract class MainModule {
     @Singleton
     @Named(HTTP_CLIENT_SSL_CTX)
     public static SSLContext provideClientSslContext(
-            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_VERSION)
-                    Optional<String> clientTlsVersion,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUST_ALL) boolean trustAll,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PATH)
                     Optional<String> truststorePath,
@@ -474,7 +472,13 @@ public abstract class MainModule {
                         };
             }
 
-            SSLContext sslCtx = SSLContext.getInstance(clientTlsVersion.orElse("TLS"));
+            // Always use "TLS" to get the most general SSLContext. Actual
+            // protocol restriction (exact version or minimum version) is enforced
+            // by TlsUtil via SSLParameters.setProtocols(). See the JSSE Reference
+            // Guide: getInstance() returns a context that supports "at least" the
+            // requested protocol and may enable others, so passing a specific
+            // version here does not reliably constrain the enabled protocols.
+            SSLContext sslCtx = SSLContext.getInstance("TLS");
             sslCtx.init(keyManagers, new X509TrustManager[] {trustManager}, null);
             return sslCtx;
         } catch (NoSuchAlgorithmException
@@ -492,8 +496,6 @@ public abstract class MainModule {
     @Singleton
     @Named(HTTP_SERVER_SSL_CTX)
     public static Optional<SSLContext> provideServerSslContext(
-            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_VERSION)
-                    Optional<String> serverTlsVersion,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_PASS)
                     Optional<String> keyStorePassFile,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_PASS_CHARSET)
@@ -534,7 +536,9 @@ public abstract class MainModule {
         InputStream keystore = null;
         InputStream pass = null;
         try (InputStream certFile = new FileInputStream(certFilePath.get())) {
-            SSLContext sslContext = SSLContext.getInstance(serverTlsVersion.orElse("TLS"));
+            // See comment in provideClientSslContext — always use "TLS" and let
+            // TlsUtil enforce protocol restrictions via SSLParameters.
+            SSLContext sslContext = SSLContext.getInstance("TLS");
             if (keyStoreFilePath.isPresent()) {
                 keystore = new FileInputStream(keyStoreFilePath.get());
             }
@@ -665,11 +669,9 @@ public abstract class MainModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_CONNECTION_POOL_MAX_TOTAL) int maxTotal,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_CONNECTION_POOL_MAX_PER_ROUTE)
                     int maxPerRoute) {
-        Optional<String> effectiveMinVersion =
-                tlsVersion.isPresent() ? Optional.empty() : minTlsVersion;
         SSLConnectionSocketFactory sslSocketFactory =
                 TlsUtil.createSSLConnectionSocketFactory(
-                        sslContext, effectiveMinVersion, ciphers, verifyHostname);
+                        sslContext, tlsVersion, minTlsVersion, ciphers, verifyHostname);
 
         RegistryBuilder<ConnectionSocketFactory> socketFactoryRegistryBuilder =
                 RegistryBuilder.<ConnectionSocketFactory>create()
@@ -771,13 +773,11 @@ public abstract class MainModule {
             if (sslContext.isEmpty()) {
                 http = HttpServer.create(new InetSocketAddress(host, port), 0);
             } else {
-                Optional<String> effectiveMinVersion =
-                        tlsVersion.isPresent() ? Optional.empty() : minTlsVersion;
                 http = HttpsServer.create(new InetSocketAddress(host, port), 0);
                 ((HttpsServer) http)
                         .setHttpsConfigurator(
                                 TlsUtil.createHttpsConfigurator(
-                                        sslContext.get(), effectiveMinVersion, ciphers));
+                                        sslContext.get(), tlsVersion, minTlsVersion, ciphers));
             }
             http.setExecutor(executor);
             return http;
