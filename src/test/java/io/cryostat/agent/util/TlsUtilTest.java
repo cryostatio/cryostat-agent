@@ -514,11 +514,12 @@ class TlsUtilTest {
     @Test
     void testHttpsConfiguratorRejectsTls12CiphersWithExactTls13() {
         List<String> tls12Ciphers = List.of("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256");
-        String[] supported = sslContext.getSupportedSSLParameters().getCipherSuites();
-        if (!List.of(supported).contains(tls12Ciphers.get(0))) {
+        String[] supportedCiphers = sslContext.getSupportedSSLParameters().getCipherSuites();
+        if (!List.of(supportedCiphers).contains(tls12Ciphers.get(0))) {
             return;
         }
-        if (!List.of(supported).contains("TLSv1.3")) {
+        String[] supportedProtocols = sslContext.getSupportedSSLParameters().getProtocols();
+        if (!List.of(supportedProtocols).contains("TLSv1.3")) {
             return;
         }
 
