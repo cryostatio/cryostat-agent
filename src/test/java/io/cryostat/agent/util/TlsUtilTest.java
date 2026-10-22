@@ -416,6 +416,46 @@ class TlsUtilTest {
                                 true));
     }
 
+    @Test
+    void testSocketFactoryExactVersionProtocols() throws Exception {
+        SSLConnectionSocketFactory factory =
+                TlsUtil.createSSLConnectionSocketFactory(
+                        sslContext, Optional.of("TLSv1.2"), Optional.empty(), List.of(), true);
+        assertNotNull(factory);
+
+        try (javax.net.ssl.SSLSocket socket =
+                (javax.net.ssl.SSLSocket) sslContext.getSocketFactory().createSocket()) {
+            socket.setEnabledProtocols(new String[] {"TLSv1.2"});
+            assertArrayEquals(new String[] {"TLSv1.2"}, socket.getEnabledProtocols());
+        }
+    }
+
+    @Test
+    void testSocketFactoryMinVersionProtocols() throws Exception {
+        SSLConnectionSocketFactory factory =
+                TlsUtil.createSSLConnectionSocketFactory(
+                        sslContext, Optional.empty(), Optional.of("TLSv1.2"), List.of(), true);
+        assertNotNull(factory);
+
+        String[] supported = sslContext.getSupportedSSLParameters().getProtocols();
+        boolean jvmSupportsTls13 = List.of(supported).contains("TLSv1.3");
+
+        try (javax.net.ssl.SSLSocket socket =
+                (javax.net.ssl.SSLSocket) sslContext.getSocketFactory().createSocket()) {
+            if (jvmSupportsTls13) {
+                socket.setEnabledProtocols(new String[] {"TLSv1.2", "TLSv1.3"});
+                List<String> protocols = List.of(socket.getEnabledProtocols());
+                assertTrue(protocols.contains("TLSv1.2"));
+                assertTrue(protocols.contains("TLSv1.3"));
+                assertFalse(protocols.contains("TLSv1"));
+                assertFalse(protocols.contains("TLSv1.1"));
+            } else {
+                socket.setEnabledProtocols(new String[] {"TLSv1.2"});
+                assertArrayEquals(new String[] {"TLSv1.2"}, socket.getEnabledProtocols());
+            }
+        }
+    }
+
     // --- SSLEngine protocol/cipher acceptance tests ---
 
     @Test
