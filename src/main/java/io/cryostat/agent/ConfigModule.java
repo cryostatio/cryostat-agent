@@ -88,6 +88,10 @@ public abstract class ConfigModule {
 
     public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_VERSION =
             "cryostat.agent.webclient.tls.version";
+    public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_MIN_VERSION =
+            "cryostat.agent.webclient.tls.min.version";
+    public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_CIPHERS =
+            "cryostat.agent.webclient.tls.ciphers";
     public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUST_ALL =
             "cryostat.agent.webclient.tls.trust-all";
     public static final String CRYOSTAT_AGENT_WEBCLIENT_TLS_VERIFY_HOSTNAME =
@@ -155,6 +159,10 @@ public abstract class ConfigModule {
     public static final String CRYOSTAT_AGENT_WEBSERVER_PORT = "cryostat.agent.webserver.port";
     public static final String CRYOSTAT_AGENT_WEBSERVER_TLS_VERSION =
             "cryostat.agent.webserver.tls.version";
+    public static final String CRYOSTAT_AGENT_WEBSERVER_TLS_MIN_VERSION =
+            "cryostat.agent.webserver.tls.min.version";
+    public static final String CRYOSTAT_AGENT_WEBSERVER_TLS_CIPHERS =
+            "cryostat.agent.webserver.tls.ciphers";
     public static final String CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_PASS =
             "cryostat.agent.webserver.tls.keystore.pass";
     public static final String CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_PASS_CHARSET =
@@ -755,15 +763,65 @@ public abstract class ConfigModule {
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_VERSION)
-    public static String provideCryostatAgentWebclientTlsVersion(SmallRyeConfig config) {
-        return config.getValue(CRYOSTAT_AGENT_WEBCLIENT_TLS_VERSION, String.class);
+    public static Optional<String> provideCryostatAgentWebclientTlsVersion(SmallRyeConfig config) {
+        return config.getOptionalValue(CRYOSTAT_AGENT_WEBCLIENT_TLS_VERSION, String.class)
+                .filter(s -> !s.isBlank());
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_MIN_VERSION)
+    public static Optional<String> provideCryostatAgentWebclientTlsMinVersion(
+            SmallRyeConfig config) {
+        return config.getOptionalValue(CRYOSTAT_AGENT_WEBCLIENT_TLS_MIN_VERSION, String.class)
+                .filter(s -> !s.isBlank());
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBCLIENT_TLS_CIPHERS)
+    public static List<String> provideCryostatAgentWebclientTlsCiphers(SmallRyeConfig config) {
+        return config.getOptionalValue(CRYOSTAT_AGENT_WEBCLIENT_TLS_CIPHERS, String.class)
+                .filter(s -> !s.isBlank())
+                .map(
+                        s ->
+                                Arrays.stream(s.split(","))
+                                        .map(String::trim)
+                                        .filter(c -> !c.isEmpty())
+                                        .collect(Collectors.toList()))
+                .orElse(List.of());
     }
 
     @Provides
     @Singleton
     @Named(CRYOSTAT_AGENT_WEBSERVER_TLS_VERSION)
-    public static String provideCryostatAgentWebserverTlsVersion(SmallRyeConfig config) {
-        return config.getValue(CRYOSTAT_AGENT_WEBSERVER_TLS_VERSION, String.class);
+    public static Optional<String> provideCryostatAgentWebserverTlsVersion(SmallRyeConfig config) {
+        return config.getOptionalValue(CRYOSTAT_AGENT_WEBSERVER_TLS_VERSION, String.class)
+                .filter(s -> !s.isBlank());
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBSERVER_TLS_MIN_VERSION)
+    public static Optional<String> provideCryostatAgentWebserverTlsMinVersion(
+            SmallRyeConfig config) {
+        return config.getOptionalValue(CRYOSTAT_AGENT_WEBSERVER_TLS_MIN_VERSION, String.class)
+                .filter(s -> !s.isBlank());
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_WEBSERVER_TLS_CIPHERS)
+    public static List<String> provideCryostatAgentWebserverTlsCiphers(SmallRyeConfig config) {
+        return config.getOptionalValue(CRYOSTAT_AGENT_WEBSERVER_TLS_CIPHERS, String.class)
+                .filter(s -> !s.isBlank())
+                .map(
+                        s ->
+                                Arrays.stream(s.split(","))
+                                        .map(String::trim)
+                                        .filter(c -> !c.isEmpty())
+                                        .collect(Collectors.toList()))
+                .orElse(List.of());
     }
 
     @Provides

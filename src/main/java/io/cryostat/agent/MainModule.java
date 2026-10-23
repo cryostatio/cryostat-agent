@@ -67,7 +67,6 @@ import javax.inject.Singleton;
 import javax.net.ssl.KeyManager;
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLException;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
@@ -81,6 +80,7 @@ import io.cryostat.agent.remote.RemoteModule;
 import io.cryostat.agent.remote.UnifiedLogging;
 import io.cryostat.agent.triggers.TriggerModule;
 import io.cryostat.agent.util.AppNameResolver;
+import io.cryostat.agent.util.TlsUtil;
 import io.cryostat.libcryostat.JvmIdentifier;
 import io.cryostat.libcryostat.net.IDException;
 
@@ -88,8 +88,6 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.sun.net.httpserver.HttpServer;
-import com.sun.net.httpserver.HttpsConfigurator;
-import com.sun.net.httpserver.HttpsParameters;
 import com.sun.net.httpserver.HttpsServer;
 import dagger.Lazy;
 import dagger.Module;
@@ -104,8 +102,6 @@ import org.apache.hc.client5.http.impl.classic.HttpClients;
 import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManager;
 import org.apache.hc.client5.http.socket.ConnectionSocketFactory;
 import org.apache.hc.client5.http.socket.PlainConnectionSocketFactory;
-import org.apache.hc.client5.http.ssl.DefaultHostnameVerifier;
-import org.apache.hc.client5.http.ssl.NoopHostnameVerifier;
 import org.apache.hc.client5.http.ssl.SSLConnectionSocketFactory;
 import org.apache.hc.core5.http.ConnectionClosedException;
 import org.apache.hc.core5.http.EntityDetails;
@@ -229,7 +225,6 @@ public abstract class MainModule {
     @Singleton
     @Named(HTTP_CLIENT_SSL_CTX)
     public static SSLContext provideClientSslContext(
-            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_VERSION) String clientTlsVersion,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUST_ALL) boolean trustAll,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_TRUSTSTORE_PATH)
                     Optional<String> truststorePath,
@@ -477,7 +472,13 @@ public abstract class MainModule {
                         };
             }
 
-            SSLContext sslCtx = SSLContext.getInstance(clientTlsVersion);
+            // Always use "TLS" to get the most general SSLContext. Actual
+            // protocol restriction (exact version or minimum version) is enforced
+            // by TlsUtil via SSLParameters.setProtocols(). See the JSSE Reference
+            // Guide: getInstance() returns a context that supports "at least" the
+            // requested protocol and may enable others, so passing a specific
+            // version here does not reliably constrain the enabled protocols.
+            SSLContext sslCtx = SSLContext.getInstance("TLS");
             sslCtx.init(keyManagers, new X509TrustManager[] {trustManager}, null);
             return sslCtx;
         } catch (NoSuchAlgorithmException
@@ -495,7 +496,6 @@ public abstract class MainModule {
     @Singleton
     @Named(HTTP_SERVER_SSL_CTX)
     public static Optional<SSLContext> provideServerSslContext(
-            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_VERSION) String serverTlsVersion,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_PASS)
                     Optional<String> keyStorePassFile,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_KEYSTORE_PASS_CHARSET)
@@ -536,7 +536,9 @@ public abstract class MainModule {
         InputStream keystore = null;
         InputStream pass = null;
         try (InputStream certFile = new FileInputStream(certFilePath.get())) {
-            SSLContext sslContext = SSLContext.getInstance(serverTlsVersion);
+            // See comment in provideClientSslContext — always use "TLS" and let
+            // TlsUtil enforce protocol restrictions via SSLParameters.
+            SSLContext sslContext = SSLContext.getInstance("TLS");
             if (keyStoreFilePath.isPresent()) {
                 keystore = new FileInputStream(keyStoreFilePath.get());
             }
@@ -653,6 +655,10 @@ public abstract class MainModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_AUTHORIZATION)
                     Supplier<Optional<String>> authorizationSupplier,
             @Named(HTTP_CLIENT_SSL_CTX) SSLContext sslContext,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_VERSION) Optional<String> tlsVersion,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_MIN_VERSION)
+                    Optional<String> minTlsVersion,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_CIPHERS) List<String> ciphers,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_TLS_VERIFY_HOSTNAME)
                     boolean verifyHostname,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_CONNECT_TIMEOUT_MS) int connectTimeout,
@@ -664,11 +670,8 @@ public abstract class MainModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBCLIENT_CONNECTION_POOL_MAX_PER_ROUTE)
                     int maxPerRoute) {
         SSLConnectionSocketFactory sslSocketFactory =
-                new SSLConnectionSocketFactory(
-                        sslContext,
-                        verifyHostname
-                                ? new DefaultHostnameVerifier()
-                                : NoopHostnameVerifier.INSTANCE);
+                TlsUtil.createSSLConnectionSocketFactory(
+                        sslContext, tlsVersion, minTlsVersion, ciphers, verifyHostname);
 
         RegistryBuilder<ConnectionSocketFactory> socketFactoryRegistryBuilder =
                 RegistryBuilder.<ConnectionSocketFactory>create()
@@ -760,7 +763,11 @@ public abstract class MainModule {
             ScheduledExecutorService executor,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_HOST) String host,
             @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_PORT) int port,
-            @Named(HTTP_SERVER_SSL_CTX) Optional<SSLContext> sslContext) {
+            @Named(HTTP_SERVER_SSL_CTX) Optional<SSLContext> sslContext,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_VERSION) Optional<String> tlsVersion,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_MIN_VERSION)
+                    Optional<String> minTlsVersion,
+            @Named(ConfigModule.CRYOSTAT_AGENT_WEBSERVER_TLS_CIPHERS) List<String> ciphers) {
         try {
             HttpServer http;
             if (sslContext.isEmpty()) {
@@ -769,21 +776,8 @@ public abstract class MainModule {
                 http = HttpsServer.create(new InetSocketAddress(host, port), 0);
                 ((HttpsServer) http)
                         .setHttpsConfigurator(
-                                new HttpsConfigurator(sslContext.get()) {
-                                    public void configure(HttpsParameters params) {
-                                        try {
-                                            SSLContext context = getSSLContext();
-                                            SSLEngine engine = context.createSSLEngine();
-                                            params.setNeedClientAuth(false);
-                                            params.setCipherSuites(engine.getEnabledCipherSuites());
-                                            params.setProtocols((engine.getEnabledProtocols()));
-                                            params.setSSLParameters(
-                                                    context.getDefaultSSLParameters());
-                                        } catch (Exception e) {
-                                            throw new RuntimeException(e);
-                                        }
-                                    }
-                                });
+                                TlsUtil.createHttpsConfigurator(
+                                        sslContext.get(), tlsVersion, minTlsVersion, ciphers));
             }
             http.setExecutor(executor);
             return http;
