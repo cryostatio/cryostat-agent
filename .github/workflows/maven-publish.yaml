@@ -32,7 +32,7 @@ jobs:
       run: ./mvnw -Psnapshots -B -U package -s $GITHUB_WORKSPACE/settings.xml --file pom.xml
 
     - name: Publish to GitHub Packages Apache Maven
-      run: ./mvnw -Psnapshots deploy -s $GITHUB_WORKSPACE/settings.xml
+      run: ./mvnw -Psnapshots -B -U deploy -s $GITHUB_WORKSPACE/settings.xml
       env:
         GITHUB_TOKEN: ${{ github.token }}
 
