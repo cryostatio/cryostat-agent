@@ -92,7 +92,7 @@
 
   <com.github.spotbugs.version>4.10.5</com.github.spotbugs.version>
   <com.github.spotbugs.plugin.version>4.10.5.0</com.github.spotbugs.plugin.version>
-  <org.junit.jupiter.version>5.10.5</org.junit.jupiter.version>
+  <org.junit.jupiter.version>5.12.2</org.junit.jupiter.version>
   <org.jacoco.maven.plugin.version>0.8.16</org.jacoco.maven.plugin.version>
   <com.diffplug.spotless.maven.plugin.version>2.46.1</com.diffplug.spotless.maven.plugin.version>
   <com.google.googlejavaformat.version>1.35.0</com.google.googlejavaformat.version>
