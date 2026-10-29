@@ -22,6 +22,7 @@ import static org.mockito.Mockito.*;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -302,6 +303,72 @@ class RecordingsContextTest {
 
         verify(exchange).sendResponseHeaders(eq(200), anyLong());
         assertTrue(getBody.size() > 0, "expected non-empty jfrsync recording content");
+    }
+
+    @Test
+    void testPatchedJfrSyncRecordingOptionsSurviveNaturalStop() throws Exception {
+        when(config.getValue(anyString(), eq(boolean.class))).thenReturn(true);
+        when(asyncProfilerExecutor.isAvailable()).thenReturn(true);
+        Recording[] simulatedHolder = new Recording[1];
+        doAnswer(
+                        invocation -> {
+                            String cmd = invocation.getArgument(0);
+                            String outputPath =
+                                    cmd.substring(cmd.indexOf("file=") + "file=".length());
+                            Recording simulated = new Recording();
+                            simulated.setDestination(Path.of(outputPath));
+                            simulated.start();
+                            simulatedHolder[0] = simulated;
+                            recordingsToClose.add(simulated);
+                            return "profiler is running";
+                        })
+                .when(asyncProfilerExecutor)
+                .execute(anyString());
+
+        RecordingsContext.StartRecordingRequest req = new RecordingsContext.StartRecordingRequest();
+        req.name = "jfrsync-patched";
+        req.template =
+                "<?xml version=\"1.0\" encoding=\"UTF-8\"?><configuration"
+                        + " version=\"2.0\"></configuration>";
+        req.asprofEvents = List.of("cpu");
+
+        ByteArrayOutputStream startBody = mockPost(req);
+        ctx.handle(exchange);
+        long id = mapper.readTree(startBody.toByteArray()).get("id").asLong();
+
+        reset(exchange);
+        when(exchange.getRequestMethod()).thenReturn("PATCH");
+        when(exchange.getRequestURI()).thenReturn(URI.create("/recordings/" + id));
+        when(exchange.getRequestBody())
+                .thenReturn(
+                        new ByteArrayInputStream(
+                                "{\"name\":\"renamed\",\"maxSize\":4096}"
+                                        .getBytes(StandardCharsets.UTF_8)));
+        when(exchange.getResponseBody()).thenReturn(new ByteArrayOutputStream());
+        ctx.handle(exchange);
+        verify(exchange).sendResponseHeaders(eq(200), anyLong());
+
+        simulatedHolder[0].stop();
+        assertTrue(flightRecorder.getRecording(id).isEmpty(), "recording should no longer be live");
+
+        reset(exchange);
+        when(exchange.getRequestMethod()).thenReturn("GET");
+        when(exchange.getRequestURI()).thenReturn(URI.create("/recordings/"));
+        ByteArrayOutputStream listBody = new ByteArrayOutputStream();
+        when(exchange.getResponseBody()).thenReturn(listBody);
+        ctx.handle(exchange);
+
+        JsonNode listed = null;
+        for (JsonNode n : mapper.readTree(listBody.toByteArray())) {
+            if (n.get("id").asLong() == id) {
+                listed = n;
+            }
+        }
+        assertNotNull(listed, "expected stopped jfrsync recording to be listed");
+        assertEquals("renamed", listed.get("name").asText());
+        assertEquals(4096, listed.get("maxSize").asLong());
+        assertTrue(listed.get("toDisk").asBoolean());
+        assertEquals("STOPPED", listed.get("state").asText());
     }
 
     @Test

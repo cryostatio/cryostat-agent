@@ -341,68 +341,74 @@ class RecordingsContext implements RemoteContext {
                 return;
             }
             Recording recording = recordingOpt.get();
-            while (fields.hasNext()) {
-                Map.Entry<String, JsonNode> field = fields.next();
-                switch (field.getKey()) {
-                    case "state":
-                        if ("stopped".equalsIgnoreCase(field.getValue().textValue())) {
-                            shouldStop = true;
-                            break;
-                        }
-                        sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
-                        return;
-                    case "name":
-                        if (!StringUtils.isBlank(field.getValue().textValue())) {
-                            recording.setName(field.getValue().textValue());
-                            break;
-                        }
-                        sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
-                        return;
-                    case "duration":
-                        if (field.getValue().canConvertToLong()) {
-                            recording.setDuration(Duration.ofMillis(field.getValue().longValue()));
-                            break;
-                        }
-                        sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
-                        return;
-                    case "maxSize":
-                        if (field.getValue().canConvertToLong()) {
-                            recording.setMaxSize(field.getValue().longValue());
-                            break;
-                        }
-                        sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
-                        return;
-                    case "maxAge":
-                        if (field.getValue().canConvertToLong()) {
-                            recording.setMaxAge(Duration.ofMillis(field.getValue().longValue()));
-                            break;
-                        }
-                        sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
-                        return;
-                    case "toDisk":
-                        if (field.getValue().isBoolean()) {
-                            recording.setToDisk(field.getValue().booleanValue());
-                            break;
-                        }
-                        sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
-                        return;
-                    default:
-                        log.warn("Unknown recording option {}", field.getKey());
-                        sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
-                        return;
+            try {
+                while (fields.hasNext()) {
+                    Map.Entry<String, JsonNode> field = fields.next();
+                    switch (field.getKey()) {
+                        case "state":
+                            if ("stopped".equalsIgnoreCase(field.getValue().textValue())) {
+                                shouldStop = true;
+                                break;
+                            }
+                            sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
+                            return;
+                        case "name":
+                            if (!StringUtils.isBlank(field.getValue().textValue())) {
+                                recording.setName(field.getValue().textValue());
+                                break;
+                            }
+                            sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
+                            return;
+                        case "duration":
+                            if (field.getValue().canConvertToLong()) {
+                                recording.setDuration(
+                                        Duration.ofMillis(field.getValue().longValue()));
+                                break;
+                            }
+                            sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
+                            return;
+                        case "maxSize":
+                            if (field.getValue().canConvertToLong()) {
+                                recording.setMaxSize(field.getValue().longValue());
+                                break;
+                            }
+                            sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
+                            return;
+                        case "maxAge":
+                            if (field.getValue().canConvertToLong()) {
+                                recording.setMaxAge(
+                                        Duration.ofMillis(field.getValue().longValue()));
+                                break;
+                            }
+                            sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
+                            return;
+                        case "toDisk":
+                            if (field.getValue().isBoolean()) {
+                                recording.setToDisk(field.getValue().booleanValue());
+                                break;
+                            }
+                            sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
+                            return;
+                        default:
+                            log.warn("Unknown recording option {}", field.getKey());
+                            sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
+                            return;
+                    }
                 }
+            } finally {
+                // for a jfrsync-enabled recording, refresh its bookkeeping from the live Recording
+                // after every update, including partially-applied ones that end in a rejected
+                // field, and not only on an explicit stop: JfrSync.start() set a destination on
+                // this Recording, so it is dumped-and-closed the instant it stops for any reason,
+                // including its duration timer elapsing (see jfrSyncRecordings javadoc), after
+                // which the Recording API can no longer answer questions about it.
+                // computeIfPresent is atomic with respect to a concurrent delete, so a removed
+                // entry is never resurrected.
+                jfrSyncRecordings.computeIfPresent(
+                        recordingId, (id, info) -> info.capture(recording));
             }
             if (shouldStop) {
                 try {
-                    // for a jfrsync-enabled recording, record its bookkeeping before stopping it:
-                    // JfrSync.start() set a destination on this Recording, so stop() dumps-and-
-                    // closes it synchronously in this same call (see jfrSyncRecordings javadoc),
-                    // after which the Recording API can no longer answer questions about it
-                    JfrSyncRecording info = jfrSyncRecordings.get(recordingId);
-                    if (info != null) {
-                        info = info.capture(recording);
-                        jfrSyncRecordings.put(recordingId, info);
-                    }
                     if (!recording.stop()) {
                         sendHeader(exchange, HttpStatus.SC_INTERNAL_SERVER_ERROR);
                     }
@@ -688,6 +694,7 @@ class RecordingsContext implements RemoteContext {
         final boolean continuous;
         final long maxSize;
         final long maxAge;
+        final boolean toDisk;
 
         JfrSyncRecording(Path jfcFile, Path outputFile, Recording recording) {
             this.jfcFile = jfcFile;
@@ -700,25 +707,7 @@ class RecordingsContext implements RemoteContext {
             this.continuous = recording.getDuration() == null;
             this.maxSize = recording.getMaxSize();
             this.maxAge = recording.getMaxAge() == null ? 0 : recording.getMaxAge().toMillis();
-        }
-
-        private JfrSyncRecording(
-                Path jfcFile,
-                Path outputFile,
-                String name,
-                long startTime,
-                long duration,
-                boolean continuous,
-                long maxSize,
-                long maxAge) {
-            this.jfcFile = jfcFile;
-            this.outputFile = outputFile;
-            this.name = name;
-            this.startTime = startTime;
-            this.duration = duration;
-            this.continuous = continuous;
-            this.maxSize = maxSize;
-            this.maxAge = maxAge;
+            this.toDisk = recording.isToDisk();
         }
 
         /** Returns an updated copy reflecting the current live state of {@code recording}. */
@@ -734,7 +723,7 @@ class RecordingsContext implements RemoteContext {
                     startTime,
                     duration,
                     continuous,
-                    true,
+                    toDisk,
                     maxSize,
                     maxAge);
         }
