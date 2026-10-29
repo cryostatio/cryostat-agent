@@ -18,7 +18,6 @@ package io.cryostat.agent.remote;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.lang.management.ManagementFactory;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
@@ -41,9 +40,6 @@ import java.util.stream.Collectors;
 
 import javax.inject.Inject;
 import javax.inject.Named;
-import javax.management.MBeanServerInvocationHandler;
-import javax.management.MalformedObjectNameException;
-import javax.management.ObjectName;
 
 import io.cryostat.agent.ConfigModule;
 
@@ -70,6 +66,7 @@ class AsyncProfilerContext extends MutatingRemoteContext {
     private final ProfileIdGenerator idGenerator = () -> UUID.randomUUID().toString();
     private final ObjectMapper mapper;
     private final ScheduledExecutorService scheduler;
+    private final AsyncProfilerExecutor executor;
     private final Logger log = LoggerFactory.getLogger(getClass());
     private volatile StartProfileRequest currentProfile = null;
 
@@ -78,10 +75,12 @@ class AsyncProfilerContext extends MutatingRemoteContext {
             SmallRyeConfig config,
             ObjectMapper mapper,
             ScheduledExecutorService scheduler,
+            AsyncProfilerExecutor executor,
             @Named(ConfigModule.CRYOSTAT_AGENT_ASYNC_PROFILER_REPOSITORY_PATH) Path repository) {
         super(config);
         this.mapper = mapper;
         this.scheduler = scheduler;
+        this.executor = executor;
         this.repository = repository;
     }
 
@@ -137,21 +136,6 @@ class AsyncProfilerContext extends MutatingRemoteContext {
         }
     }
 
-    private Optional<AsyncProfilerMXBean> profilerInstance() {
-        try {
-            // TODO cache instance once we get one
-            return Optional.of(
-                    MBeanServerInvocationHandler.newProxyInstance(
-                            ManagementFactory.getPlatformMBeanServer(),
-                            new ObjectName(AsyncProfilerMXBean.OBJECT_NAME),
-                            AsyncProfilerMXBean.class,
-                            false));
-        } catch (MalformedObjectNameException e) {
-            log.error("AsyncProfilerMXBean lookup failure", e);
-            return Optional.empty();
-        }
-    }
-
     private boolean ensureMethodAccepted(HttpExchange exchange) throws IOException {
         Set<String> alwaysAllowed = Set.of("GET");
         String mtd = exchange.getRequestMethod();
@@ -180,15 +164,11 @@ class AsyncProfilerContext extends MutatingRemoteContext {
     }
 
     private boolean ensureProfilerAvailable(HttpExchange exchange) {
-        try {
-            return profilerInstance()
-                    .map(AsyncProfilerMXBean::getVersion)
-                    .map(StringUtils::isNotBlank)
-                    .orElse(false);
-        } catch (Exception e) {
-            log.error("async-profiler failure", e);
-            return false;
+        boolean available = executor.isAvailable();
+        if (!available) {
+            sendHeader(exchange, HttpStatus.SC_SERVICE_UNAVAILABLE);
         }
+        return available;
     }
 
     private static String extractId(HttpExchange exchange) throws IOException {
@@ -221,10 +201,7 @@ class AsyncProfilerContext extends MutatingRemoteContext {
     }
 
     private String asyncProfilerExec(String cmd) throws IOException {
-        log.debug("async-profiler execute {} ...", cmd);
-        String out = profilerInstance().orElseThrow().execute(cmd).strip();
-        log.debug("async-profiler execute {}: \"{}\"", cmd, out);
-        return out;
+        return executor.execute(cmd);
     }
 
     private ProfilerStatus getProfilerStatus() throws IOException {
@@ -443,15 +420,5 @@ class AsyncProfilerContext extends MutatingRemoteContext {
 
     interface ProfileIdGenerator {
         String next();
-    }
-
-    // https://github.com/async-profiler/async-profiler/blob/2a4f329cbae8f849642d4cd74b766ced79ed3557/src/api/one/profiler/AsyncProfilerMXBean.java#L19
-    public interface AsyncProfilerMXBean {
-        public String OBJECT_NAME = "one.profiler:type=AsyncProfiler";
-
-        String getVersion();
-
-        String execute(String command)
-                throws IllegalArgumentException, IllegalStateException, java.io.IOException;
     }
 }

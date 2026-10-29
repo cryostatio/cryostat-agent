@@ -36,7 +36,7 @@ import javax.management.ReflectionException;
 
 import io.cryostat.agent.ConfigModule;
 import io.cryostat.agent.CryostatClient;
-import io.cryostat.agent.remote.AsyncProfilerContext.AsyncProfilerMXBean;
+import io.cryostat.agent.remote.AsyncProfilerExecutor.AsyncProfilerMXBean;
 import io.cryostat.libcryostat.net.CryostatAgentMXBean;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
