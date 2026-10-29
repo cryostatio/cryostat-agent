@@ -25,6 +25,7 @@ import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import io.cryostat.agent.FlightRecorderHelper;
@@ -500,6 +501,36 @@ class RecordingsContextTest {
         ctx.handle(exchange);
 
         verify(exchange).sendResponseHeaders(400, RemoteContext.BODY_LENGTH_NONE);
+    }
+
+    @Test
+    void testStartJfrSyncRecordingWithMalformedEventNamesRespondsBadRequestWithoutStarting()
+            throws Exception {
+        when(config.getValue(anyString(), eq(boolean.class))).thenReturn(true);
+
+        RecordingsContext.StartRecordingRequest req = new RecordingsContext.StartRecordingRequest();
+        req.name = "jfrsync-malformed-event";
+        req.localTemplateName = "default";
+        req.asprofEvents = Arrays.asList("cpu", null);
+
+        mockPost(req);
+        ctx.handle(exchange);
+        verify(exchange).sendResponseHeaders(400, RemoteContext.BODY_LENGTH_NONE);
+
+        req.asprofEvents = List.of("cpu,file=/tmp/evil");
+        mockPost(req);
+        ctx.handle(exchange);
+
+        req.asprofEvents = List.of("cpu=1");
+        mockPost(req);
+        ctx.handle(exchange);
+
+        req.asprofEvents = List.of("a,b");
+        mockPost(req);
+        ctx.handle(exchange);
+
+        verify(exchange, times(4)).sendResponseHeaders(400, RemoteContext.BODY_LENGTH_NONE);
+        verify(asyncProfilerExecutor, never()).execute(anyString());
     }
 
     @Test

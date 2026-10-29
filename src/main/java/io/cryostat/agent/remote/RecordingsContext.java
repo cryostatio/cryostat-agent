@@ -475,7 +475,15 @@ class RecordingsContext implements RemoteContext {
             return;
         }
         deleteQuietly(info.jfcFile);
-        deleteQuietly(info.outputFile);
+        deleteJfrSyncOutputQuietly(info.outputFile);
+    }
+
+    private void deleteJfrSyncOutputQuietly(Path outputFile) {
+        if (outputFile == null) {
+            return;
+        }
+        deleteQuietly(outputFile);
+        deleteQuietly(outputFile.getParent());
     }
 
     private void deleteQuietly(Path path) {
@@ -575,15 +583,15 @@ class RecordingsContext implements RemoteContext {
                 jfrSyncSetting = jfcFile.toAbsolutePath().toString();
             }
 
-            outputFile = Files.createTempFile("cryostat-jfrsync-recording-", ".jfr");
             // async-profiler's native argument parser requires file= to designate a destination;
             // the file it manages is distinct from the .jfc configuration file above. While the
             // recording is RUNNING, the normal Recording-API-based download path
             // (handleGetRecording) is used; once the backing Recording has stopped-and-closed
             // (see jfrSyncRecordings javadoc), this location is read directly instead. This does
             // not need to be - and must not be - the separate AsyncProfilerContext#repository
-            // used by the standalone async-profiler feature.
-            Files.deleteIfExists(outputFile);
+            // used by the standalone async-profiler feature. The file lives in a private
+            // per-recording directory so that no other local user can pre-create or swap it.
+            outputFile = Files.createTempDirectory("cryostat-jfrsync-").resolve("recording.jfr");
 
             String events =
                     req.asprofEvents.stream()
@@ -624,7 +632,7 @@ class RecordingsContext implements RemoteContext {
                 | IllegalArgumentException
                 | IllegalStateException e) {
             deleteQuietly(jfcFile);
-            deleteQuietly(outputFile);
+            deleteJfrSyncOutputQuietly(outputFile);
             throw e;
         }
     }
@@ -734,6 +742,8 @@ class RecordingsContext implements RemoteContext {
 
     static class StartRecordingRequest {
 
+        private static final Pattern ASPROF_EVENT_PATTERN = Pattern.compile("^[A-Za-z0-9_.:$/-]+$");
+
         public String name;
         public String localTemplateName;
         public String template;
@@ -754,6 +764,22 @@ class RecordingsContext implements RemoteContext {
             return asprofEvents != null && !asprofEvents.isEmpty();
         }
 
+        boolean hasValidAsprofEvents() {
+            return !requestsJfrSync() || asprofEvents.stream().allMatch(this::isValidAsprofEvent);
+        }
+
+        /**
+         * Rejects null entries and any entry containing the async-profiler argument delimiters
+         * {@code ,} or {@code =}, which would allow injecting additional arguments (e.g. {@code
+         * file=}) into the command, before applying the identifier allowlist.
+         */
+        private boolean isValidAsprofEvent(String event) {
+            if (event == null || event.indexOf(',') >= 0 || event.indexOf('=') >= 0) {
+                return false;
+            }
+            return ASPROF_EVENT_PATTERN.matcher(event).matches();
+        }
+
         boolean requestSnapshot() {
             boolean snapshotName = name.equals("snapshot");
             boolean snapshotTemplate =
@@ -767,7 +793,8 @@ class RecordingsContext implements RemoteContext {
             boolean requestsBundledTemplate = requestsBundledTemplate();
             boolean requestsEither = requestsCustomTemplate || requestsBundledTemplate;
             boolean requestsBoth = requestsCustomTemplate && requestsBundledTemplate;
-            return (requestsEither && !requestsBoth) || requestSnapshot();
+            return ((requestsEither && !requestsBoth) || requestSnapshot())
+                    && hasValidAsprofEvents();
         }
     }
 }
