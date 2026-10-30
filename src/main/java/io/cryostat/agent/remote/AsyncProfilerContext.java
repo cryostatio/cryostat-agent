@@ -184,7 +184,7 @@ class AsyncProfilerContext extends MutatingRemoteContext {
         String path = exchange.getRequestURI().getPath();
         return PATH.equals(path)
                 || PATH.substring(0, PATH.length() - 1).equals(path)
-                || PATH_ID_PATTERN.matcher(path).find();
+                || PATH_ID_PATTERN.matcher(path).matches();
     }
 
     private static String extractId(HttpExchange exchange) throws IOException {

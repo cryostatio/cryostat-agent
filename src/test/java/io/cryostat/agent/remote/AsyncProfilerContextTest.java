@@ -120,6 +120,29 @@ class AsyncProfilerContextTest {
     }
 
     @Test
+    void testDeleteWithTrailingTextAfterValidIdSendsNotFound() throws Exception {
+        when(exchange.getRequestMethod()).thenReturn("DELETE");
+        when(config.getValue(anyString(), eq(boolean.class))).thenReturn(true);
+        when(executor.isAvailable()).thenReturn(true);
+        when(exchange.getRequestURI()).thenReturn(URI.create("/async-profiler/status%0Afoo"));
+
+        ctx.handle(exchange);
+
+        verify(exchange).sendResponseHeaders(404, RemoteContext.BODY_LENGTH_NONE);
+    }
+
+    @Test
+    void testGetWithLeadingTextBeforeValidIdSendsNotFound() throws Exception {
+        when(exchange.getRequestMethod()).thenReturn("GET");
+        when(executor.isAvailable()).thenReturn(true);
+        when(exchange.getRequestURI()).thenReturn(URI.create("/foo%0A/async-profiler/status"));
+
+        ctx.handle(exchange);
+
+        verify(exchange).sendResponseHeaders(404, RemoteContext.BODY_LENGTH_NONE);
+    }
+
+    @Test
     void testDeleteWithoutIdSendsBadRequest() throws Exception {
         when(exchange.getRequestMethod()).thenReturn("DELETE");
         when(config.getValue(anyString(), eq(boolean.class))).thenReturn(true);
