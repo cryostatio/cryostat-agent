@@ -101,6 +101,10 @@ class AsyncProfilerContext extends MutatingRemoteContext {
             if (!ensureProfilerAvailable(exchange)) {
                 return;
             }
+            if (!isRecognizedPath(exchange)) {
+                sendHeader(exchange, HttpStatus.SC_NOT_FOUND);
+                return;
+            }
             String mtd = exchange.getRequestMethod();
             String id = "";
             switch (mtd) {
@@ -169,6 +173,18 @@ class AsyncProfilerContext extends MutatingRemoteContext {
             sendHeader(exchange, HttpStatus.SC_SERVICE_UNAVAILABLE);
         }
         return available;
+    }
+
+    /**
+     * A request path is recognized if it addresses the collection (with or without the trailing
+     * slash), the status resource, or a profile id in UUID format. Anything else is an unknown
+     * resource.
+     */
+    private static boolean isRecognizedPath(HttpExchange exchange) {
+        String path = exchange.getRequestURI().getPath();
+        return PATH.equals(path)
+                || PATH.substring(0, PATH.length() - 1).equals(path)
+                || PATH_ID_PATTERN.matcher(path).find();
     }
 
     private static String extractId(HttpExchange exchange) throws IOException {
