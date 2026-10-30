@@ -17,14 +17,24 @@ package io.cryostat.agent;
 
 import java.io.IOException;
 import java.io.StringReader;
+import java.lang.management.ManagementFactory;
+import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
+import java.nio.file.Path;
 import java.text.ParseException;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Predicate;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import io.cryostat.libcryostat.templates.TemplateType;
 
@@ -36,6 +46,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class FlightRecorderHelper {
+
+    private static final String START_FLIGHT_RECORDING = "-XX:StartFlightRecording";
+    private static final Pattern DUMP_FILE_NAME =
+            Pattern.compile(
+                    "^hotspot-pid-(\\d+)-id-(\\d+)-\\d{4}_\\d{2}_\\d{2}_\\d{2}_\\d{2}_\\d{2}\\.jfr$");
 
     private final Logger log = LoggerFactory.getLogger(getClass());
 
@@ -126,6 +141,150 @@ public class FlightRecorderHelper {
 
     public Optional<Recording> getRecording(long id) {
         return getRecordings(r -> r.getId() == id).stream().findFirst();
+    }
+
+    /**
+     * Finds the file the JVM wrote when a recording started by {@code -XX:StartFlightRecording}
+     * with a directory as its {@code filename} was stopped. Such a recording reports no destination
+     * through the API, and on newer JDKs it is closed as soon as it has been written out, so the
+     * file can only be located by the name the JVM gives it, {@code hotspot-pid-<pid>-id-<recording
+     * id>-<timestamp>.jfr}, within the directories named on the JVM command line. A recording
+     * started by {@code jcmd} with a directory cannot be found this way, since that directory is
+     * not recorded anywhere.
+     */
+    public Optional<Path> findStartupDumpFile(long recordingId) {
+        return findDumpFile(
+                getStartupDumpDirectories(), ProcessHandle.current().pid(), recordingId);
+    }
+
+    List<Path> getStartupDumpDirectories() {
+        return parseStartupDumpDirectories(
+                ManagementFactory.getRuntimeMXBean().getInputArguments(),
+                ProcessHandle.current().pid());
+    }
+
+    static List<Path> parseStartupDumpDirectories(List<String> jvmArguments, long pid) {
+        List<Path> directories = new ArrayList<>();
+        for (String argument : jvmArguments) {
+            if (!argument.startsWith(START_FLIGHT_RECORDING)
+                    || argument.length() <= START_FLIGHT_RECORDING.length()) {
+                continue;
+            }
+            char delimiter = argument.charAt(START_FLIGHT_RECORDING.length());
+            if (delimiter != '=' && delimiter != ':') {
+                continue;
+            }
+            String options = argument.substring(START_FLIGHT_RECORDING.length() + 1);
+            for (String option : splitOptions(options)) {
+                int equals = option.indexOf('=');
+                if (equals < 0 || !"filename".equals(option.substring(0, equals))) {
+                    continue;
+                }
+                String expanded = expandFilename(unquote(option.substring(equals + 1)), pid);
+                if (expanded != null && !expanded.isEmpty()) {
+                    try {
+                        directories.add(Path.of(expanded).toAbsolutePath().normalize());
+                    } catch (InvalidPathException e) {
+                        continue;
+                    }
+                }
+            }
+        }
+        return directories;
+    }
+
+    static Optional<Path> findDumpFile(Collection<Path> directories, long pid, long recordingId) {
+        List<Path> candidates = new ArrayList<>();
+        for (Path directory : directories) {
+            if (!Files.isDirectory(directory)) {
+                continue;
+            }
+            try (Stream<Path> files = Files.list(directory)) {
+                files.filter(Files::isRegularFile)
+                        .filter(f -> isDumpFileOf(f, pid, recordingId))
+                        .forEach(candidates::add);
+            } catch (IOException | RuntimeException e) {
+                continue;
+            }
+        }
+        return candidates.stream().max(Comparator.comparing(FlightRecorderHelper::fileNameOf));
+    }
+
+    private static String fileNameOf(Path file) {
+        Path name = file.getFileName();
+        return name == null ? "" : name.toString();
+    }
+
+    private static boolean isDumpFileOf(Path file, long pid, long recordingId) {
+        Matcher m = DUMP_FILE_NAME.matcher(fileNameOf(file));
+        return m.matches()
+                && Long.toString(pid).equals(m.group(1))
+                && Long.toString(recordingId).equals(m.group(2));
+    }
+
+    private static List<String> splitOptions(String options) {
+        List<String> parts = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        char quote = 0;
+        for (int i = 0; i < options.length(); i++) {
+            char c = options.charAt(i);
+            if (quote != 0) {
+                if (c == quote && options.charAt(i - 1) != '\\') {
+                    quote = 0;
+                }
+                current.append(c);
+            } else if (c == '"' || c == '\'') {
+                quote = c;
+                current.append(c);
+            } else if (c == ',') {
+                parts.add(current.toString());
+                current.setLength(0);
+            } else {
+                current.append(c);
+            }
+        }
+        parts.add(current.toString());
+        return parts;
+    }
+
+    private static String unquote(String value) {
+        if (value.length() >= 2) {
+            char first = value.charAt(0);
+            if ((first == '"' || first == '\'') && value.charAt(value.length() - 1) == first) {
+                return value.substring(1, value.length() - 1);
+            }
+        }
+        return value;
+    }
+
+    /**
+     * Expands {@code %p} to the PID and {@code %%} to {@code %}, as the JVM does. A name containing
+     * {@code %t} depends on the time at which it was expanded and cannot be reproduced, so null is
+     * returned for it.
+     */
+    private static String expandFilename(String filename, long pid) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < filename.length(); i++) {
+            char c = filename.charAt(i);
+            if (c == '%' && i < filename.length() - 1) {
+                char next = filename.charAt(i + 1);
+                if (next == 't') {
+                    return null;
+                }
+                if (next == '%') {
+                    sb.append('%');
+                    i++;
+                } else if (next == 'p') {
+                    sb.append(pid);
+                    i++;
+                } else {
+                    sb.append(c);
+                }
+            } else {
+                sb.append(c);
+            }
+        }
+        return sb.toString();
     }
 
     @SuppressFBWarnings({"EI_EXPOSE_REP", "CT_CONSTRUCTOR_THROW"})
