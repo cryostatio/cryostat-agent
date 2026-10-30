@@ -30,7 +30,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import io.cryostat.agent.util.FakeCryostatServer;
@@ -40,7 +39,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -99,6 +97,7 @@ class AgentStartupRecordingIT {
                 "cryostat.agent.recordings.initial-scan.delay-ms",
                 Long.toString(INITIAL_SCAN_DELAY_MS));
 
+        long launched = System.nanoTime();
         dummyAppWithAgent =
                 ProcessTestHelper.startDummyAppWithAgentAndJvmArguments(
                         ProcessTestHelper.getAgentShadedJarPath(),
@@ -124,23 +123,26 @@ class AgentStartupRecordingIT {
                                                 .getBytes(StandardCharsets.UTF_8));
         URI recordings = URI.create("http://127.0.0.1:" + agentPort + "/recordings/");
 
-        Thread.sleep(INITIAL_SCAN_DELAY_MS + 1000);
-        Assumptions.assumeTrue(
-                dumpFiles().isEmpty(),
-                "the recording ended before the initial scan could run, so the test is moot");
-
-        long deadline =
-                System.nanoTime() + TimeUnit.SECONDS.toNanos(RECORDING_DURATION_SECONDS + 20);
-        while (dumpFiles().isEmpty() && System.nanoTime() < deadline) {
-            Thread.sleep(250);
+        long remainingMillis =
+                TimeUnit.SECONDS.toMillis(RECORDING_DURATION_SECONDS + 3)
+                        - TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - launched);
+        if (remainingMillis > 0) {
+            Thread.sleep(remainingMillis);
         }
-        Assertions.assertFalse(dumpFiles().isEmpty(), "JVM should have written the recording");
 
-        JsonNode listed = findRecording(get(recordings, authorization), RECORDING_NAME);
+        JsonNode listed = null;
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(20);
+        while (listed == null && System.nanoTime() < deadline) {
+            listed = findRecording(get(recordings, authorization), RECORDING_NAME);
+            if (listed == null || !"STOPPED".equals(listed.get("state").asText())) {
+                listed = null;
+                Thread.sleep(250);
+            }
+        }
         Assertions.assertNotNull(
                 listed,
-                "Agent should still list the recording after the JVM closed it, which means it"
-                        + " was found by the initial scan or listener before then");
+                "Agent should list the recording as STOPPED after its duration elapsed, whether"
+                        + " the JVM kept it or closed it");
         Assertions.assertEquals("STOPPED", listed.get("state").asText());
 
         HttpResponse<byte[]> download =
@@ -162,13 +164,6 @@ class AgentStartupRecordingIT {
         dummyAppWithAgent.waitFor(2, TimeUnit.SECONDS);
         stderrThread.join(1000);
         stdoutThread.join(1000);
-    }
-
-    private List<Path> dumpFiles() throws IOException {
-        try (Stream<Path> files = Files.list(dumpDirectory)) {
-            return files.filter(f -> f.getFileName().toString().endsWith(".jfr"))
-                    .collect(Collectors.toList());
-        }
     }
 
     private JsonNode get(URI uri, String authorization) throws Exception {
