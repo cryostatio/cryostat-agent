@@ -20,6 +20,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.net.URI;
 import java.nio.file.Path;
 import java.util.concurrent.ScheduledExecutorService;
 
@@ -68,5 +69,100 @@ class AsyncProfilerContextTest {
         ctx.handle(exchange);
 
         verify(exchange).sendResponseHeaders(503, RemoteContext.BODY_LENGTH_NONE);
+    }
+
+    @Test
+    void testGetWithUnrecognizedIdSendsNotFound() throws Exception {
+        when(exchange.getRequestMethod()).thenReturn("GET");
+        when(executor.isAvailable()).thenReturn(true);
+        when(exchange.getRequestURI()).thenReturn(URI.create("/async-profiler/nonexistent"));
+
+        ctx.handle(exchange);
+
+        verify(exchange).sendResponseHeaders(404, RemoteContext.BODY_LENGTH_NONE);
+    }
+
+    @Test
+    void testDeleteWithUnrecognizedIdSendsNotFound() throws Exception {
+        when(exchange.getRequestMethod()).thenReturn("DELETE");
+        when(config.getValue(anyString(), eq(boolean.class))).thenReturn(true);
+        when(executor.isAvailable()).thenReturn(true);
+        when(exchange.getRequestURI()).thenReturn(URI.create("/async-profiler/nonexistent"));
+
+        ctx.handle(exchange);
+
+        verify(exchange).sendResponseHeaders(404, RemoteContext.BODY_LENGTH_NONE);
+    }
+
+    @Test
+    void testPostWithUnrecognizedPathSendsNotFound() throws Exception {
+        when(exchange.getRequestMethod()).thenReturn("POST");
+        when(config.getValue(anyString(), eq(boolean.class))).thenReturn(true);
+        when(executor.isAvailable()).thenReturn(true);
+        when(exchange.getRequestURI()).thenReturn(URI.create("/async-profiler/nonexistent"));
+
+        ctx.handle(exchange);
+
+        verify(exchange).sendResponseHeaders(404, RemoteContext.BODY_LENGTH_NONE);
+    }
+
+    @Test
+    void testDeleteWithAbsentUuidSendsNotFound() throws Exception {
+        when(exchange.getRequestMethod()).thenReturn("DELETE");
+        when(config.getValue(anyString(), eq(boolean.class))).thenReturn(true);
+        when(executor.isAvailable()).thenReturn(true);
+        when(exchange.getRequestURI())
+                .thenReturn(URI.create("/async-profiler/af9cb3e2-7152-4011-8389-093780f8d668"));
+
+        ctx.handle(exchange);
+
+        verify(exchange).sendResponseHeaders(404, RemoteContext.BODY_LENGTH_NONE);
+    }
+
+    @Test
+    void testDeleteWithTrailingTextAfterValidIdSendsNotFound() throws Exception {
+        when(exchange.getRequestMethod()).thenReturn("DELETE");
+        when(config.getValue(anyString(), eq(boolean.class))).thenReturn(true);
+        when(executor.isAvailable()).thenReturn(true);
+        when(exchange.getRequestURI()).thenReturn(URI.create("/async-profiler/status%0Afoo"));
+
+        ctx.handle(exchange);
+
+        verify(exchange).sendResponseHeaders(404, RemoteContext.BODY_LENGTH_NONE);
+    }
+
+    @Test
+    void testGetWithLeadingTextBeforeValidIdSendsNotFound() throws Exception {
+        when(exchange.getRequestMethod()).thenReturn("GET");
+        when(executor.isAvailable()).thenReturn(true);
+        when(exchange.getRequestURI()).thenReturn(URI.create("/foo%0A/async-profiler/status"));
+
+        ctx.handle(exchange);
+
+        verify(exchange).sendResponseHeaders(404, RemoteContext.BODY_LENGTH_NONE);
+    }
+
+    @Test
+    void testDeleteWithoutIdSendsBadRequest() throws Exception {
+        when(exchange.getRequestMethod()).thenReturn("DELETE");
+        when(config.getValue(anyString(), eq(boolean.class))).thenReturn(true);
+        when(executor.isAvailable()).thenReturn(true);
+        when(exchange.getRequestURI()).thenReturn(URI.create("/async-profiler/"));
+
+        ctx.handle(exchange);
+
+        verify(exchange).sendResponseHeaders(400, RemoteContext.BODY_LENGTH_NONE);
+    }
+
+    @Test
+    void testDeleteStatusResourceSendsBadRequest() throws Exception {
+        when(exchange.getRequestMethod()).thenReturn("DELETE");
+        when(config.getValue(anyString(), eq(boolean.class))).thenReturn(true);
+        when(executor.isAvailable()).thenReturn(true);
+        when(exchange.getRequestURI()).thenReturn(URI.create("/async-profiler/status"));
+
+        ctx.handle(exchange);
+
+        verify(exchange).sendResponseHeaders(400, RemoteContext.BODY_LENGTH_NONE);
     }
 }
