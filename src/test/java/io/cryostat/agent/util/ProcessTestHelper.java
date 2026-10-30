@@ -81,6 +81,25 @@ public class ProcessTestHelper {
         return pb.start();
     }
 
+    public static Process startDummyAppWithAgentAndJvmArguments(
+            String jarPath, List<String> jvmArguments, Map<String, String> properties)
+            throws IOException {
+        List<String> command = new ArrayList<>();
+        command.add("java");
+        command.add(String.format("-D%s=%s", LOG_LEVEL_PROPERTY, "DEBUG"));
+        properties.forEach((k, v) -> command.add(String.format("-D%s=%s", k, v)));
+        command.addAll(jvmArguments);
+        command.add("-javaagent:" + jarPath);
+        command.add("-cp");
+        command.add(
+                System.getProperty(PROJECT_BUILD_TEST_OUTPUT_DIRECTORY, DEFAULT_OUTPUT_DIRECTORY));
+        command.add(DummyApp.class.getName());
+
+        ProcessBuilder pb = new ProcessBuilder(command);
+        pb.redirectErrorStream(false);
+        return pb.start();
+    }
+
     public static Process startDummyAppWithAgentArguments(
             String jarPath, Map<String, String> properties) throws IOException {
         List<String> command = new ArrayList<>();

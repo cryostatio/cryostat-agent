@@ -234,6 +234,9 @@ public abstract class ConfigModule {
     public static final String CRYOSTAT_AGENT_EXIT_DEREGISTRATION_TIMEOUT_MS =
             "cryostat.agent.exit.deregistration.timeout-ms";
 
+    public static final String CRYOSTAT_AGENT_RECORDINGS_INITIAL_SCAN_DELAY_MS =
+            "cryostat.agent.recordings.initial-scan.delay-ms";
+
     public static final String CRYOSTAT_AGENT_PUBLISH_CONTEXT = "cryostat.agent.publish.context";
     public static final String CRYOSTAT_AGENT_PUBLISH_FILL_STRATEGY =
             "cryostat.agent.publish.fill-strategy";
