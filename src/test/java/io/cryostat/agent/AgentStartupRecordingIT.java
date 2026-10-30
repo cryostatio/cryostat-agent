@@ -30,6 +30,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import io.cryostat.agent.util.FakeCryostatServer;
@@ -165,7 +166,8 @@ class AgentStartupRecordingIT {
 
     private List<Path> dumpFiles() throws IOException {
         try (Stream<Path> files = Files.list(dumpDirectory)) {
-            return files.filter(f -> f.getFileName().toString().endsWith(".jfr")).toList();
+            return files.filter(f -> f.getFileName().toString().endsWith(".jfr"))
+                    .collect(Collectors.toList());
         }
     }
 
