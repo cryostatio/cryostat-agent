@@ -85,7 +85,7 @@ class HarvesterUploadIT {
                 "Cryostat should receive a scheduled upload");
         assertLogged("Non-OK response (500)");
         assertLogged("SCHEDULED upload of ");
-        assertLogged("failed, dump file retained for cleanup");
+        assertLogged(" failed");
         assertLogged("SCHEDULED snapshot upload failed");
     }
 

@@ -16,6 +16,7 @@
 package io.cryostat.agent.harvest;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -24,6 +25,9 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -225,6 +229,80 @@ class HarvesterTest {
 
             scheduled.getValue().run();
             verify(client, times(2)).upload(any(), any(), anyInt(), any(), any());
+        } finally {
+            periodicHarvester.stop();
+        }
+    }
+
+    @Test
+    void testDumpDeletedAfterSuccessfulScheduledUpload() throws Exception {
+        when(client.upload(any(), any(), anyInt(), any(), any()))
+                .thenReturn(CompletableFuture.completedFuture(null));
+
+        Path dump = runScheduledUploadAndCaptureDump();
+
+        assertFalse(Files.exists(dump), "dump should be deleted after a successful upload");
+    }
+
+    @Test
+    void testDumpDeletedAfterFailedScheduledUpload() throws Exception {
+        when(client.upload(any(), any(), anyInt(), any(), any()))
+                .thenReturn(CompletableFuture.failedFuture(new IOException("upload failed")));
+
+        Path dump = runScheduledUploadAndCaptureDump();
+
+        assertFalse(Files.exists(dump), "dump should be deleted after a failed upload");
+    }
+
+    @Test
+    void testDumpDeletedWhenUploadFailsSynchronously() throws Exception {
+        when(client.upload(any(), any(), anyInt(), any(), any()))
+                .thenThrow(new IOException("could not start upload"));
+
+        Path dump = runScheduledUploadAndCaptureDump();
+
+        assertFalse(Files.exists(dump), "dump should be deleted when the upload cannot start");
+    }
+
+    private Path runScheduledUploadAndCaptureDump() throws Exception {
+        Harvester periodicHarvester =
+                new Harvester(
+                        executor,
+                        workerPool,
+                        60_000L,
+                        "default",
+                        5,
+                        new Harvester.RecordingSettings(),
+                        new Harvester.RecordingSettings(),
+                        false,
+                        client,
+                        flightRecorderHelper,
+                        registration);
+        when(executor.submit(any(Runnable.class)))
+                .thenAnswer(
+                        inv -> {
+                            inv.<Runnable>getArgument(0).run();
+                            return null;
+                        });
+
+        recording = new Recording();
+        recording.start();
+
+        try {
+            periodicHarvester.start();
+            ArgumentCaptor<Runnable> scheduled = ArgumentCaptor.forClass(Runnable.class);
+            verify(workerPool)
+                    .scheduleAtFixedRate(
+                            scheduled.capture(),
+                            eq(60_000L),
+                            eq(60_000L),
+                            eq(TimeUnit.MILLISECONDS));
+
+            scheduled.getValue().run();
+
+            ArgumentCaptor<Path> dump = ArgumentCaptor.forClass(Path.class);
+            verify(client).upload(any(), any(), anyInt(), any(), dump.capture());
+            return dump.getValue();
         } finally {
             periodicHarvester.stop();
         }

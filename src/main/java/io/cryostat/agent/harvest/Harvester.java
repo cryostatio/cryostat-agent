@@ -411,8 +411,10 @@ public class Harvester implements FlightRecorderListener {
                 recording.getState(),
                 recording.getMaxAge(),
                 recording.getMaxSize());
+        Path exitPath = null;
+        boolean uploadStarted = false;
         try {
-            Path exitPath = Files.createTempFile(null, null);
+            exitPath = Files.createTempFile(null, null);
             Files.write(exitPath, new byte[0], StandardOpenOption.TRUNCATE_EXISTING);
             recording.dump(exitPath);
             long size = Files.size(exitPath);
@@ -433,34 +435,24 @@ public class Harvester implements FlightRecorderListener {
                 return CompletableFuture.failedFuture(new NoRecordingDataException());
             }
             log.trace("Dumping {}({}) to {}", recording.getName(), recording.getId(), exitPath);
-            return client.upload(
+            Path dump = exitPath;
+            CompletableFuture<Void> upload =
+                    client.upload(
                             pushType,
                             sownRecording,
                             maxFiles,
                             additionalLabels(recording, true),
-                            exitPath)
-                    .whenComplete(
-                            (v, t) -> {
-                                if (t != null) {
-                                    log.warn(
-                                            "{} upload of {} failed, dump file retained for"
-                                                    + " cleanup",
-                                            pushType,
-                                            exitPath,
-                                            t);
-                                } else {
-                                    log.debug("{} upload of {} completed", pushType, exitPath);
-                                }
-                            })
-                    .thenRun(
-                            () -> {
-                                try {
-                                    Files.deleteIfExists(exitPath);
-                                    log.trace("Deleted temp file {}", exitPath);
-                                } catch (IOException ioe) {
-                                    log.error("Failed to clean up snapshot dump file", ioe);
-                                }
-                            });
+                            dump);
+            uploadStarted = true;
+            return upload.whenComplete(
+                    (v, t) -> {
+                        if (t != null) {
+                            log.warn("{} upload of {} failed", pushType, dump, t);
+                        } else {
+                            log.debug("{} upload of {} completed", pushType, dump);
+                        }
+                        deleteDump(dump);
+                    });
         } catch (IOException e) {
             log.warn(
                     "{} snapshot {}({}) could not be dumped",
@@ -471,6 +463,18 @@ public class Harvester implements FlightRecorderListener {
             return CompletableFuture.failedFuture(e);
         } finally {
             recording.close();
+            if (!uploadStarted && exitPath != null) {
+                deleteDump(exitPath);
+            }
+        }
+    }
+
+    private void deleteDump(Path path) {
+        try {
+            Files.deleteIfExists(path);
+            log.trace("Deleted temp file {}", path);
+        } catch (IOException ioe) {
+            log.error("Failed to clean up snapshot dump file {}", path, ioe);
         }
     }
 
