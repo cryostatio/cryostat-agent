@@ -347,6 +347,12 @@ public class CryostatClient {
                         "TARGET"));
 
         HttpPost req = new HttpPost(baseUri.resolve("/api/beta/recordings/" + jvmId));
+        log.debug(
+                "Uploading {} recording {} ({} bytes on disk) to {}",
+                pushType,
+                fileName,
+                Files.size(recording),
+                req.getRequestUri());
 
         CountingInputStream is = getRecordingInputStream(recording);
         MultipartEntityBuilder entityBuilder =
@@ -391,6 +397,15 @@ public class CryostatClient {
                         })
                 .whenComplete(
                         (v, t) -> {
+                            if (t != null) {
+                                log.warn(
+                                        "{} upload of {} to {} failed after {} bytes sent",
+                                        pushType,
+                                        fileName,
+                                        req.getRequestUri(),
+                                        is.getByteCount(),
+                                        t);
+                            }
                             try {
                                 is.close();
                             } catch (IOException ioe) {

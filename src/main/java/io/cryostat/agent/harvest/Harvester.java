@@ -71,6 +71,7 @@ public class Harvester implements FlightRecorderListener {
     private Optional<TemplatedRecording> sownRecording = Optional.empty();
     private final Map<TemplatedRecording, Path> exitPaths = new ConcurrentHashMap<>();
     private final AtomicBoolean exitUploadInitiated = new AtomicBoolean(false);
+    private final AtomicBoolean scheduledUploadInProgress = new AtomicBoolean(false);
     private FlightRecorder flightRecorder;
     private Future<?> task;
     private boolean running;
@@ -182,7 +183,10 @@ public class Harvester implements FlightRecorderListener {
                                 "JFR Harvester started with period {}", Duration.ofMillis(period));
                         this.task =
                                 workerPool.scheduleAtFixedRate(
-                                        this::uploadOngoing, period, period, TimeUnit.MILLISECONDS);
+                                        this::uploadOngoingScheduled,
+                                        period,
+                                        period,
+                                        TimeUnit.MILLISECONDS);
                     } else {
                         log.debug(
                                 "JFR Harvester started, periodic uploads disabled (period {} < 0)",
@@ -361,19 +365,72 @@ public class Harvester implements FlightRecorderListener {
         return Optional.empty();
     }
 
-    private Future<Void> uploadOngoing() {
-        return uploadOngoing(PushType.SCHEDULED, periodicSettings);
+    /**
+     * Entry point for the periodic upload task. If the previous scheduled upload has not yet
+     * completed, this tick is skipped rather than queued, so a slow network cannot cause an
+     * unbounded backlog of snapshots. The next tick after the in-flight upload completes will
+     * capture the then-latest data. Any failure is logged here, since an exception escaping a task
+     * submitted with {@code scheduleAtFixedRate} would otherwise silently cancel all subsequent
+     * executions.
+     */
+    private void uploadOngoingScheduled() {
+        if (!scheduledUploadInProgress.compareAndSet(false, true)) {
+            log.debug(
+                    "Skipping {} snapshot upload, previous upload still in progress",
+                    PushType.SCHEDULED);
+            return;
+        }
+        log.debug("Starting {} snapshot upload", PushType.SCHEDULED);
+        try {
+            uploadOngoing(PushType.SCHEDULED, periodicSettings)
+                    .whenComplete(
+                            (v, t) -> {
+                                scheduledUploadInProgress.set(false);
+                                if (t instanceof NoRecordingDataException) {
+                                    log.debug("{} snapshot upload skipped", PushType.SCHEDULED);
+                                } else if (t != null) {
+                                    log.warn("{} snapshot upload failed", PushType.SCHEDULED, t);
+                                }
+                            });
+        } catch (Throwable t) {
+            scheduledUploadInProgress.set(false);
+            log.warn("{} snapshot upload could not be started", PushType.SCHEDULED, t);
+            if (t instanceof Error) {
+                throw (Error) t;
+            }
+        }
     }
 
-    private Future<Void> uploadOngoing(PushType pushType, RecordingSettings settings) {
+    private CompletableFuture<Void> uploadOngoing(PushType pushType, RecordingSettings settings) {
         Recording recording = settings.apply(flightRecorder.takeSnapshot());
+        log.debug(
+                "{} snapshot {}({}) taken, state={}, maxAge={}, maxSize={}",
+                pushType,
+                recording.getName(),
+                recording.getId(),
+                recording.getState(),
+                recording.getMaxAge(),
+                recording.getMaxSize());
         try {
             Path exitPath = Files.createTempFile(null, null);
             Files.write(exitPath, new byte[0], StandardOpenOption.TRUNCATE_EXISTING);
             recording.dump(exitPath);
-            if (Files.size(exitPath) < 1) {
-                return CompletableFuture.failedFuture(
-                        new IllegalStateException("No source recording data"));
+            long size = Files.size(exitPath);
+            log.debug(
+                    "{} snapshot {}({}) dumped {} bytes to {}",
+                    pushType,
+                    recording.getName(),
+                    recording.getId(),
+                    size,
+                    exitPath);
+            if (size < 1) {
+                log.debug(
+                        "{} snapshot {}({}) dump {} is empty, skipping upload",
+                        pushType,
+                        recording.getName(),
+                        recording.getId(),
+                        exitPath);
+                return CompletableFuture.failedFuture(new NoRecordingDataException());
             }
             log.trace("Dumping {}({}) to {}", recording.getName(), recording.getId(), exitPath);
             return client.upload(
@@ -382,6 +439,19 @@ public class Harvester implements FlightRecorderListener {
                             maxFiles,
                             additionalLabels(recording, true),
                             exitPath)
+                    .whenComplete(
+                            (v, t) -> {
+                                if (t != null) {
+                                    log.warn(
+                                            "{} upload of {} failed, dump file retained for"
+                                                    + " cleanup",
+                                            pushType,
+                                            exitPath,
+                                            t);
+                                } else {
+                                    log.debug("{} upload of {} completed", pushType, exitPath);
+                                }
+                            })
                     .thenRun(
                             () -> {
                                 try {
@@ -392,6 +462,12 @@ public class Harvester implements FlightRecorderListener {
                                 }
                             });
         } catch (IOException e) {
+            log.warn(
+                    "{} snapshot {}({}) could not be dumped",
+                    pushType,
+                    recording.getName(),
+                    recording.getId(),
+                    e);
             return CompletableFuture.failedFuture(e);
         } finally {
             recording.close();
@@ -442,6 +518,13 @@ public class Harvester implements FlightRecorderListener {
         map.put("duration", String.valueOf(duration));
         map.put("sourceRecordingId", String.valueOf(recording.getId()));
         return map;
+    }
+
+    /** Signals that a snapshot contained no data to upload. */
+    private static class NoRecordingDataException extends IllegalStateException {
+        NoRecordingDataException() {
+            super("No source recording data");
+        }
     }
 
     public enum PushType {
