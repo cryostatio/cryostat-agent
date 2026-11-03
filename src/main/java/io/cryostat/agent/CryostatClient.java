@@ -35,6 +35,8 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
 
 import io.cryostat.agent.FlightRecorderHelper.ConfigurationInfo;
@@ -101,6 +103,7 @@ public class CryostatClient {
     private final URI baseUri;
     private final String realm;
     private final DiscoveryPublication discoveryPublication;
+    private final long uploadTimeoutMs;
 
     CryostatClient(
             Executor executor,
@@ -111,7 +114,8 @@ public class CryostatClient {
             String appName,
             URI baseUri,
             String realm,
-            DiscoveryPublication discoveryPublication) {
+            DiscoveryPublication discoveryPublication,
+            long uploadTimeoutMs) {
         this.executor = executor;
         this.mapper = mapper;
         this.host = HttpHost.create(baseUri);
@@ -122,6 +126,7 @@ public class CryostatClient {
         this.baseUri = baseUri;
         this.realm = realm;
         this.discoveryPublication = discoveryPublication;
+        this.uploadTimeoutMs = uploadTimeoutMs;
 
         log.trace("Using Cryostat baseuri {}", baseUri);
     }
@@ -380,7 +385,9 @@ public class CryostatClient {
                                                         ContentType.TEXT_PLAIN))
                                         .build());
         req.setEntity(entityBuilder.build());
-        return supply(
+        CompletableFuture<Void> deadline = new CompletableFuture<>();
+        CompletableFuture<Void> upload =
+                supply(
                         req,
                         (res) -> {
                             Instant finish = Instant.now();
@@ -394,25 +401,44 @@ public class CryostatClient {
                                     Duration.between(start, finish));
                             assertOkStatus(req, res);
                             return (Void) null;
-                        })
-                .whenComplete(
-                        (v, t) -> {
-                            if (t != null) {
-                                log.warn(
-                                        "{} upload of {} to {} failed after {} bytes sent",
-                                        pushType,
-                                        fileName,
-                                        req.getRequestUri(),
-                                        is.getByteCount(),
-                                        t);
-                            }
-                            try {
-                                is.close();
-                            } catch (IOException ioe) {
-                                log.warn("Failed to close recording upload stream", ioe);
-                            }
-                            req.reset();
                         });
+        if (uploadTimeoutMs > 0) {
+            deadline.orTimeout(uploadTimeoutMs, TimeUnit.MILLISECONDS)
+                    .exceptionally(
+                            t -> {
+                                if (t instanceof TimeoutException) {
+                                    log.warn(
+                                            "{} upload of {} to {} exceeded {}ms after {} bytes"
+                                                    + " sent, aborting request",
+                                            pushType,
+                                            fileName,
+                                            req.getRequestUri(),
+                                            uploadTimeoutMs,
+                                            is.getByteCount());
+                                    req.cancel();
+                                }
+                                return null;
+                            });
+        }
+        return upload.whenComplete(
+                (v, t) -> {
+                    deadline.complete(null);
+                    if (t != null) {
+                        log.warn(
+                                "{} upload of {} to {} failed after {} bytes sent",
+                                pushType,
+                                fileName,
+                                req.getRequestUri(),
+                                is.getByteCount(),
+                                t);
+                    }
+                    try {
+                        is.close();
+                    } catch (IOException ioe) {
+                        log.warn("Failed to close recording upload stream", ioe);
+                    }
+                    req.reset();
+                });
     }
 
     private CompletableFuture<PluginInfo> postForPluginInfo(URI uri, Object payload) {

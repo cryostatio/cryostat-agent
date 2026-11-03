@@ -23,16 +23,24 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import io.cryostat.agent.CryostatClient.DiscoveryPublication;
 import io.cryostat.agent.WebServer.CredentialsSnapshot;
+import io.cryostat.agent.harvest.Harvester;
 import io.cryostat.agent.model.DiscoveryNode;
 import io.cryostat.agent.model.PluginInfo;
 
@@ -81,9 +89,11 @@ class CryostatClientTest {
                         APP_NAME,
                         BASE_URI,
                         REALM,
-                        discoveryPublication);
+                        discoveryPublication,
+                        0L);
 
-        doAnswer(
+        lenient()
+                .doAnswer(
                         invocation -> {
                             Runnable r = invocation.getArgument(0);
                             r.run();
@@ -240,7 +250,8 @@ class CryostatClientTest {
                         APP_NAME,
                         BASE_URI,
                         differentRealm,
-                        discoveryPublication);
+                        discoveryPublication,
+                        0L);
 
         URI callback = URI.create("http://agent.example.com:9977");
         JsonNode requestBody = captureRegistrationRequest(clientWithDifferentRealm, callback);
@@ -248,6 +259,51 @@ class CryostatClientTest {
         String matchExpression = requestBody.get("credential").get("matchExpression").asText();
         assertTrue(matchExpression.contains(differentRealm));
         assertFalse(matchExpression.contains(REALM));
+    }
+
+    @Test
+    void testUploadExceedingTimeoutAbortsInFlightRequest() throws Exception {
+        ExecutorService realExecutor = Executors.newSingleThreadExecutor();
+        Path recording = Files.createTempFile("upload-timeout", ".jfr");
+        Files.write(recording, new byte[] {'F', 'L', 'R', 0});
+        try {
+            CryostatClient timeoutClient =
+                    new CryostatClient(
+                            realExecutor,
+                            mapper,
+                            http,
+                            INSTANCE_ID,
+                            JVM_ID,
+                            APP_NAME,
+                            BASE_URI,
+                            REALM,
+                            new DiscoveryPublication("MERGE", Map.of()),
+                            200L);
+            AtomicBoolean abortedWhileInFlight = new AtomicBoolean();
+            when(http.execute(any(HttpHost.class), any(HttpPost.class)))
+                    .thenAnswer(
+                            invocation -> {
+                                HttpPost request = invocation.getArgument(1);
+                                long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+                                while (!request.isCancelled() && System.nanoTime() < deadline) {
+                                    Thread.sleep(25);
+                                }
+                                abortedWhileInFlight.set(request.isCancelled());
+                                throw new IOException("request aborted");
+                            });
+
+            CompletableFuture<Void> upload =
+                    timeoutClient.upload(
+                            Harvester.PushType.SCHEDULED, Optional.empty(), 5, Map.of(), recording);
+
+            ExecutionException ex =
+                    assertThrows(ExecutionException.class, () -> upload.get(5, TimeUnit.SECONDS));
+            assertInstanceOf(IOException.class, ex.getCause());
+            assertTrue(abortedWhileInFlight.get(), "in-flight request should have been aborted");
+        } finally {
+            realExecutor.shutdownNow();
+            Files.deleteIfExists(recording);
+        }
     }
 
     private JsonNode captureRegistrationRequest(CryostatClient client, URI callback)

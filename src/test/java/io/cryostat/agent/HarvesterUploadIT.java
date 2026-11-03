@@ -127,7 +127,28 @@ class HarvesterUploadIT {
                 1, cryostat.maxConcurrentUploads(), "scheduled uploads should never overlap");
     }
 
+    @Test
+    void testUploadExceedingTimeoutIsAbortedAndScheduleContinues() throws Exception {
+        cryostat.holdUploads();
+        startAgent(Map.of("cryostat.agent.harvester.upload.timeout-ms", "2000"));
+
+        Assertions.assertTrue(
+                cryostat.awaitUploadCount(1, 30, TimeUnit.SECONDS),
+                "Cryostat should receive a scheduled upload");
+        assertLogged("Skipping SCHEDULED snapshot upload, previous upload still in progress");
+        assertLogged("exceeded 2000ms");
+        assertLogged("SCHEDULED snapshot upload failed");
+
+        Assertions.assertTrue(
+                cryostat.awaitUploadCount(2, 30, TimeUnit.SECONDS),
+                "Harvester should start a new upload once the timed-out one has been aborted");
+    }
+
     private void startAgent() throws Exception {
+        startAgent(Map.of());
+    }
+
+    private void startAgent(Map<String, String> additionalProperties) throws Exception {
         int agentPort = freePort();
         Map<String, String> properties = new HashMap<>();
         properties.put("cryostat.agent.baseuri", "http://localhost:" + cryostat.port());
@@ -137,6 +158,7 @@ class HarvesterUploadIT {
         properties.put("cryostat.agent.webclient.tls.required", "false");
         properties.put("cryostat.agent.harvester.template", "Continuous");
         properties.put("cryostat.agent.harvester.period-ms", Long.toString(HARVEST_PERIOD_MS));
+        properties.putAll(additionalProperties);
 
         dummyAppWithAgent =
                 ProcessTestHelper.startDummyAppWithAgentAndJvmArguments(

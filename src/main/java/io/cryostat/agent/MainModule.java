@@ -811,8 +811,8 @@ public abstract class MainModule {
             @Named(ConfigModule.CRYOSTAT_AGENT_BASEURI) URI baseUri,
             @Named(ConfigModule.CRYOSTAT_AGENT_REALM) String realm,
             @Named(ConfigModule.CRYOSTAT_AGENT_PUBLISH_FILL_STRATEGY) String fillStrategy,
-            @Named(ConfigModule.CRYOSTAT_AGENT_PUBLISH_CONTEXT)
-                    Map<String, String> publishContext) {
+            @Named(ConfigModule.CRYOSTAT_AGENT_PUBLISH_CONTEXT) Map<String, String> publishContext,
+            @Named(ConfigModule.CRYOSTAT_AGENT_HARVESTER_UPLOAD_TIMEOUT_MS) long uploadTimeoutMs) {
         return new CryostatClient(
                 executor,
                 objectMapper,
@@ -822,7 +822,8 @@ public abstract class MainModule {
                 appName,
                 baseUri,
                 realm,
-                new CryostatClient.DiscoveryPublication(fillStrategy, publishContext));
+                new CryostatClient.DiscoveryPublication(fillStrategy, publishContext),
+                uploadTimeoutMs);
     }
 
     @Provides
