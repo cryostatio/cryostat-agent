@@ -258,7 +258,8 @@ public class Harvester implements FlightRecorderListener {
                                         exitDumpWritten.countDown();
                                     }
                                     try {
-                                        if (!exitUploadInitiated.get()) {
+                                        if (!exitUploadInitiated.get()
+                                                && (!isSownRecording && shuttingDown.get())) {
                                             tr.getRecording().dump(exitPaths.get(tr));
                                             // This callback can be invoked on the JDK's
                                             // "JFR Shutdown Hook" thread, which the JVM must join
