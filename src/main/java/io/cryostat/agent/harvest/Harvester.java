@@ -84,7 +84,7 @@ public class Harvester implements FlightRecorderListener {
     // Counted down once the sown recording's dump-on-exit destination file has been written and is
     // safe to read, whether that write was performed by our own exit upload or by the JDK's JFR
     // shutdown hook.
-    private final CountDownLatch exitDumpWritten = new CountDownLatch(1);
+    private volatile CountDownLatch exitDumpWritten = new CountDownLatch(1);
     private final AtomicBoolean scheduledUploadInProgress = new AtomicBoolean(false);
     private FlightRecorder flightRecorder;
     private Future<?> task;
@@ -557,6 +557,7 @@ public class Harvester implements FlightRecorderListener {
                             .ifPresent(
                                     recording -> {
                                         handleNewRecording(recording, this.periodicSettings);
+                                        this.exitDumpWritten = new CountDownLatch(1);
                                         this.sownRecording = Optional.of(recording);
                                         recording.getRecording().start();
                                         log.debug(
