@@ -250,6 +250,8 @@ public abstract class ConfigModule {
             "cryostat.agent.harvester.exit.max-age-ms";
     public static final String CRYOSTAT_AGENT_HARVESTER_EXIT_MAX_SIZE_B =
             "cryostat.agent.harvester.exit.max-size-b";
+    public static final String CRYOSTAT_AGENT_HARVESTER_EXIT_TIMEOUT_MS =
+            "cryostat.agent.harvester.exit.timeout-ms";
     public static final String CRYOSTAT_AGENT_HARVESTER_MAX_AGE_MS =
             "cryostat.agent.harvester.max-age-ms";
     public static final String CRYOSTAT_AGENT_HARVESTER_MAX_SIZE_B =
@@ -1146,6 +1148,13 @@ public abstract class ConfigModule {
     @Named(CRYOSTAT_AGENT_HARVESTER_EXIT_MAX_SIZE_B)
     public static long provideCryostatAgentHarvesterExitMaxSize(SmallRyeConfig config) {
         return config.getValue(CRYOSTAT_AGENT_HARVESTER_EXIT_MAX_SIZE_B, long.class);
+    }
+
+    @Provides
+    @Singleton
+    @Named(CRYOSTAT_AGENT_HARVESTER_EXIT_TIMEOUT_MS)
+    public static long provideCryostatAgentHarvesterExitTimeoutMs(SmallRyeConfig config) {
+        return config.getValue(CRYOSTAT_AGENT_HARVESTER_EXIT_TIMEOUT_MS, long.class);
     }
 
     @Provides
