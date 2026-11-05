@@ -374,7 +374,10 @@ public class Harvester implements FlightRecorderListener {
                         "Exit upload budget of " + exitTimeout + "ms elapsed before starting");
             }
             uploadOngoing(PushType.ON_EXIT, exitSettings).get(remaining, TimeUnit.MILLISECONDS);
-        } catch (ExecutionException | InterruptedException | TimeoutException e) {
+        } catch (ExecutionException
+                | InterruptedException
+                | TimeoutException
+                | RuntimeException e) {
             // The snapshot path is the only one that can honour exit-max-age-ms/exit-max-size-b,
             // so it is always tried first. It is also the most fragile: it has to create a
             // snapshot, open a new file and copy chunks out, all while the JDK's JFR shutdown hook
