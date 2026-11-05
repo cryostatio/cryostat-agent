@@ -71,6 +71,12 @@ public class Harvester implements FlightRecorderListener {
     private Optional<TemplatedRecording> sownRecording = Optional.empty();
     private final Map<TemplatedRecording, Path> exitPaths = new ConcurrentHashMap<>();
     private final AtomicBoolean exitUploadInitiated = new AtomicBoolean(false);
+    // Set synchronously as soon as an exit upload is requested, before any asynchronous work is
+    // submitted. Once set, the JVM is on its way down and the Harvester must not destroy any
+    // recording or dump file that the exit upload may still need: the JDK's own
+    // "JFR Shutdown Hook" runs concurrently with ours and will stop the sown recording out from
+    // under us, and that stop is what writes the tail-end data to its destination file.
+    private final AtomicBoolean shuttingDown = new AtomicBoolean(false);
     private final AtomicBoolean scheduledUploadInProgress = new AtomicBoolean(false);
     private FlightRecorder flightRecorder;
     private Future<?> task;
@@ -242,19 +248,39 @@ public class Harvester implements FlightRecorderListener {
                                     } catch (InterruptedException | ExecutionException e) {
                                         log.warn("Could not upload exit dump file", e);
                                     }
-                                    if (isSownRecording) {
+                                    if (isSownRecording && !shuttingDown.get()) {
+                                        // During shutdown the in-flight exit upload owns the
+                                        // lifecycle of this recording and closes it in its own
+                                        // finally block. Closing it here would drop the recording's
+                                        // chunks (PlatformRecording#close does not write the
+                                        // destination) while the exit upload is still reading them.
                                         safeCloseCurrentRecording();
                                     }
                                     // next
                                     break;
                                 case CLOSED:
+                                    if (shuttingDown.get()) {
+                                        // Keep the tracking entry and the dump file. The stop that
+                                        // preceded this close wrote the tail-end data to
+                                        // exitPaths.get(tr), and that file is the exit upload's
+                                        // fallback source. It is a temp file in the container's
+                                        // ephemeral storage, so leaving it behind on the way out
+                                        // costs nothing.
+                                        log.trace(
+                                                "Shutting down, retaining temp file {} for exit"
+                                                        + " upload",
+                                                exitPaths.get(tr));
+                                        break;
+                                    }
                                     executor.submit(
                                             () -> {
                                                 try {
                                                     recordings.remove(tr);
                                                     Path exitPath = exitPaths.remove(tr);
-                                                    Files.deleteIfExists(exitPath);
-                                                    log.trace("Deleted temp file {}", exitPath);
+                                                    if (exitPath != null) {
+                                                        Files.deleteIfExists(exitPath);
+                                                        log.trace("Deleted temp file {}", exitPath);
+                                                    }
                                                 } catch (IOException e) {
                                                     log.warn("Could not delete temp file", e);
                                                 } finally {
@@ -273,6 +299,11 @@ public class Harvester implements FlightRecorderListener {
     }
 
     public Future<Void> exitUpload() {
+        // Must be set on the calling (shutdown hook) thread rather than inside the async task:
+        // otherwise the JDK's JFR shutdown hook can stop and close the sown recording during the
+        // window between submission and execution, and our own listener callback would tear down
+        // the data this upload is about to read.
+        shuttingDown.set(true);
         return CompletableFuture.supplyAsync(
                 () -> {
                     running = false;
