@@ -591,6 +591,27 @@ class TlsUtilTest {
     }
 
     @Test
+    void testHttpsConfiguratorRejectsScsvOnlyCiphersWithTls13Only() {
+        // a signalling cipher suite has no "_WITH_" in its name but negotiates no cipher, so it
+        // must not be mistaken for TLS 1.3 support
+        List<String> scsvCiphers = List.of("TLS_EMPTY_RENEGOTIATION_INFO_SCSV");
+        String[] supportedCiphers = sslContext.getSupportedSSLParameters().getCipherSuites();
+        if (!List.of(supportedCiphers).contains(scsvCiphers.get(0))) {
+            return;
+        }
+        String[] supportedProtocols = sslContext.getSupportedSSLParameters().getProtocols();
+        if (!List.of(supportedProtocols).contains("TLSv1.3")) {
+            return;
+        }
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () ->
+                        TlsUtil.createHttpsConfigurator(
+                                sslContext, Optional.of("TLSv1.3"), Optional.empty(), scsvCiphers));
+    }
+
+    @Test
     void testSocketFactoryRejectsTls12CiphersWithTls13Only() {
         List<String> tls12Ciphers = List.of("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256");
         String[] supported = sslContext.getSupportedSSLParameters().getCipherSuites();

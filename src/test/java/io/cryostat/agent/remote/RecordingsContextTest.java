@@ -536,6 +536,84 @@ class RecordingsContextTest {
     }
 
     @Test
+    void testJfrSyncTempDirectoryKeepsCommaFreeTmpDir() throws Exception {
+        Path tmpDir = Files.createTempDirectory("cryostat-no-comma-");
+        try {
+            assertEquals(tmpDir, ctx.jfrSyncTempDirectory(tmpDir.toString()));
+        } finally {
+            Files.deleteIfExists(tmpDir);
+        }
+    }
+
+    @Test
+    void testJfrSyncTempDirectoryFallsBackWhenTmpDirContainsComma() throws Exception {
+        Path tmpDir = Files.createTempDirectory("cryostat,comma-");
+        try {
+            Path resolved = ctx.jfrSyncTempDirectory(tmpDir.toString());
+            assertFalse(
+                    resolved.toString().contains(","),
+                    "expected a comma-free fallback directory, got " + resolved);
+            assertTrue(Files.isDirectory(resolved));
+        } finally {
+            Files.deleteIfExists(tmpDir);
+        }
+    }
+
+    @Test
+    void testStartJfrSyncRecordingUsesCommaFreeTempPaths() throws Exception {
+        when(config.getValue(anyString(), eq(boolean.class))).thenReturn(true);
+        when(asyncProfilerExecutor.isAvailable()).thenReturn(true);
+        doAnswer(
+                        invocation -> {
+                            String cmd = (String) invocation.getArgument(0);
+                            String outputPath =
+                                    cmd.substring(cmd.indexOf("file=") + "file=".length());
+                            Recording simulated = new Recording();
+                            simulated.setDestination(Path.of(outputPath));
+                            simulated.start();
+                            recordingsToClose.add(simulated);
+                            return "profiler is running";
+                        })
+                .when(asyncProfilerExecutor)
+                .execute(anyString());
+
+        Path commaTmpDir = Files.createTempDirectory("cryostat,comma-");
+        String originalTmpDir = System.getProperty("java.io.tmpdir");
+        System.setProperty("java.io.tmpdir", commaTmpDir.toString());
+        try {
+            RecordingsContext.StartRecordingRequest req =
+                    new RecordingsContext.StartRecordingRequest();
+            req.name = "jfrsync-comma-tmpdir";
+            req.template =
+                    "<?xml version=\"1.0\" encoding=\"UTF-8\"?><configuration"
+                            + " version=\"2.0\"></configuration>";
+            req.asprofEvents = List.of("cpu");
+
+            mockPost(req);
+            ctx.handle(exchange);
+
+            verify(exchange).sendResponseHeaders(eq(201), anyLong());
+            org.mockito.ArgumentCaptor<String> cmdCaptor =
+                    org.mockito.ArgumentCaptor.forClass(String.class);
+            verify(asyncProfilerExecutor).execute(cmdCaptor.capture());
+            String cmd = cmdCaptor.getValue();
+            String jfcPath =
+                    cmd.substring(
+                            cmd.indexOf("jfrsync=") + "jfrsync=".length(), cmd.indexOf(",event="));
+            String outputPath = cmd.substring(cmd.indexOf("file=") + "file=".length());
+            // a comma in either path would be parsed by async-profiler as an argument separator
+            assertFalse(
+                    jfcPath.contains(","), "jfrsync template path contains a comma: " + jfcPath);
+            assertFalse(
+                    outputPath.contains(","),
+                    "jfrsync output path contains a comma: " + outputPath);
+        } finally {
+            System.setProperty("java.io.tmpdir", originalTmpDir);
+            Files.deleteIfExists(commaTmpDir);
+        }
+    }
+
+    @Test
     void testStartJfrSyncRecordingWithInvalidEventNameRespondsBadRequest() throws Exception {
         when(config.getValue(anyString(), eq(boolean.class))).thenReturn(true);
         when(asyncProfilerExecutor.isAvailable()).thenReturn(true);

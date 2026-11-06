@@ -22,6 +22,7 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.text.ParseException;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -57,6 +58,8 @@ import org.slf4j.LoggerFactory;
 class RecordingsContext implements RemoteContext {
 
     private static final String PATH = "/recordings/";
+    private static final String JFRSYNC_TEMP_PREFIX = "cryostat-jfrsync-";
+    private static final String JFRSYNC_OUTPUT_FILE_NAME = "recording.jfr";
     private static final Pattern PATH_ID_PATTERN =
             Pattern.compile("^" + PATH + "(\\d+)$", Pattern.MULTILINE);
 
@@ -597,7 +600,12 @@ class RecordingsContext implements RemoteContext {
             // not need to be - and must not be - the separate AsyncProfilerContext#repository
             // used by the standalone async-profiler feature. The file lives in a private
             // per-recording directory so that no other local user can pre-create or swap it.
-            outputFile = Files.createTempDirectory("cryostat-jfrsync-").resolve("recording.jfr");
+            Path outputDir = Files.createTempDirectory(jfrSyncTempDirectory(), JFRSYNC_TEMP_PREFIX);
+            outputFile = outputDir.resolve(JFRSYNC_OUTPUT_FILE_NAME);
+            // registered before the file it contains, so that the JVM's reverse-order exit
+            // deletion empties the directory before removing it
+            deleteOnExit(outputDir);
+            deleteOnExit(outputFile);
 
             String events =
                     req.asprofEvents.stream()
@@ -649,10 +657,68 @@ class RecordingsContext implements RemoteContext {
                 .collect(Collectors.toSet());
     }
 
+    /**
+     * Writes the given event template contents to a temporary {@code .jfc} file whose path can be
+     * embedded in an async-profiler command string, and registers it for deletion at JVM exit in
+     * case the recording is never explicitly deleted.
+     */
     private Path writeJfcTempFile(String contents) throws IOException {
-        Path jfcFile = Files.createTempFile("cryostat-jfrsync-", ".jfc");
+        Path jfcFile = Files.createTempFile(jfrSyncTempDirectory(), JFRSYNC_TEMP_PREFIX, ".jfc");
+        deleteOnExit(jfcFile);
         Files.write(jfcFile, contents.getBytes(StandardCharsets.UTF_8));
         return jfcFile;
+    }
+
+    /**
+     * Resolves the base directory to create jfrsync temporary files in. async-profiler parses its
+     * command string as a comma-separated argument list, so any file path embedded in that string
+     * must not contain a comma - otherwise the path is split and reparsed as bogus arguments.
+     * Generated temporary file names never contain commas, so only the base directory has to be
+     * checked: if the configured {@code java.io.tmpdir} contains one, fall back to {@code /tmp}.
+     *
+     * @throws IOException if no usable comma-free temporary directory is available
+     */
+    private Path jfrSyncTempDirectory() throws IOException {
+        return jfrSyncTempDirectory(System.getProperty("java.io.tmpdir", "/tmp"));
+    }
+
+    /**
+     * @param configuredTmpDir the configured temporary directory, normally {@code java.io.tmpdir}
+     * @return {@code configuredTmpDir} if it holds no comma, otherwise a comma-free fallback
+     * @throws IOException if no usable comma-free temporary directory is available
+     * @see #jfrSyncTempDirectory()
+     */
+    Path jfrSyncTempDirectory(String configuredTmpDir) throws IOException {
+        Path configured = Paths.get(configuredTmpDir).toAbsolutePath();
+        if (configured.toString().indexOf(',') < 0) {
+            return configured;
+        }
+        Path fallback = Paths.get("/tmp");
+        if (Files.isDirectory(fallback) && Files.isWritable(fallback)) {
+            log.warn(
+                    "java.io.tmpdir {} contains a comma, which async-profiler cannot accept within"
+                            + " a file path; creating jfrsync temporary files in {} instead",
+                    configured,
+                    fallback);
+            return fallback;
+        }
+        throw new IOException(
+                "No comma-free temporary directory is available for jfrsync files:"
+                        + " async-profiler cannot accept a file path containing a comma, and"
+                        + " java.io.tmpdir is "
+                        + configured);
+    }
+
+    /**
+     * Registers a jfrsync temporary file or directory for deletion when the JVM exits, so that a
+     * recording which is never explicitly deleted does not leave its files behind. Files are kept
+     * for the whole lifetime of the agent, including after the recording stops, so that they remain
+     * downloadable.
+     */
+    private static void deleteOnExit(Path path) {
+        if (path != null) {
+            path.toFile().deleteOnExit();
+        }
     }
 
     private Set<Long> currentRecordingIds() {

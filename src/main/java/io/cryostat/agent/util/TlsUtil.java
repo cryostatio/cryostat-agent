@@ -143,7 +143,11 @@ public class TlsUtil {
         Set<String> protoSet = new HashSet<>(Arrays.asList(effectiveProtocols));
         boolean hasTls13 = protoSet.contains("TLSv1.3");
         boolean hasTls12OrBelow = protoSet.stream().anyMatch(p -> !p.equals("TLSv1.3"));
-        boolean hasAnyTls13Cipher = Arrays.stream(ciphers).anyMatch(c -> !c.contains("_WITH_"));
+        // a signalling cipher suite value (TLS_EMPTY_RENEGOTIATION_INFO_SCSV,
+        // TLS_FALLBACK_SCSV) also has no "_WITH_", but it negotiates no actual cipher, so it
+        // must not count as TLS 1.3 support
+        boolean hasAnyTls13Cipher =
+                Arrays.stream(ciphers).anyMatch(c -> !c.contains("_WITH_") && !c.endsWith("_SCSV"));
         boolean hasAnyTls12Cipher = Arrays.stream(ciphers).anyMatch(c -> c.contains("_WITH_"));
 
         if (hasTls13 && !hasTls12OrBelow && !hasAnyTls13Cipher) {
