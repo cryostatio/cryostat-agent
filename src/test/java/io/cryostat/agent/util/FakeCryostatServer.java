@@ -42,7 +42,7 @@ public class FakeCryostatServer implements AutoCloseable {
     private static final String PLUGIN_INFO =
             "{\"id\":\"it-plugin\",\"token\":\"it-token\",\"env\":[]}";
     private static final String HEALTH =
-            "{\"cryostatVersion\":\"4.3.0\",\"build\":{\"git\":{\"hash\":\"it\"}}}";
+            "{\"cryostatVersion\":\"5.0.0\",\"build\":{\"git\":{\"hash\":\"it\"}}}";
 
     private final ObjectMapper mapper = new ObjectMapper();
     private final HttpServer server;
@@ -53,9 +53,11 @@ public class FakeCryostatServer implements AutoCloseable {
         server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
         server.setExecutor(executor);
         server.createContext("/health", ex -> respond(ex, 200, HEALTH));
-        server.createContext("/api/v4.3/discovery/agents", this::register);
-        server.createContext("/api/v4/discovery", ex -> respond(ex, 200, PLUGIN_INFO));
-        server.createContext("/api/beta/recordings/", this::upload);
+        // NOTE: HttpServer dispatches on longest matching path prefix, so the more specific
+        // agent registration context takes precedence over the general discovery plugins one.
+        server.createContext("/api/v5/discovery/plugins/agent", this::register);
+        server.createContext("/api/v5/discovery/plugins", ex -> respond(ex, 200, PLUGIN_INFO));
+        server.createContext("/api/v5/recordings/", this::upload);
         server.createContext("/", ex -> respond(ex, 200, "{}"));
         server.start();
     }
@@ -80,7 +82,7 @@ public class FakeCryostatServer implements AutoCloseable {
         respond(ex, 200, PLUGIN_INFO);
     }
 
-    /** Handles {@code POST /api/beta/recordings/<jvmId>} by consuming the body and accepting it. */
+    /** Handles {@code POST /api/v5/recordings/<jvmId>} by consuming the body and accepting it. */
     protected void upload(HttpExchange ex) throws IOException {
         try (InputStream is = ex.getRequestBody()) {
             is.readAllBytes();
