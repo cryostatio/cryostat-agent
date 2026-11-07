@@ -94,7 +94,7 @@
 
   <com.github.spotbugs.version>4.10.5</com.github.spotbugs.version>
   <com.github.spotbugs.plugin.version>4.10.5.0</com.github.spotbugs.plugin.version>
-  <org.junit.jupiter.version>5.10.5</org.junit.jupiter.version>
+  <org.junit.jupiter.version>5.14.4</org.junit.jupiter.version>
   <org.hamcrest.version>3.0</org.hamcrest.version>
   <org.mockito.version>5.24.0</org.mockito.version>
   <org.jacoco.maven.plugin.version>0.8.16</org.jacoco.maven.plugin.version>
