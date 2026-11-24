@@ -9,7 +9,10 @@
     ":docker",
     ":separateMajorReleases",
     ":separateMultipleMinorReleases",
-    ":separatePatchReleases"
+    ":separatePatchReleases",
+    "github>cryostatio/cryostat//.github/renovate/release-branch/lockdown",
+    "github>cryostatio/cryostat//.github/renovate/release-branch/default(maven)",
+    "github>cryostatio/cryostat//.github/renovate/release-branch/default(dockerfile)"
   ],
   "baseBranchPatterns": ["main", "/^cryostat-v.*/"],
   "reviewersFromCodeOwners": true,
@@ -37,22 +40,6 @@
     }
   ],
   "packageRules": [
-    {
-      "description": "Dockerfile base image updates are never gated by the dependency dashboard, on any branch",
-      "matchManagers": ["dockerfile"],
-      "dependencyDashboardApproval": false
-    },
-    {
-      "description": "Disable all dependency updates on release branches except Dockerfile base images; other updates there are handled via Mergify backport",
-      "matchBaseBranches": ["/^cryostat-v.*/"],
-      "enabled": false
-    },
-    {
-      "description": "Allow Dockerfile base image updates on release branches",
-      "matchBaseBranches": ["/^cryostat-v.*/"],
-      "matchManagers": ["dockerfile"],
-      "enabled": true
-    },
     {
       "description": "Require approval for projectnessie updates",
       "matchManagers": [
