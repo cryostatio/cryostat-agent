@@ -27,4 +27,11 @@ public interface RemoteContext extends HttpHandler {
     default boolean available() {
         return true;
     }
+
+    /**
+     * Invoked once when the agent's web server starts, which is independent of whether the agent
+     * has registered with Cryostat. Contexts that need to observe the host JVM from the earliest
+     * possible moment can use this to begin doing so.
+     */
+    default void start() {}
 }

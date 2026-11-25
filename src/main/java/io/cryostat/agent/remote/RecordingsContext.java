@@ -24,6 +24,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.text.ParseException;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -32,12 +33,17 @@ import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.function.LongFunction;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import javax.inject.Inject;
 
+import io.cryostat.agent.ConfigModule;
 import io.cryostat.agent.FlightRecorderHelper;
 import io.cryostat.libcryostat.serialization.SerializableRecordingDescriptor;
 import io.cryostat.libcryostat.templates.InvalidEventTemplateException;
@@ -47,6 +53,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
 import io.smallrye.config.SmallRyeConfig;
 import jdk.jfr.Configuration;
+import jdk.jfr.FlightRecorder;
+import jdk.jfr.FlightRecorderListener;
 import jdk.jfr.Recording;
 import jdk.jfr.RecordingState;
 import org.apache.commons.lang3.StringUtils;
@@ -57,6 +65,7 @@ import org.slf4j.LoggerFactory;
 class RecordingsContext implements RemoteContext {
 
     private static final String PATH = "/recordings/";
+    private static final Duration CHECK_GRACE = Duration.ofSeconds(1);
     private static final Pattern PATH_ID_PATTERN =
             Pattern.compile("^" + PATH + "(\\d+)$", Pattern.MULTILINE);
 
@@ -65,35 +74,91 @@ class RecordingsContext implements RemoteContext {
     private final ObjectMapper mapper;
     private final FlightRecorderHelper flightRecorder;
     private final AsyncProfilerExecutor asyncProfilerExecutor;
+    private final ScheduledExecutorService scheduler;
 
     /**
-     * Tracks bookkeeping for a jfrsync-enabled recording, keyed by the agent-local recording ID.
-     * async-profiler's {@code JfrSync.start()} calls {@code recording.setDestination(...)} on the
-     * {@code jdk.jfr.Recording} it creates and owns; the JDK synchronously dumps a
-     * destination-bound recording to disk and closes it the instant it stops, for any stop reason,
-     * including its own duration timer simply elapsing. There is no observable "STOPPED but still
-     * queryable via the Recording API" window -- the recording just disappears from {@code
-     * FlightRecorder}'s list. This tracked state lets the list/status/download/delete handlers keep
-     * treating the recording as present (now in a STOPPED state, with its content available from
-     * the tracked output file on disk) even after the backing {@code Recording} object is gone.
+     * Tracks every recording visible to {@code FlightRecorder}, keyed by agent-local recording ID,
+     * whether started through this context or found already present (for example one started with
+     * {@code -XX:StartFlightRecording}). Newer JDKs close a recording bound to a destination file
+     * as soon as it stops, including when its duration elapses, after which it is no longer visible
+     * to {@code FlightRecorder} or JMX; older JDKs leave it visible in the STOPPED state. Neither
+     * behaviour is assumed. When a tracked recording is found to have disappeared and had an
+     * on-disk destination, it is frozen into an immutable "ghost": a read-only STOPPED recording
+     * backed by that file, so that newer JDKs behave like older ones. The only mutation a ghost
+     * permits is deletion. A recording that disappeared without a destination, or whose destination
+     * file is gone, is forgotten as if it had never existed. The state is reconciled with the JDK
+     * once a recording's expected duration has elapsed, after every update request, and whenever a
+     * request arrives.
      */
-    private final Map<Long, JfrSyncRecording> jfrSyncRecordings = new ConcurrentHashMap<>();
+    private final Map<Long, TrackedRecording> trackedRecordings = new ConcurrentHashMap<>();
 
     @Inject
     RecordingsContext(
             SmallRyeConfig config,
             ObjectMapper mapper,
             FlightRecorderHelper flightRecorder,
-            AsyncProfilerExecutor asyncProfilerExecutor) {
+            AsyncProfilerExecutor asyncProfilerExecutor,
+            ScheduledExecutorService scheduler) {
         this.config = config;
         this.mapper = mapper;
         this.flightRecorder = flightRecorder;
         this.asyncProfilerExecutor = asyncProfilerExecutor;
+        this.scheduler = scheduler;
     }
 
     @Override
     public String path() {
         return PATH;
+    }
+
+    /**
+     * Begins tracking recordings when the agent's web server starts, rather than when the first
+     * request arrives, and independently of whether the agent has registered with Cryostat. A
+     * listener is registered at once so that recordings changing state from then on are tracked.
+     * Recordings that already exist are swept after the delay configured by {@link
+     * ConfigModule#CRYOSTAT_AGENT_RECORDINGS_INITIAL_SCAN_DELAY_MS}, because a recording started by
+     * {@code -XX:StartFlightRecording} may not yet be registered when the agent starts, depending
+     * on the machine, its load, and the JVM version. On newer JDKs a recording bound to a
+     * destination is closed as soon as it stops, so it must be known beforehand for its dump file
+     * to be found afterwards. A delay of zero or less sweeps synchronously.
+     */
+    @Override
+    public void start() {
+        if (!FlightRecorder.isAvailable()) {
+            return;
+        }
+        try {
+            FlightRecorder.addListener(
+                    new FlightRecorderListener() {
+                        @Override
+                        public void recordingStateChanged(Recording recording) {
+                            onRecordingStateChanged(recording);
+                        }
+                    });
+        } catch (Exception e) {
+            log.warn("Failed to register recording listener", e);
+        }
+        long delayMillis =
+                config.getValue(
+                        ConfigModule.CRYOSTAT_AGENT_RECORDINGS_INITIAL_SCAN_DELAY_MS, long.class);
+        if (delayMillis <= 0) {
+            reconcileTrackedRecordings();
+        } else {
+            scheduler.schedule(
+                    this::reconcileTrackedRecordings, delayMillis, TimeUnit.MILLISECONDS);
+        }
+    }
+
+    private void onRecordingStateChanged(Recording recording) {
+        try {
+            long id = recording.getId();
+            if (!trackedRecordings.containsKey(id)) {
+                track(recording, null, null);
+            }
+            reconcileTrackedRecording(id, false);
+        } catch (Exception e) {
+            log.warn("Failed to process recording state change", e);
+        }
     }
 
     @Override
@@ -102,6 +167,7 @@ class RecordingsContext implements RemoteContext {
             if (!ensureMethodAccepted(exchange)) {
                 return;
             }
+            reconcileTrackedRecordings();
             String mtd = exchange.getRequestMethod();
             long id = Long.MIN_VALUE;
             switch (mtd) {
@@ -157,18 +223,11 @@ class RecordingsContext implements RemoteContext {
                     flightRecorder.getRecordings().stream()
                             .map(SerializableRecordingDescriptor::new)
                             .collect(Collectors.toCollection(ArrayList::new));
-            Set<Long> liveIds =
-                    recordings.stream()
-                            .map(SerializableRecordingDescriptor::getId)
-                            .collect(Collectors.toSet());
-            // a jfrsync-enabled recording whose backing Recording has already stopped-and-closed
-            // (see jfrSyncRecordings javadoc) is still reported here, as STOPPED, so that the
-            // Cryostat server's recording-sync does not mistake it for an orphaned recording and
-            // delete its ActiveRecording row before archiveOnStop can act on it.
-            jfrSyncRecordings.forEach(
+            trackedRecordings.forEach(
                     (id, info) -> {
-                        if (!liveIds.contains(id) && Files.isRegularFile(info.outputFile)) {
-                            recordings.add(info.toStoppedDescriptor(id));
+                        SerializableRecordingDescriptor ghost = info.ghost();
+                        if (ghost != null) {
+                            recordings.add(ghost);
                         }
                     });
             exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
@@ -184,16 +243,32 @@ class RecordingsContext implements RemoteContext {
             streamLiveRecording(exchange, liveRecording.get());
             return;
         }
-        JfrSyncRecording info = jfrSyncRecordings.get(recordingId);
-        if (info != null) {
-            // the backing Recording has already stopped-and-closed (see jfrSyncRecordings
-            // javadoc), so the normal Recording-API-based streaming path above is unusable; serve
-            // the bytes directly from the known output file on disk instead, the same strategy
-            // AsyncProfilerContext already uses for its own repository files.
-            streamJfrSyncOutputFile(exchange, info.outputFile);
+        TrackedRecording info = trackedRecordings.get(recordingId);
+        if (info != null && info.ghost() != null) {
+            streamDumpFile(exchange, info.ghostFile());
             return;
         }
         sendHeader(exchange, HttpStatus.SC_NOT_FOUND);
+    }
+
+    private void streamDumpFile(HttpExchange exchange, Path outputFile) {
+        if (!Files.isRegularFile(outputFile)) {
+            sendHeader(exchange, HttpStatus.SC_NOT_FOUND);
+            return;
+        }
+        try (InputStream stream = Files.newInputStream(outputFile);
+                BufferedInputStream bis = new BufferedInputStream(stream);
+                OutputStream response = exchange.getResponseBody()) {
+            exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
+            bis.transferTo(response);
+        } catch (IOException ioe) {
+            log.error("I/O error", ioe);
+            try {
+                exchange.sendResponseHeaders(HttpStatus.SC_INTERNAL_SERVER_ERROR, BODY_LENGTH_NONE);
+            } catch (IOException ioe2) {
+                log.error("Failed to write response", ioe2);
+            }
+        }
     }
 
     private void streamLiveRecording(HttpExchange exchange, Recording r) {
@@ -217,43 +292,6 @@ class RecordingsContext implements RemoteContext {
         } finally {
             copy.close();
         }
-    }
-
-    private void streamJfrSyncOutputFile(HttpExchange exchange, Path outputFile) {
-        if (!Files.isRegularFile(outputFile)) {
-            sendHeader(exchange, HttpStatus.SC_NOT_FOUND);
-            return;
-        }
-        try (InputStream stream = Files.newInputStream(outputFile);
-                BufferedInputStream bis = new BufferedInputStream(stream);
-                OutputStream response = exchange.getResponseBody()) {
-            exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
-            bis.transferTo(response);
-        } catch (IOException ioe) {
-            log.error("I/O error", ioe);
-            try {
-                exchange.sendResponseHeaders(HttpStatus.SC_INTERNAL_SERVER_ERROR, BODY_LENGTH_NONE);
-            } catch (IOException ioe2) {
-                log.error("Failed to write response", ioe2);
-            }
-        }
-    }
-
-    /**
-     * Resolves a recording descriptor for status-reporting purposes, falling back to a synthesized
-     * STOPPED descriptor built from tracked jfrsync bookkeeping when the backing {@code Recording}
-     * is no longer registered with {@code FlightRecorder} (see {@link #jfrSyncRecordings} javadoc).
-     */
-    private Optional<SerializableRecordingDescriptor> findRecordingDescriptor(long recordingId) {
-        Optional<Recording> live = flightRecorder.getRecording(recordingId);
-        if (live.isPresent()) {
-            return live.map(SerializableRecordingDescriptor::new);
-        }
-        JfrSyncRecording info = jfrSyncRecordings.get(recordingId);
-        if (info != null && Files.isRegularFile(info.outputFile)) {
-            return Optional.of(info.toStoppedDescriptor(recordingId));
-        }
-        return Optional.empty();
     }
 
     private void handleStartRecordingOrSnapshot(HttpExchange exchange) throws IOException {
@@ -324,88 +362,60 @@ class RecordingsContext implements RemoteContext {
 
             Optional<Recording> recordingOpt = flightRecorder.getRecording(recordingId);
             if (recordingOpt.isEmpty()) {
-                // the backing Recording of a jfrsync-enabled recording may have already
-                // stopped-and-closed on its own (see jfrSyncRecordings javadoc) by the time this
-                // request arrives; report it as STOPPED rather than not found, since it is not
-                // actually orphaned
-                Optional<SerializableRecordingDescriptor> jfrSyncDescriptor =
-                        findRecordingDescriptor(recordingId);
-                if (jfrSyncDescriptor.isPresent()) {
-                    exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
-                    try (OutputStream response = exchange.getResponseBody()) {
-                        mapper.writeValue(response, jfrSyncDescriptor.get());
-                    }
-                } else {
-                    sendHeader(exchange, HttpStatus.SC_NOT_FOUND);
-                }
+                handleUpdateOfGhost(exchange, recordingId, jsonMap);
                 return;
             }
             Recording recording = recordingOpt.get();
-            try {
-                while (fields.hasNext()) {
-                    Map.Entry<String, JsonNode> field = fields.next();
-                    switch (field.getKey()) {
-                        case "state":
-                            if ("stopped".equalsIgnoreCase(field.getValue().textValue())) {
-                                shouldStop = true;
-                                break;
-                            }
-                            sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
-                            return;
-                        case "name":
-                            if (!StringUtils.isBlank(field.getValue().textValue())) {
-                                recording.setName(field.getValue().textValue());
-                                break;
-                            }
-                            sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
-                            return;
-                        case "duration":
-                            if (field.getValue().canConvertToLong()) {
-                                recording.setDuration(
-                                        Duration.ofMillis(field.getValue().longValue()));
-                                break;
-                            }
-                            sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
-                            return;
-                        case "maxSize":
-                            if (field.getValue().canConvertToLong()) {
-                                recording.setMaxSize(field.getValue().longValue());
-                                break;
-                            }
-                            sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
-                            return;
-                        case "maxAge":
-                            if (field.getValue().canConvertToLong()) {
-                                recording.setMaxAge(
-                                        Duration.ofMillis(field.getValue().longValue()));
-                                break;
-                            }
-                            sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
-                            return;
-                        case "toDisk":
-                            if (field.getValue().isBoolean()) {
-                                recording.setToDisk(field.getValue().booleanValue());
-                                break;
-                            }
-                            sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
-                            return;
-                        default:
-                            log.warn("Unknown recording option {}", field.getKey());
-                            sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
-                            return;
-                    }
+            while (fields.hasNext()) {
+                Map.Entry<String, JsonNode> field = fields.next();
+                switch (field.getKey()) {
+                    case "state":
+                        if ("stopped".equalsIgnoreCase(field.getValue().textValue())) {
+                            shouldStop = true;
+                            break;
+                        }
+                        sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
+                        return;
+                    case "name":
+                        if (!StringUtils.isBlank(field.getValue().textValue())) {
+                            recording.setName(field.getValue().textValue());
+                            break;
+                        }
+                        sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
+                        return;
+                    case "duration":
+                        if (field.getValue().canConvertToLong()) {
+                            recording.setDuration(Duration.ofMillis(field.getValue().longValue()));
+                            break;
+                        }
+                        sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
+                        return;
+                    case "maxSize":
+                        if (field.getValue().canConvertToLong()) {
+                            recording.setMaxSize(field.getValue().longValue());
+                            break;
+                        }
+                        sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
+                        return;
+                    case "maxAge":
+                        if (field.getValue().canConvertToLong()) {
+                            recording.setMaxAge(Duration.ofMillis(field.getValue().longValue()));
+                            break;
+                        }
+                        sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
+                        return;
+                    case "toDisk":
+                        if (field.getValue().isBoolean()) {
+                            recording.setToDisk(field.getValue().booleanValue());
+                            break;
+                        }
+                        sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
+                        return;
+                    default:
+                        log.warn("Unknown recording option {}", field.getKey());
+                        sendHeader(exchange, HttpStatus.SC_BAD_REQUEST);
+                        return;
                 }
-            } finally {
-                // for a jfrsync-enabled recording, refresh its bookkeeping from the live Recording
-                // after every update, including partially-applied ones that end in a rejected
-                // field, and not only on an explicit stop: JfrSync.start() set a destination on
-                // this Recording, so it is dumped-and-closed the instant it stops for any reason,
-                // including its duration timer elapsing (see jfrSyncRecordings javadoc), after
-                // which the Recording API can no longer answer questions about it.
-                // computeIfPresent is atomic with respect to a concurrent delete, so a removed
-                // entry is never resurrected.
-                jfrSyncRecordings.computeIfPresent(
-                        recordingId, (id, info) -> info.capture(recording));
             }
             if (shouldStop) {
                 try {
@@ -421,43 +431,90 @@ class RecordingsContext implements RemoteContext {
                 }
             }
 
-            Optional<SerializableRecordingDescriptor> descriptor =
-                    findRecordingDescriptor(recordingId);
             try (OutputStream response = exchange.getResponseBody()) {
                 if (response == null) {
                     sendHeader(exchange, HttpStatus.SC_NO_CONTENT);
-                } else if (descriptor.isEmpty()) {
-                    sendHeader(exchange, HttpStatus.SC_NOT_FOUND);
                 } else {
                     exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
-                    mapper.writeValue(response, descriptor.get());
+                    mapper.writeValue(
+                            response,
+                            flightRecorder
+                                    .getRecording(recordingId)
+                                    .map(SerializableRecordingDescriptor::new)
+                                    .orElseGet(() -> describeAsStopped(recordingId, recording)));
                 }
             }
         } catch (Exception e) {
             log.error("Failed to update recording", e);
             sendHeader(exchange, HttpStatus.SC_INTERNAL_SERVER_ERROR);
         } finally {
+            reconcileTrackedRecording(recordingId, true);
             exchange.close();
         }
     }
 
+    /**
+     * A ghost recording is read-only: reporting it as STOPPED again is accepted, since a client
+     * acting on stale state may legitimately repeat that request, but any other update conflicts
+     * with the ghost's immutability.
+     */
+    private void handleUpdateOfGhost(HttpExchange exchange, long recordingId, JsonNode jsonMap)
+            throws IOException {
+        TrackedRecording info = trackedRecordings.get(recordingId);
+        SerializableRecordingDescriptor ghost = info == null ? null : info.ghost();
+        if (ghost == null) {
+            sendHeader(exchange, HttpStatus.SC_NOT_FOUND);
+            return;
+        }
+        Iterator<Entry<String, JsonNode>> fields = jsonMap.fields();
+        while (fields.hasNext()) {
+            Entry<String, JsonNode> field = fields.next();
+            if (!"state".equals(field.getKey())
+                    || !"stopped".equalsIgnoreCase(field.getValue().textValue())) {
+                sendHeader(exchange, HttpStatus.SC_CONFLICT);
+                return;
+            }
+        }
+        exchange.sendResponseHeaders(HttpStatus.SC_OK, BODY_LENGTH_UNKNOWN);
+        try (OutputStream response = exchange.getResponseBody()) {
+            mapper.writeValue(response, ghost);
+        }
+    }
+
+    /**
+     * Describes a recording as STOPPED. The getters of a {@code Recording} closed by the JDK remain
+     * usable, but its state would read as CLOSED.
+     */
+    private static SerializableRecordingDescriptor describeAsStopped(
+            long recordingId, Recording recording) {
+        return new SerializableRecordingDescriptor(
+                recordingId,
+                recording.getName(),
+                RecordingState.STOPPED,
+                recording.getStartTime() == null ? 0 : recording.getStartTime().toEpochMilli(),
+                recording.getDuration() == null ? 0 : recording.getDuration().toMillis(),
+                recording.getDuration() == null,
+                recording.isToDisk(),
+                recording.getMaxSize(),
+                recording.getMaxAge() == null ? 0 : recording.getMaxAge().toMillis());
+    }
+
     private void handleDelete(HttpExchange exchange, long recordingId) throws IOException {
+        // untrack first so that a concurrent reconcile does not turn the recording being deleted
+        // into a ghost
+        TrackedRecording info = trackedRecordings.remove(recordingId);
         try {
             Optional<Recording> opt = flightRecorder.getRecording(recordingId);
             if (opt.isEmpty()) {
-                // the backing Recording of a jfrsync-enabled recording may have already
-                // stopped-and-closed on its own (see jfrSyncRecordings javadoc); its tracked files
-                // still need to be cleaned up even though there is no live Recording to close
-                if (!jfrSyncRecordings.containsKey(recordingId)) {
+                if (info == null || info.ghost() == null) {
                     sendHeader(exchange, HttpStatus.SC_NOT_FOUND);
                     return;
                 }
             } else {
                 Recording recording = opt.get();
-                // for a jfrsync-enabled recording tracked in jfrSyncRecordings, call stop() first
-                // to stop the async-profiler via the bound FlightRecorderListener, before cleanup
-                // removes its state and files
-                if (jfrSyncRecordings.containsKey(recordingId)) {
+                // for a jfrsync-enabled recording, call stop() first to stop the async-profiler
+                // via the bound FlightRecorderListener, before its files are removed
+                if (info != null && info.isJfrSync()) {
                     try {
                         recording.stop();
                     } catch (IllegalStateException e) {
@@ -467,21 +524,113 @@ class RecordingsContext implements RemoteContext {
                     recording.close();
                 }
             }
-            cleanupJfrSyncRecordingFiles(recordingId);
             sendHeader(exchange, HttpStatus.SC_NO_CONTENT);
         } catch (Exception e) {
             log.error("Operation failed", e);
             sendHeader(exchange, HttpStatus.SC_INTERNAL_SERVER_ERROR);
+        } finally {
+            if (info != null) {
+                release(info);
+            }
         }
     }
 
-    private void cleanupJfrSyncRecordingFiles(long recordingId) {
-        JfrSyncRecording info = jfrSyncRecordings.remove(recordingId);
+    private void reconcileTrackedRecordings() {
+        try {
+            for (Recording recording : flightRecorder.getRecordings()) {
+                if (!trackedRecordings.containsKey(recording.getId())) {
+                    track(recording, null, null);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to discover recordings", e);
+        }
+        for (Long id : new ArrayList<>(trackedRecordings.keySet())) {
+            reconcileTrackedRecording(id, false);
+        }
+    }
+
+    private void track(Recording recording, Path jfcFile, Path ownedOutputFile) {
+        TrackedRecording previous =
+                trackedRecordings.put(
+                        recording.getId(),
+                        new TrackedRecording(jfcFile, ownedOutputFile, recording));
+        if (previous != null) {
+            previous.cancelCheck();
+        }
+        scheduleCheck(recording.getId(), recording);
+    }
+
+    /**
+     * Re-reads the state of a tracked recording from the JDK. If it is still visible and running, a
+     * check is scheduled for when its (possibly just updated) duration elapses. If it has
+     * disappeared, it is frozen into a read-only ghost backed by its on-disk destination, or, if it
+     * had none, forgotten as if it had never existed. A ghost whose file has gone away is forgotten
+     * likewise. Does nothing for an untracked recording.
+     *
+     * @param reschedule replace a still pending check, because the duration may have changed
+     */
+    private void reconcileTrackedRecording(long recordingId, boolean reschedule) {
+        try {
+            TrackedRecording info = trackedRecordings.get(recordingId);
+            if (info == null) {
+                return;
+            }
+            if (!info.isFrozen()) {
+                Optional<Recording> recording = flightRecorder.getRecording(recordingId);
+                if (recording.isPresent()) {
+                    if (reschedule || !info.hasPendingCheck()) {
+                        scheduleCheck(recordingId, recording.get());
+                    }
+                    return;
+                }
+                info.freeze(recordingId, flightRecorder::findStartupDumpFile);
+            }
+            if (info.ghost() == null || !Files.isRegularFile(info.ghostFile())) {
+                forget(recordingId);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to reconcile recording {}", recordingId, e);
+        }
+    }
+
+    private void scheduleCheck(long recordingId, Recording recording) {
+        TrackedRecording info = trackedRecordings.get(recordingId);
         if (info == null) {
             return;
         }
+        info.cancelCheck();
+        Duration duration = recording.getDuration();
+        Instant start = recording.getStartTime();
+        if (duration == null || start == null || recording.getState() != RecordingState.RUNNING) {
+            return;
+        }
+        long delayMillis =
+                Math.max(0, Duration.between(Instant.now(), start.plus(duration)).toMillis())
+                        + CHECK_GRACE.toMillis();
+        info.setCheck(
+                scheduler.schedule(
+                        () -> reconcileTrackedRecording(recordingId, false),
+                        delayMillis,
+                        TimeUnit.MILLISECONDS));
+    }
+
+    private void forget(long recordingId) {
+        TrackedRecording info = trackedRecordings.remove(recordingId);
+        if (info != null) {
+            release(info);
+        }
+    }
+
+    /**
+     * Cancels the pending check and deletes only the files this context created. The destination
+     * file of a recording that was not started here belongs to whoever configured it, and is never
+     * deleted.
+     */
+    private void release(TrackedRecording info) {
+        info.cancelCheck();
         deleteQuietly(info.jfcFile);
-        deleteJfrSyncOutputQuietly(info.outputFile);
+        deleteJfrSyncOutputQuietly(info.ownedOutputFile);
     }
 
     private void deleteJfrSyncOutputQuietly(Path outputFile) {
@@ -499,7 +648,7 @@ class RecordingsContext implements RemoteContext {
         try {
             Files.deleteIfExists(path);
         } catch (IOException e) {
-            log.warn("Failed to delete temporary jfrsync template file {}", path, e);
+            log.warn("Failed to delete temporary file {}", path, e);
         }
     }
 
@@ -551,6 +700,7 @@ class RecordingsContext implements RemoteContext {
         recording.setMaxSize(req.maxSize);
         recording.setMaxAge(Duration.ofMillis(req.maxAge));
         recording.start();
+        track(recording, null, null);
         return new SerializableRecordingDescriptor(recording);
     }
 
@@ -593,7 +743,7 @@ class RecordingsContext implements RemoteContext {
             // the file it manages is distinct from the .jfc configuration file above. While the
             // recording is RUNNING, the normal Recording-API-based download path
             // (handleGetRecording) is used; once the backing Recording has stopped-and-closed
-            // (see jfrSyncRecordings javadoc), this location is read directly instead. This does
+            // (see TrackedRecording), this location is read directly instead. This does
             // not need to be - and must not be - the separate AsyncProfilerContext#repository
             // used by the standalone async-profiler feature. The file lives in a private
             // per-recording directory so that no other local user can pre-create or swap it.
@@ -630,8 +780,7 @@ class RecordingsContext implements RemoteContext {
             recording.setName(req.name);
             applyRecordingOptions(recording, req);
 
-            jfrSyncRecordings.put(
-                    recording.getId(), new JfrSyncRecording(jfcFile, outputFile, recording));
+            track(recording, jfcFile, outputFile);
             return new SerializableRecordingDescriptor(recording);
         } catch (InvalidEventTemplateException
                 | IOException
@@ -680,52 +829,78 @@ class RecordingsContext implements RemoteContext {
     }
 
     /**
-     * Bookkeeping for a jfrsync-enabled recording. See {@link #jfrSyncRecordings} for why this is
-     * needed: once the backing {@code Recording} stops-and-closes, none of this state is available
-     * through the JFR {@code Recording} API any longer, so it is captured here instead while the
-     * {@code Recording} is still live.
+     * Bookkeeping for a recording: the temporary files this context created for it (if any), the
+     * pending check that reconciles it with the JDK once its duration has elapsed, and the {@code
+     * Recording} itself until it disappears from {@code FlightRecorder}. At that point it is frozen
+     * into an immutable ghost descriptor, if it had an on-disk destination, and the {@code
+     * Recording} reference is released. Reading the closed {@code Recording} is safe, and picks up
+     * any update applied before it closed.
      */
-    private static final class JfrSyncRecording {
+    private static final class TrackedRecording {
         final Path jfcFile;
-        final Path outputFile;
-        final String name;
-        final long startTime;
-        final long duration;
-        final boolean continuous;
-        final long maxSize;
-        final long maxAge;
-        final boolean toDisk;
+        final Path ownedOutputFile;
+        private Recording recording;
+        private SerializableRecordingDescriptor ghost;
+        private Path ghostFile;
+        private ScheduledFuture<?> check;
 
-        JfrSyncRecording(Path jfcFile, Path outputFile, Recording recording) {
+        TrackedRecording(Path jfcFile, Path ownedOutputFile, Recording recording) {
             this.jfcFile = jfcFile;
-            this.outputFile = outputFile;
-            this.name = recording.getName();
-            this.startTime =
-                    recording.getStartTime() == null ? 0 : recording.getStartTime().toEpochMilli();
-            this.duration =
-                    recording.getDuration() == null ? 0 : recording.getDuration().toMillis();
-            this.continuous = recording.getDuration() == null;
-            this.maxSize = recording.getMaxSize();
-            this.maxAge = recording.getMaxAge() == null ? 0 : recording.getMaxAge().toMillis();
-            this.toDisk = recording.isToDisk();
+            this.ownedOutputFile = ownedOutputFile;
+            this.recording = recording;
         }
 
-        /** Returns an updated copy reflecting the current live state of {@code recording}. */
-        JfrSyncRecording capture(Recording recording) {
-            return new JfrSyncRecording(jfcFile, outputFile, recording);
+        boolean isJfrSync() {
+            return ownedOutputFile != null;
         }
 
-        SerializableRecordingDescriptor toStoppedDescriptor(long id) {
-            return new SerializableRecordingDescriptor(
-                    id,
-                    name,
-                    RecordingState.STOPPED,
-                    startTime,
-                    duration,
-                    continuous,
-                    toDisk,
-                    maxSize,
-                    maxAge);
+        synchronized boolean isFrozen() {
+            return recording == null;
+        }
+
+        /** Returns the read-only descriptor of the ghost, or null if there is no ghost. */
+        synchronized SerializableRecordingDescriptor ghost() {
+            return ghost;
+        }
+
+        /** Returns the file backing the ghost, or null if there is no ghost. */
+        synchronized Path ghostFile() {
+            return ghostFile;
+        }
+
+        /**
+         * Freezes the recording into a ghost if it has an on-disk destination. A recording started
+         * by {@code -XX:StartFlightRecording} with a directory as its filename reports none, so the
+         * file the JVM wrote into that directory is looked up by its generated name instead.
+         */
+        synchronized void freeze(long recordingId, LongFunction<Optional<Path>> dumpFileFinder) {
+            if (recording == null) {
+                return;
+            }
+            Path destination = recording.getDestination();
+            if (destination == null) {
+                destination = dumpFileFinder.apply(recordingId).orElse(null);
+            }
+            if (destination != null) {
+                ghost = describeAsStopped(recordingId, recording);
+                ghostFile = destination;
+            }
+            recording = null;
+        }
+
+        synchronized boolean hasPendingCheck() {
+            return check != null && !check.isDone();
+        }
+
+        synchronized void setCheck(ScheduledFuture<?> check) {
+            this.check = check;
+        }
+
+        synchronized void cancelCheck() {
+            if (check != null) {
+                check.cancel(false);
+                check = null;
+            }
         }
     }
 
