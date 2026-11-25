@@ -867,7 +867,7 @@ class RegistrationTest {
 
     private ServerHealth serverHealth() {
         return new ServerHealth(
-                "4.3.0", new ServerHealth.BuildInfo(new ServerHealth.GitInfo("test-hash")));
+                "5.0.0", new ServerHealth.BuildInfo(new ServerHealth.GitInfo("test-hash")));
     }
 
     private void runSubmittedTasksImmediately() {

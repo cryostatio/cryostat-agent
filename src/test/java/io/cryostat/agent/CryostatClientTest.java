@@ -128,7 +128,8 @@ class CryostatClientTest {
 
         ArgumentCaptor<HttpPost> requestCaptor = ArgumentCaptor.forClass(HttpPost.class);
         verify(http).execute(any(HttpHost.class), requestCaptor.capture());
-        assertEquals("/api/v4.3/discovery/agents", requestCaptor.getValue().getUri().getPath());
+        assertEquals(
+                "/api/v5/discovery/plugins/agent", requestCaptor.getValue().getUri().getPath());
 
         assertEquals(REALM, requestBody.get("realm").asText());
         assertEquals(callback.toString(), requestBody.get("callback").asText());
@@ -161,7 +162,7 @@ class CryostatClientTest {
 
         ArgumentCaptor<HttpPost> requestCaptor = ArgumentCaptor.forClass(HttpPost.class);
         verify(http).execute(any(HttpHost.class), requestCaptor.capture());
-        assertEquals("/api/v4/discovery", requestCaptor.getValue().getUri().getPath());
+        assertEquals("/api/v5/discovery/plugins", requestCaptor.getValue().getUri().getPath());
 
         assertEquals("plugin-id", requestBody.get("id").asText());
         assertEquals("current-token", requestBody.get("token").asText());
@@ -188,7 +189,7 @@ class CryostatClientTest {
 
         ArgumentCaptor<HttpPost> requestCaptor = ArgumentCaptor.forClass(HttpPost.class);
         verify(http).execute(any(HttpHost.class), requestCaptor.capture());
-        assertEquals("/api/v4/discovery", requestCaptor.getValue().getUri().getPath());
+        assertEquals("/api/v5/discovery/plugins", requestCaptor.getValue().getUri().getPath());
 
         assertEquals(REALM, requestBody.get("realm").asText());
         assertEquals(callback.toString(), requestBody.get("callback").asText());
